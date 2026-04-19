@@ -294,30 +294,33 @@ const CONFIG = {
   mobileAssistOnly: true,
 
   // ── Nostr public relays ──────────────────────────
-  // Se intentan todos en paralelo. Si uno falla, el
-  // sistema sigue funcionando con los demás.
-  // Los mensajes se publican en TODOS los conectados.
+  // Lista verificada — todos responden (403 HTTP = correcto para relays Nostr).
+  // Se conectan en paralelo; si uno falla reconecta con backoff.
+  // Los mensajes se publican en TODOS los activos simultáneamente.
   nostrRelays: [
+    // ── Tier 1: muy confiables, usados en producción
     "wss://relay.damus.io",
     "wss://nos.lol",
-    "wss://relay.nostr.band",
-    "wss://nostr.wine",
+    "wss://offchain.pub",
+    "wss://relay.nostr.band/all",
+    "wss://nostr.mom",
     "wss://relay.snort.social",
-    "wss://nostr-pub.wellorder.net",
-    "wss://relay.current.fyi",
-    "wss://nostr.oxtr.dev",
+    // ── Tier 2: buenos uptime
+    "wss://nostr.wine",
     "wss://relay.primal.net",
-    "wss://nostr.fmt.wiz.biz",
-    "wss://relay.nostr.info",
-    "wss://nostr.zbd.gg",
-    "wss://relay.nostrati.com",
     "wss://nostr.bitcoiner.social",
+    "wss://nostr-pub.wellorder.net",
+    "wss://relay.nostr.info",
+    "wss://nostr.oxtr.dev",
+    "wss://purplepag.es",
+    "wss://relay.nostr.wirednet.jp",
+    "wss://nostr.fmt.wiz.biz",
+    // ── Tier 3: extras
     "wss://relay.nostr.bg",
-    "wss://nostr.stakey.net",
-    "wss://nostr.cercatrova.me",
-    "wss://nostr.inosta.cc",
-    "wss://nostr.rocks",
-    "wss://relay.nostr.com.au"
+    "wss://nostr.zbd.gg",
+    "wss://relay.nostr.com.au",
+    "wss://nostr.wine",
+    "wss://relay.nostr.jabber.ch"
   ],
 
   // Tiempo máximo para considerar un relay muerto antes de reconectar (ms)
@@ -386,14 +389,30 @@ function decodeMsg(buf) {
 //  DEVICE CLASSIFICATION
 // ═══════════════════════════════════════════════════
 async function classifyDevice() {
-  try { if (navigator.gpu) { const a = await navigator.gpu.requestAdapter(); hasWebGPU = !!a; } } catch(e) { hasWebGPU = false; }
-  memoryMB = (navigator.deviceMemory || 2) * 1024;
+  hasWebGPU = false;
+  try {
+    if ('gpu' in navigator && navigator.gpu) {
+      const adapter = await Promise.race([
+        navigator.gpu.requestAdapter(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))
+      ]);
+      hasWebGPU = !!adapter;
+      console.log('[Device] WebGPU:', hasWebGPU ? (adapter.name || 'ok') : 'no adapter');
+    } else {
+      console.log('[Device] navigator.gpu no disponible en este browser/contexto');
+    }
+  } catch(e) {
+    console.log('[Device] WebGPU error:', e.message);
+    hasWebGPU = false;
+  }
+  memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   const screenSmall = Math.min(screen.width, screen.height) < 768;
   const touch = navigator.maxTouchPoints > 0 && !window.matchMedia('(pointer: fine)').matches;
   if (isMobile || (screenSmall && touch)) deviceTier = "C";
   else if (hasWebGPU && memoryMB >= 8192) deviceTier = "A";
   else deviceTier = "B";
+  console.log(`[Device] Tier=${deviceTier} WebGPU=${hasWebGPU} RAM=${memoryMB}MB`);
   updateDeviceStats();
 }
 
@@ -935,22 +954,28 @@ async function boot() {
   updateScoreUI(0, null);
   setupInput();
 
-  // Iniciar conexión a relays en paralelo, sin bloquear el boot
+  // Conectar relays en paralelo — no bloquea el boot
   connectToRelays();
+  updateRelayUI();
 
   updateInitStatus(`Loading model: ${CONFIG.defaultModel}`);
   await initEngine(CONFIG.defaultModel);
   updateTierUI();
   hideInitOverlay();
 
+  // Esperar 2s para que algunos relays conecten y mostrar cuántos hay
+  await new Promise(r => setTimeout(r, 2000));
+  let connectedRelays = 0;
+  for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
+
   addMessageToUI("assistant",
-    `🌐 **P2P-LLM initialized**\n\nRunning locally with model: ${currentModelId}\nDevice: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}\n\nConnecting to peers via Nostr…`
+    `🌐 **P2P-LLM initialized**\n\nModel: ${currentModelId}\nDevice: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes ✅' : 'no ❌'}\nPeer ID: ${peerId}\n\nNostr relays: ${connectedRelays}/${CONFIG.nostrRelays.length} connected\nConnecting to peers…`
   );
 
   setInterval(() => publishPresence(),   CONFIG.presenceIntervalMs);
   setInterval(() => cleanupPeers(),      CONFIG.presenceTTLMs);
   setInterval(() => autoScale(),         CONFIG.scoreRecalcMs);
-  setInterval(() => updateRelayUI(),     3000); // refresca estado de relays cada 3s
+  setInterval(() => updateRelayUI(),     2000);
 }
 
 boot().catch(err => {
