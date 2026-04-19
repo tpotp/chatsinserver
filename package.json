@@ -1,0 +1,18 @@
+{
+  "name": "versionantigravity",
+  "version": "1.0.0",
+  "description": "A fully browser-based, peer-to-peer LLM inference system that runs locally on any device and automatically improves when peers join the network.",
+  "main": "relay.js",
+  "scripts": {
+    "relay": "node relay.js",
+    "serve": "npx -y serve .",
+    "start": "node relay.js & npx -y serve .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.20.0"
+  }
+}

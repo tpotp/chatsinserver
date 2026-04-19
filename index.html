@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>P2P-LLM — Decentralized AI Chat</title>
+<meta name="description" content="Browser-based peer-to-peer LLM inference with auto-scaling model tiers. Local-first, fault-tolerant.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a28;
+  --bg-glass: rgba(18, 18, 30, 0.6);
+  --text-primary: #e4e4ef;
+  --text-secondary: #8888a8;
+  --text-muted: #55556a;
+  --accent-primary: #6c5ce7;
+  --accent-secondary: #a29bfe;
+  --accent-glow: rgba(108, 92, 231, 0.35);
+  --tier-small: #00cec9;
+  --tier-medium: #fdcb6e;
+  --tier-large: #e17055;
+  --mode-local: #00b894;
+  --mode-assist: #0984e3;
+  --mode-verify: #d63031;
+  --peer-online: #00b894;
+  --peer-slow: #fdcb6e;
+  --peer-dead: #636e72;
+  --border-subtle: rgba(255,255,255,0.06);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --shadow-glow: 0 0 30px var(--accent-glow);
+  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-med: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; font-family: var(--font-sans);
+  background: var(--bg-primary); color: var(--text-primary);
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+body { display: flex; flex-direction: column; }
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(108,92,231,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(0,206,201,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(225,112,85,0.04) 0%, transparent 40%);
+  pointer-events: none; z-index: 0; animation: bgPulse 12s ease-in-out infinite alternate;
+}
+@keyframes bgPulse { 0% { opacity: 0.7; } 100% { opacity: 1; } }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(108,92,231,0.3); border-radius: 3px; }
+
+#status-bar {
+  position: relative; z-index: 10; display: flex; align-items: center;
+  gap: 12px; padding: 10px 16px; background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+  overflow-x: auto; white-space: nowrap;
+}
+.status-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 20px; font-size: 12px;
+  font-weight: 500; letter-spacing: 0.3px;
+  border: 1px solid var(--border-subtle); background: var(--bg-glass);
+  backdrop-filter: blur(8px); flex-shrink: 0;
+  transition: all var(--transition-med);
+}
+.status-chip .dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  transition: background var(--transition-med);
+}
+
+#app { position: relative; z-index: 1; display: flex; flex: 1; min-height: 0; }
+#sidebar {
+  width: 280px; background: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+}
+@media (max-width: 768px) { #sidebar { display: none; } }
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.sidebar-section { padding: 16px; border-bottom: 1px solid var(--border-subtle); }
+.sidebar-section h3 {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1.2px; color: var(--text-muted); margin-bottom: 10px;
+}
+.peer-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  margin-bottom: 4px; font-size: 13px;
+}
+.peer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.peer-dot.online { background: var(--peer-online); box-shadow: 0 0 6px var(--peer-online); }
+.peer-dot.slow { background: var(--peer-slow); }
+.peer-dot.dead { background: var(--peer-dead); }
+.peer-id { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.peer-rtt { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.peer-tier-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; }
+.peer-tier-badge.tier-a { background: rgba(0,206,201,0.15); color: var(--tier-small); }
+.peer-tier-badge.tier-b { background: rgba(253,203,110,0.15); color: var(--tier-medium); }
+.peer-tier-badge.tier-c { background: rgba(225,112,85,0.15); color: var(--tier-large); }
+
+#model-progress-section { display: none; }
+#model-progress-section.active { display: block; }
+.progress-bar-track { width: 100%; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); border-radius: 3px; width: 0%; transition: width var(--transition-med); }
+#model-progress-label { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+
+.score-bar { display: flex; gap: 3px; margin-top: 8px; }
+.score-segment { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 2px; transition: background var(--transition-med); }
+.score-segment.active { background: var(--accent-primary); }
+.score-segment.active.high { background: var(--tier-small); }
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
+.stat-label { color: var(--text-muted); }
+.stat-value { color: var(--text-primary); font-family: var(--font-mono); font-weight: 500; }
+
+#messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.message { max-width: 720px; width: 100%; margin: 0 auto; display: flex; gap: 12px; animation: messageIn 0.3s ease-out; }
+@keyframes messageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.msg-avatar { width: 32px; height: 32px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; font-weight: 600; }
+.msg-avatar.user-av { background: linear-gradient(135deg, var(--accent-primary), #a29bfe); color: white; }
+.msg-avatar.ai-av { background: linear-gradient(135deg, #00cec9, #00b894); color: white; }
+.msg-body { flex: 1; min-width: 0; }
+.msg-header { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary); }
+.msg-content { font-size: 14px; line-height: 1.65; color: var(--text-primary); word-wrap: break-word; white-space: pre-wrap; }
+.msg-meta { font-size: 10px; color: var(--text-muted); margin-top: 6px; font-family: var(--font-mono); }
+.typing-indicator { display: flex; gap: 4px; padding: 4px 0; }
+.typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-secondary); animation: typingBounce 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
+
+#input-area { padding: 16px 20px; border-top: 1px solid var(--border-subtle); background: var(--bg-secondary); flex-shrink: 0; }
+#input-row { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+#chat-input {
+  flex: 1; background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 12px 16px; font-family: var(--font-sans);
+  font-size: 14px; color: var(--text-primary); resize: none; outline: none;
+  min-height: 44px; max-height: 160px; line-height: 1.5;
+  transition: border-color var(--transition-fast);
+}
+#chat-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-glow); }
+#chat-input::placeholder { color: var(--text-muted); }
+#send-btn {
+  width: 44px; height: 44px; border-radius: var(--radius-md); border: none;
+  background: linear-gradient(135deg, var(--accent-primary), #8b7cf7);
+  color: white; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; transition: all var(--transition-fast); flex-shrink: 0;
+}
+#send-btn:hover { transform: scale(1.05); box-shadow: var(--shadow-glow); }
+#send-btn:active { transform: scale(0.95); }
+#send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+#send-btn svg { width: 18px; height: 18px; }
+
+#init-overlay {
+  position: fixed; inset: 0; z-index: 1000; background: var(--bg-primary);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 24px; transition: opacity 0.5s ease;
+}
+#init-overlay.hidden { opacity: 0; pointer-events: none; }
+.init-logo {
+  font-size: 48px; font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary), var(--tier-small));
+  background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: logoGlow 3s ease-in-out infinite alternate;
+}
+@keyframes logoGlow { 0% { filter: brightness(1); } 100% { filter: brightness(1.3); } }
+.init-status { font-size: 14px; color: var(--text-secondary); text-align: center; max-width: 400px; }
+.init-progress { width: 260px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
+.init-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
+
+@media (max-width: 768px) {
+  #status-bar { padding: 8px 10px; gap: 6px; }
+  .status-chip { font-size: 11px; padding: 4px 8px; }
+  #messages { padding: 12px; gap: 12px; }
+  #input-area { padding: 10px 12px; }
+  .msg-avatar { width: 28px; height: 28px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div id="init-overlay">
+  <div class="init-logo">P2P-LLM</div>
+  <div class="init-status" id="init-status">Initializing local AI engine…</div>
+  <div class="init-progress"><div class="init-progress-fill" id="init-progress-fill"></div></div>
+</div>
+
+<div id="status-bar">
+  <div class="status-chip" id="chip-tier"><span class="dot" id="chip-tier-dot"></span><span id="chip-tier-text">TIER: —</span></div>
+  <div class="status-chip" id="chip-mode"><span class="dot" id="chip-mode-dot"></span><span id="chip-mode-text">MODE: —</span></div>
+  <div class="status-chip" id="chip-peers"><span class="dot"></span><span id="chip-peers-text">PEERS: 0</span></div>
+  <div class="status-chip" id="chip-speed"><span class="dot"></span><span id="chip-speed-text">0 tok/s</span></div>
+  <div class="status-chip" id="chip-score"><span class="dot"></span><span id="chip-score-text">SCORE: 0</span></div>
+</div>
+
+<div id="app">
+  <aside id="sidebar">
+    <div class="sidebar-section">
+      <h3>⚡ Connected Peers</h3>
+      <div id="peer-list"><div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No peers connected</div></div>
+    </div>
+    <div class="sidebar-section" id="model-progress-section">
+      <h3>📦 Model Loading</h3>
+      <div id="model-name-display" style="font-size:12px;color:var(--text-secondary);"></div>
+      <div class="progress-bar-track"><div class="progress-bar-fill" id="model-progress-bar"></div></div>
+      <div id="model-progress-label"></div>
+    </div>
+    <div class="sidebar-section">
+      <h3>📊 Network Score</h3>
+      <div class="score-bar" id="score-bar"></div>
+      <div style="margin-top:12px">
+        <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value" id="stat-score">0</span></div>
+        <div class="stat-row"><span class="stat-label">Avg RTT</span><span class="stat-value" id="stat-rtt">—</span></div>
+        <div class="stat-row"><span class="stat-label">Tok/s (local)</span><span class="stat-value" id="stat-tps-local">—</span></div>
+        <div class="stat-row"><span class="stat-label">Tok/s (effective)</span><span class="stat-value" id="stat-tps-eff">—</span></div>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <h3>🖥️ Device Info</h3>
+      <div>
+        <div class="stat-row"><span class="stat-label">Device Tier</span><span class="stat-value" id="stat-device-tier">—</span></div>
+        <div class="stat-row"><span class="stat-label">WebGPU</span><span class="stat-value" id="stat-webgpu">—</span></div>
+        <div class="stat-row"><span class="stat-label">Memory</span><span class="stat-value" id="stat-memory">—</span></div>
+        <div class="stat-row"><span class="stat-label">Peer ID</span><span class="stat-value" id="stat-peer-id" style="font-size:10px;">—</span></div>
+      </div>
+    </div>
+  </aside>
+  <div id="main">
+    <div id="messages"></div>
+    <div id="input-area">
+      <div id="input-row">
+        <textarea id="chat-input" rows="1" placeholder="Type a message… (works offline)" autofocus></textarea>
+        <button id="send-btn" title="Send message">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// ═══════════════════════════════════════════════════
+//  WEB WORKER FOR NON-BLOCKING LLM INFERENCE
+// ═══════════════════════════════════════════════════
+// We create the worker inline as a blob so everything stays in one file.
+const WORKER_CODE = `
+import { WebWorkerMLCEngineHandler } from "https://esm.run/@mlc-ai/web-llm";
+const handler = new WebWorkerMLCEngineHandler();
+self.onmessage = (msg) => {
+  handler.onmessage(msg);
+};
+`;
+
+function createWorker() {
+  const blob = new Blob([WORKER_CODE], { type: "text/javascript" });
+  const url = URL.createObjectURL(blob);
+  return new Worker(url, { type: "module" });
+}
+
+// Dynamically import CreateWebWorkerMLCEngine from web-llm
+const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+
+// ═══════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════
+const CONFIG = {
+  defaultModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+  maxPeers: 6,
+  maxRemoteWorkers: 2,
+  maxAssistLatencyMs: 180,
+  hysteresisMs: 3000,
+  speculativeTokens: 4,
+  mobileAssistOnly: true,
+  nostrRelays: [
+    "ws://localhost:7777",
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.nostr.band"
+  ],
+  appNamespace: "p2p-llm-swarm-v1",
+  presenceIntervalMs: 15000,
+  presenceTTLMs: 45000,
+  pingIntervalMs: 5000,
+  scoreRecalcMs: 2000,
+  tiers: [
+    { name: "small",  model: "Llama-3.2-1B-Instruct-q4f16_1-MLC",  minScore: 0, mode: "local" },
+    { name: "medium", model: "Llama-3.2-3B-Instruct-q4f16_1-MLC",  minScore: 2, mode: "assist" },
+    { name: "large",  model: "Llama-3.1-8B-Instruct-q4f16_1-MLC",  minScore: 4, mode: "assist+verify" }
+  ]
+};
+
+// ═══════════════════════════════════════════════════
+//  GLOBALS
+// ═══════════════════════════════════════════════════
+const peerId = crypto.randomUUID().slice(0, 12);
+let engine = null;
+let currentModelId = null;
+let isModelLoading = false;
+let isGenerating = false;
+
+let deviceTier = "C";
+let hasWebGPU = false;
+let memoryMB = 0;
+let localTPS = 0;
+let effectiveTPS = 0;
+
+const peers = new Map();
+let networkScore = 0;
+let currentTierIdx = 0;
+let lastTierChange = 0;
+
+const relayConnections = [];
+const seenEventIds = new Set();
+const chatHistory = [];
+
+// ═══════════════════════════════════════════════════
+//  BINARY PROTOCOL
+// ═══════════════════════════════════════════════════
+const MSG = { HELLO:1, TOK_REQ:2, TOK_RES:3, LOGITS:4, PING:0x10, PONG:0x11, VER_REQ:0x20, VER_RES:0x21 };
+
+function encodeMsg(type, reqId, seq, payload) {
+  const pb = payload ? new TextEncoder().encode(JSON.stringify(payload)) : new Uint8Array(0);
+  const buf = new ArrayBuffer(7 + pb.length);
+  const dv = new DataView(buf);
+  dv.setUint8(0, type); dv.setUint32(1, reqId); dv.setUint16(5, seq);
+  new Uint8Array(buf, 7).set(pb);
+  return buf;
+}
+function decodeMsg(buf) {
+  const dv = new DataView(buf);
+  const type = dv.getUint8(0), reqId = dv.getUint32(1), seq = dv.getUint16(5);
+  let payload = null;
+  if (buf.byteLength > 7) try { payload = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 7))); } catch(e) {}
+  return { type, reqId, seq, payload };
+}
+
+// ═══════════════════════════════════════════════════
+//  DEVICE CLASSIFICATION
+// ═══════════════════════════════════════════════════
+async function classifyDevice() {
+  try { if (navigator.gpu) { const a = await navigator.gpu.requestAdapter(); hasWebGPU = !!a; } } catch(e) { hasWebGPU = false; }
+  memoryMB = (navigator.deviceMemory || 2) * 1024;
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const screenSmall = Math.min(screen.width, screen.height) < 768;
+  const touch = navigator.maxTouchPoints > 0 && !window.matchMedia('(pointer: fine)').matches;
+  if (isMobile || (screenSmall && touch)) deviceTier = "C";
+  else if (hasWebGPU && memoryMB >= 8192) deviceTier = "A";
+  else deviceTier = "B";
+  updateDeviceStats();
+}
+
+// ═══════════════════════════════════════════════════
+//  ENGINE (WEB WORKER — NON-BLOCKING)
+// ═══════════════════════════════════════════════════
+async function initEngine(modelId) {
+  if (isModelLoading) return;
+  isModelLoading = true;
+  currentModelId = modelId || CONFIG.defaultModel;
+  showModelProgress(true, currentModelId);
+  updateInitStatus(`Loading model: ${currentModelId}`);
+
+  try {
+    const worker = createWorker();
+    engine = await webllm.CreateWebWorkerMLCEngine(worker, currentModelId, {
+      initProgressCallback: (progress) => {
+        const pct = Math.round((progress.progress || 0) * 100);
+        updateModelProgress(pct, progress.text || '');
+        updateInitProgress(pct);
+      }
+    });
+    isModelLoading = false;
+    showModelProgress(false);
+    console.log(`[Engine] Model loaded: ${currentModelId}`);
+  } catch (err) {
+    console.error('[Engine] Load failed:', err);
+    isModelLoading = false;
+    showModelProgress(false);
+    if (currentModelId !== CONFIG.tiers[0].model) {
+      console.log('[Engine] Falling back to small');
+      currentTierIdx = 0;
+      await initEngine(CONFIG.tiers[0].model);
+    }
+  }
+}
+
+async function switchModel(modelId) {
+  if (modelId === currentModelId || isModelLoading || isGenerating) return;
+  console.log(`[Engine] Switching to: ${modelId}`);
+  showModelProgress(true, modelId);
+  try {
+    const worker = createWorker();
+    engine = await webllm.CreateWebWorkerMLCEngine(worker, modelId, {
+      initProgressCallback: (progress) => {
+        const pct = Math.round((progress.progress || 0) * 100);
+        updateModelProgress(pct, progress.text || '');
+      }
+    });
+    currentModelId = modelId;
+    isModelLoading = false;
+    showModelProgress(false);
+    console.log(`[Engine] Switched to: ${modelId}`);
+  } catch (err) {
+    console.error('[Engine] Switch failed:', err);
+    isModelLoading = false;
+    showModelProgress(false);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  CHAT / INFERENCE
+// ═══════════════════════════════════════════════════
+async function generateResponse(userMessage) {
+  if (!engine || isGenerating) return;
+  isGenerating = true;
+  chatHistory.push({ role: "user", content: userMessage });
+  addMessageToUI("user", userMessage);
+  const aiMsgEl = addMessageToUI("assistant", null, true);
+
+  const tier = CONFIG.tiers[currentTierIdx];
+  let fullResponse = "", tokenCount = 0;
+  const startTime = performance.now();
+
+  try {
+    const messages = [
+      { role: "system", content: "You are a helpful AI assistant running in a decentralized P2P network. Be concise." },
+      ...chatHistory.slice(-10)
+    ];
+    const chunks = await engine.chat.completions.create({
+      messages, stream: true, temperature: 0.7, max_tokens: 512,
+    });
+
+    const typingEl = aiMsgEl.querySelector('.typing-indicator');
+    if (typingEl) typingEl.remove();
+    const contentEl = aiMsgEl.querySelector('.msg-content');
+
+    for await (const chunk of chunks) {
+      const token = chunk.choices[0]?.delta?.content || "";
+      fullResponse += token;
+      tokenCount++;
+      contentEl.textContent = fullResponse;
+      if (tier.mode !== "local") maybeSendTokenRequest(fullResponse, tokenCount);
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+
+    const elapsedMs = performance.now() - startTime;
+    localTPS = Math.round((tokenCount / (elapsedMs / 1000)) * 10) / 10;
+    effectiveTPS = localTPS;
+
+    const metaEl = aiMsgEl.querySelector('.msg-meta');
+    if (metaEl) metaEl.textContent = `${tier.name} · ${tier.mode} · ${localTPS} tok/s · ${Math.round(elapsedMs)}ms`;
+    chatHistory.push({ role: "assistant", content: fullResponse });
+  } catch (err) {
+    console.error('[Chat] Error:', err);
+    const contentEl = aiMsgEl.querySelector('.msg-content');
+    const typingEl = aiMsgEl.querySelector('.typing-indicator');
+    if (typingEl) typingEl.remove();
+    contentEl.textContent = `⚠️ Error: ${err.message}`;
+  }
+  isGenerating = false;
+  updateSpeedChip();
+}
+
+function maybeSendTokenRequest(text, count) {
+  if (count % CONFIG.speculativeTokens !== 0) return;
+  let sent = 0;
+  for (const [pid, peer] of peers) {
+    if (sent >= CONFIG.maxRemoteWorkers) break;
+    if (peer.rtt > CONFIG.maxAssistLatencyMs) continue;
+    if (CONFIG.mobileAssistOnly && peer.deviceTier === "C") continue;
+    if (peer.dc?.readyState === "open") {
+      peer.dc.send(encodeMsg(MSG.TOK_REQ, Math.floor(Math.random()*0xFFFFFFFF), count,
+        { text: text.slice(-200), tokens: CONFIG.speculativeTokens }));
+      sent++;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  NOSTR SIGNALING
+// ═══════════════════════════════════════════════════
+function makeEvent(content) {
+  return {
+    id: crypto.randomUUID().replace(/-/g, '').slice(0, 64),
+    pubkey: peerId.padEnd(64, '0'),
+    created_at: Math.floor(Date.now() / 1000),
+    kind: 30078,
+    tags: [["d", CONFIG.appNamespace], ["p2p-llm", "presence"]],
+    content: JSON.stringify(content),
+    sig: "0".repeat(128)
+  };
+}
+
+function connectToRelays() {
+  for (const url of CONFIG.nostrRelays) connectRelay(url);
+}
+
+function connectRelay(url) {
+  let ws;
+  try { ws = new WebSocket(url); } catch(e) { return; }
+  ws._url = url;
+  ws.onopen = () => {
+    console.log(`[Nostr] Connected: ${url}`);
+    relayConnections.push(ws);
+    ws.send(JSON.stringify(["REQ", `sub-${peerId}`, {
+      kinds: [30078], "#d": [CONFIG.appNamespace],
+      since: Math.floor(Date.now() / 1000) - 60
+    }]));
+    publishPresence(ws);
+  };
+  ws.onmessage = (evt) => {
+    try { handleRelayMsg(JSON.parse(evt.data)); } catch(e) {}
+  };
+  ws.onclose = () => {
+    const idx = relayConnections.indexOf(ws);
+    if (idx >= 0) relayConnections.splice(idx, 1);
+    if (!ws._closed) setTimeout(() => connectRelay(url), 5000);
+  };
+  ws.onerror = () => {};
+}
+
+function publishPresence(specificWs) {
+  const content = { type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, currentModel: currentModelId, timestamp: Date.now() };
+  const msg = JSON.stringify(["EVENT", makeEvent(content)]);
+  if (specificWs?.readyState === WebSocket.OPEN) specificWs.send(msg);
+  else for (const ws of relayConnections) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+}
+
+function publishSignal(targetId, signal) {
+  const content = { type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() };
+  const msg = JSON.stringify(["EVENT", makeEvent(content)]);
+  for (const ws of relayConnections) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+}
+
+function handleRelayMsg(msg) {
+  if (!Array.isArray(msg) || msg[0] !== "EVENT") return;
+  const event = msg[2] || msg[1];
+  if (!event?.content || seenEventIds.has(event.id)) return;
+  seenEventIds.add(event.id);
+  if (seenEventIds.size > 1000) { const a = [...seenEventIds]; for (let i=0;i<500;i++) seenEventIds.delete(a[i]); }
+  try { const c = JSON.parse(event.content); if (c.peerId !== peerId) handleNostrContent(c); } catch(e) {}
+}
+
+function handleNostrContent(c) {
+  if (c.type === "presence") handlePeerPresence(c);
+  else if (c.type === "signal" && c.to === peerId) handleWebRTCSignal(c.from, c.signal);
+}
+
+// ═══════════════════════════════════════════════════
+//  PEER MANAGEMENT
+// ═══════════════════════════════════════════════════
+function handlePeerPresence(p) {
+  if (!peers.has(p.peerId)) {
+    if (peers.size >= CONFIG.maxPeers) return;
+    peers.set(p.peerId, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, tps: p.tps||0, lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0 });
+    if (peerId < p.peerId) initiateWebRTC(p.peerId);
+    console.log(`[Peers] Discovered: ${p.peerId} (Tier ${p.deviceTier})`);
+  } else {
+    const peer = peers.get(p.peerId);
+    Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, tps: p.tps||0, lastSeen: Date.now() });
+  }
+  updatePeerListUI();
+}
+
+function removePeer(pid) {
+  const p = peers.get(pid);
+  if (!p) return;
+  if (p.pingTimer) clearInterval(p.pingTimer);
+  try { p.dc?.close(); } catch(e) {}
+  try { p.conn?.close(); } catch(e) {}
+  peers.delete(pid);
+  console.log(`[Peers] Removed: ${pid}`);
+  updatePeerListUI();
+}
+
+// ═══════════════════════════════════════════════════
+//  WEBRTC
+// ═══════════════════════════════════════════════════
+const rtcCfg = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+
+function initiateWebRTC(targetId) {
+  const conn = new RTCPeerConnection(rtcCfg);
+  const peer = peers.get(targetId);
+  if (!peer) return;
+  peer.conn = conn;
+  const dc = conn.createDataChannel("p2p-llm", { ordered: true, maxRetransmits: 2 });
+  dc.binaryType = "arraybuffer";
+  setupDC(dc, targetId);
+  peer.dc = dc;
+  conn.onicecandidate = (e) => { if (e.candidate) publishSignal(targetId, { type: "ice", candidate: e.candidate }); };
+  conn.onconnectionstatechange = () => { if (conn.connectionState === "failed" || conn.connectionState === "disconnected") removePeer(targetId); };
+  conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => {
+    publishSignal(targetId, { type: "offer", sdp: conn.localDescription });
+  }).catch(e => console.error('[RTC] Offer err:', e));
+}
+
+function handleWebRTCSignal(fromId, signal) {
+  let peer = peers.get(fromId);
+  if (signal.type === "offer") {
+    if (!peer) {
+      if (peers.size >= CONFIG.maxPeers) return;
+      peer = { deviceTier: "C", webgpu: false, memoryMB: 0, tps: 0, lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0 };
+      peers.set(fromId, peer);
+    }
+    const conn = new RTCPeerConnection(rtcCfg);
+    peer.conn = conn;
+    conn.onicecandidate = (e) => { if (e.candidate) publishSignal(fromId, { type: "ice", candidate: e.candidate }); };
+    conn.ondatachannel = (e) => { e.channel.binaryType = "arraybuffer"; setupDC(e.channel, fromId); peer.dc = e.channel; };
+    conn.onconnectionstatechange = () => { if (conn.connectionState === "failed" || conn.connectionState === "disconnected") removePeer(fromId); };
+    conn.setRemoteDescription(new RTCSessionDescription(signal.sdp))
+      .then(() => conn.createAnswer()).then(a => conn.setLocalDescription(a))
+      .then(() => publishSignal(fromId, { type: "answer", sdp: conn.localDescription }))
+      .catch(e => console.error('[RTC] Answer err:', e));
+  } else if (signal.type === "answer") {
+    peer?.conn?.setRemoteDescription(new RTCSessionDescription(signal.sdp)).catch(() => {});
+  } else if (signal.type === "ice") {
+    peer?.conn?.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+  }
+}
+
+function setupDC(dc, remoteId) {
+  dc.onopen = () => {
+    console.log(`[DC] Opened: ${remoteId}`);
+    dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS }));
+    const peer = peers.get(remoteId);
+    if (peer) {
+      peer.pingTimer = setInterval(() => {
+        if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); }
+      }, CONFIG.pingIntervalMs);
+    }
+    updatePeerListUI();
+  };
+  dc.onclose = () => removePeer(remoteId);
+  dc.onmessage = (evt) => { if (evt.data instanceof ArrayBuffer) handleBinMsg(remoteId, evt.data); };
+  dc.onerror = () => {};
+}
+
+async function handleBinMsg(fromId, buf) {
+  const m = decodeMsg(buf);
+  const peer = peers.get(fromId);
+  if (!peer) return;
+  switch(m.type) {
+    case MSG.HELLO:
+      if (m.payload) { peer.deviceTier = m.payload.deviceTier || peer.deviceTier; peer.webgpu = m.payload.webgpu || false; peer.tps = m.payload.tps || 0; }
+      updatePeerListUI(); break;
+    case MSG.PING:
+      if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.PONG, m.reqId, m.seq, null));
+      break;
+    case MSG.PONG:
+      if (peer.lastPingSent > 0) { peer.rtt = Math.round(performance.now() - peer.lastPingSent); peer.lastSeen = Date.now(); }
+      updatePeerListUI(); break;
+    case MSG.TOK_REQ:
+      if (engine && !isGenerating) {
+        try {
+          const res = await engine.chat.completions.create({
+            messages: [{ role: "system", content: "Continue naturally." }, { role: "user", content: m.payload?.text || "" }],
+            max_tokens: m.payload?.tokens || 4, temperature: 0.7, stream: false
+          });
+          const tok = res.choices[0]?.message?.content || "";
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { tokens: tok, tps: localTPS }));
+        } catch(e) {}
+      }
+      break;
+    case MSG.TOK_RES:
+      if (m.payload) { peer.tps = m.payload.tps || peer.tps; console.log(`[Assist] Got tokens from ${fromId}`); }
+      break;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  NETWORK SCORE & AUTO-SCALING
+// ═══════════════════════════════════════════════════
+function computeScore() {
+  let score = 0, totalRTT = 0, rttCount = 0;
+  for (const [, p] of peers) {
+    if (!p.dc || p.dc.readyState !== "open") continue;
+    if (p.rtt < CONFIG.maxAssistLatencyMs) score += 1;
+    if (p.deviceTier === "A") score += 1;
+    if (p.rtt < Infinity) { totalRTT += p.rtt; rttCount++; }
+  }
+  if (rttCount > 0 && (totalRTT / rttCount) > CONFIG.maxAssistLatencyMs) score -= 1;
+  return { score: Math.max(0, Math.min(6, score)), avgRTT: rttCount > 0 ? Math.round(totalRTT / rttCount) : null };
+}
+
+function selectTier(score) {
+  let best = 0;
+  for (let i = CONFIG.tiers.length - 1; i >= 0; i--) { if (score >= CONFIG.tiers[i].minScore) { best = i; break; } }
+  return best;
+}
+
+async function autoScale() {
+  const { score, avgRTT } = computeScore();
+  networkScore = score;
+  const newIdx = selectTier(score);
+  const now = Date.now();
+  if (newIdx !== currentTierIdx && (now - lastTierChange) > CONFIG.hysteresisMs) {
+    const dir = newIdx > currentTierIdx ? "Upgrading" : "Downgrading";
+    console.log(`[AutoScale] ${dir}: ${CONFIG.tiers[currentTierIdx].name} → ${CONFIG.tiers[newIdx].name}`);
+    if (newIdx > currentTierIdx) {
+      const target = CONFIG.tiers[newIdx].model;
+      switchModel(target).then(() => { currentTierIdx = newIdx; lastTierChange = Date.now(); updateTierUI(); });
+    } else if (!isGenerating) {
+      currentTierIdx = newIdx; lastTierChange = now;
+      switchModel(CONFIG.tiers[newIdx].model);
+      updateTierUI();
+    }
+  }
+  updateScoreUI(score, avgRTT);
+}
+
+// ═══════════════════════════════════════════════════
+//  UI UPDATES
+// ═══════════════════════════════════════════════════
+function addMessageToUI(role, content, streaming = false) {
+  const el = document.getElementById('messages');
+  const msg = document.createElement('div');
+  msg.className = 'message';
+  const isUser = role === "user";
+  const tier = CONFIG.tiers[currentTierIdx];
+  msg.innerHTML = `
+    <div class="msg-avatar ${isUser ? 'user-av' : 'ai-av'}">${isUser ? '👤' : '🤖'}</div>
+    <div class="msg-body">
+      <div class="msg-header">${isUser ? 'You' : `AI · ${tier.name}`}</div>
+      <div class="msg-content">${streaming ? '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>' : (content || '')}</div>
+      <div class="msg-meta">${!isUser && !streaming ? `${tier.name} · ${tier.mode}` : ''}</div>
+    </div>`;
+  el.appendChild(msg);
+  el.scrollTop = el.scrollHeight;
+  return msg;
+}
+
+function updateTierUI() {
+  const t = CONFIG.tiers[currentTierIdx];
+  document.getElementById('chip-tier-text').textContent = `TIER: ${t.name.toUpperCase()}`;
+  document.getElementById('chip-mode-text').textContent = `MODE: ${t.mode.toUpperCase()}`;
+  const tc = { small:'var(--tier-small)', medium:'var(--tier-medium)', large:'var(--tier-large)' };
+  const mc = { local:'var(--mode-local)', assist:'var(--mode-assist)', 'assist+verify':'var(--mode-verify)' };
+  document.getElementById('chip-tier-dot').style.background = tc[t.name] || tc.small;
+  document.getElementById('chip-mode-dot').style.background = mc[t.mode] || mc.local;
+}
+
+function updatePeerListUI() {
+  const container = document.getElementById('peer-list');
+  let active = 0;
+  for (const [, p] of peers) if (p.dc?.readyState === "open") active++;
+  document.getElementById('chip-peers-text').textContent = `PEERS: ${active}`;
+  if (peers.size === 0) { container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No peers connected</div>'; return; }
+  let html = '';
+  for (const [pid, p] of peers) {
+    const connected = p.dc?.readyState === "open";
+    const dot = !connected ? 'dead' : (p.rtt < CONFIG.maxAssistLatencyMs ? 'online' : 'slow');
+    const tb = p.deviceTier === 'A' ? 'a' : p.deviceTier === 'B' ? 'b' : 'c';
+    html += `<div class="peer-item"><div class="peer-dot ${dot}"></div><span class="peer-id">${pid}</span><span class="peer-tier-badge tier-${tb}">${p.deviceTier}</span><span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function updateScoreUI(score, avgRTT) {
+  document.getElementById('chip-score-text').textContent = `SCORE: ${score}`;
+  document.getElementById('stat-score').textContent = score;
+  document.getElementById('stat-rtt').textContent = avgRTT !== null ? `${avgRTT}ms` : '—';
+  let s = '';
+  for (let i = 0; i < 6; i++) s += `<div class="score-segment ${i < score ? 'active' : ''} ${score >= 4 ? 'high' : ''}"></div>`;
+  document.getElementById('score-bar').innerHTML = s;
+}
+
+function updateSpeedChip() {
+  document.getElementById('chip-speed-text').textContent = `${localTPS} tok/s`;
+  document.getElementById('stat-tps-local').textContent = `${localTPS}`;
+  document.getElementById('stat-tps-eff').textContent = `${effectiveTPS}`;
+}
+
+function updateDeviceStats() {
+  document.getElementById('stat-device-tier').textContent = `Tier ${deviceTier}`;
+  document.getElementById('stat-webgpu').textContent = hasWebGPU ? '✅ Yes' : '❌ No';
+  document.getElementById('stat-memory').textContent = `${memoryMB}MB`;
+  document.getElementById('stat-peer-id').textContent = peerId;
+}
+
+function showModelProgress(show, name) {
+  const s = document.getElementById('model-progress-section');
+  if (show) { s.classList.add('active'); document.getElementById('model-name-display').textContent = name || ''; }
+  else s.classList.remove('active');
+}
+function updateModelProgress(pct, text) {
+  const b = document.getElementById('model-progress-bar');
+  const l = document.getElementById('model-progress-label');
+  if (b) b.style.width = `${pct}%`;
+  if (l) l.textContent = text || `${pct}%`;
+}
+function updateInitStatus(t) { const e = document.getElementById('init-status'); if (e) e.textContent = t; }
+function updateInitProgress(p) { const e = document.getElementById('init-progress-fill'); if (e) e.style.width = `${p}%`; }
+function hideInitOverlay() { const e = document.getElementById('init-overlay'); if (e) e.classList.add('hidden'); }
+
+// ═══════════════════════════════════════════════════
+//  INPUT + CLEANUP
+// ═══════════════════════════════════════════════════
+function setupInput() {
+  const input = document.getElementById('chat-input');
+  const btn = document.getElementById('send-btn');
+  function send() {
+    const t = input.value.trim();
+    if (!t || isGenerating || !engine) return;
+    input.value = ''; input.style.height = 'auto';
+    generateResponse(t);
+  }
+  btn.addEventListener('click', send);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
+}
+
+function cleanupPeers() {
+  const now = Date.now();
+  for (const [pid, p] of peers) if (now - p.lastSeen > CONFIG.presenceTTLMs) { console.log(`[Peers] Stale: ${pid}`); removePeer(pid); }
+}
+
+// ═══════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════
+async function boot() {
+  console.log(`[P2P-LLM] Boot peerId=${peerId}`);
+  updateInitStatus("Detecting device…");
+  await classifyDevice();
+  updateScoreUI(0, null);
+  setupInput();
+
+  updateInitStatus(`Loading model in Web Worker: ${CONFIG.defaultModel}`);
+  await initEngine(CONFIG.defaultModel);
+  updateTierUI();
+  hideInitOverlay();
+
+  addMessageToUI("assistant", `🌐 P2P-LLM initialized\n\nModel: ${currentModelId}\nDevice: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}\nPeer ID: ${peerId}\n\nConnecting to peers via Nostr…`);
+
+  connectToRelays();
+  setInterval(() => publishPresence(), CONFIG.presenceIntervalMs);
+  setInterval(() => cleanupPeers(), CONFIG.presenceTTLMs);
+  setInterval(() => autoScale(), CONFIG.scoreRecalcMs);
+  console.log('[P2P-LLM] Boot complete');
+}
+
+boot().catch(err => {
+  console.error('[P2P-LLM] Boot failed:', err);
+  updateInitStatus(`Boot failed: ${err.message}`);
+});
+</script>
+</body>
+</html>
