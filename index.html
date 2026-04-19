@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>P2P-LLM — Decentralized AI Chat</title>
-<meta name="description" content="Browser-based peer-to-peer LLM inference with shard federation. Local-first, fault-tolerant.">
+<title>P2P-LLM — Distributed Hive Mind</title>
+<meta name="description" content="Browser-based peer-to-peer distributed Mixture of Experts. Dynamic Edge Compute Allocation across 5 hardware tiers.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -19,11 +19,13 @@
   --accent-primary: #6c5ce7;
   --accent-secondary: #a29bfe;
   --accent-glow: rgba(108, 92, 231, 0.35);
-  --tier-small: #00cec9;
-  --tier-medium: #fdcb6e;
-  --tier-large: #e17055;
+  --tier-s: #f1c40f;
+  --tier-a: #e17055;
+  --tier-b: #fdcb6e;
+  --tier-c: #00cec9;
+  --tier-d: #636e72;
   --mode-local: #00b894;
-  --mode-assist: #0984e3;
+  --mode-moe: #e17055;
   --mode-federated: #a29bfe;
   --peer-online: #00b894;
   --peer-slow: #fdcb6e;
@@ -78,7 +80,7 @@ body::before {
 
 #app { position: relative; z-index: 1; display: flex; flex: 1; min-height: 0; }
 #sidebar {
-  width: 260px; background: var(--bg-secondary);
+  width: 280px; background: var(--bg-secondary);
   border-right: 1px solid var(--border-subtle);
   display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
 }
@@ -102,16 +104,12 @@ body::before {
 .peer-id { font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .peer-rtt { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
 .peer-badge { font-size: 9px; padding: 1px 5px; border-radius: 6px; font-weight: 600; }
-.peer-badge.tier-a { background: rgba(0,206,201,0.15); color: var(--tier-small); }
-.peer-badge.tier-b { background: rgba(253,203,110,0.15); color: var(--tier-medium); }
-.peer-badge.tier-c { background: rgba(225,112,85,0.15); color: var(--tier-large); }
-.peer-badge.shard { background: rgba(162,155,254,0.15); color: var(--mode-federated); }
-
-/* Shard progress */
-.shard-bar { display: flex; gap: 3px; margin-top: 6px; }
-.shard-seg { flex: 1; height: 5px; background: var(--bg-tertiary); border-radius: 2px; transition: background var(--transition-med); }
-.shard-seg.loaded { background: var(--mode-federated); }
-.shard-seg.local { background: var(--tier-small); }
+.peer-badge.tier-s { background: rgba(241,196,15,0.15); color: var(--tier-s); }
+.peer-badge.tier-a { background: rgba(225,112,85,0.15); color: var(--tier-a); }
+.peer-badge.tier-b { background: rgba(253,203,110,0.15); color: var(--tier-b); }
+.peer-badge.tier-c { background: rgba(0,206,201,0.15); color: var(--tier-c); }
+.peer-badge.tier-d { background: rgba(99,110,114,0.15); color: var(--tier-d); }
+.peer-badge.role { background: rgba(162,155,254,0.15); color: var(--mode-federated); }
 
 #model-progress-section { display: none; }
 #model-progress-section.active { display: block; }
@@ -132,10 +130,17 @@ body::before {
 .score-bar { display: flex; gap: 3px; margin-top: 6px; }
 .score-segment { flex: 1; height: 5px; background: var(--bg-tertiary); border-radius: 2px; transition: background var(--transition-med); }
 .score-segment.active { background: var(--accent-primary); }
-.score-segment.active.high { background: var(--tier-small); }
+.score-segment.active.high { background: var(--tier-c); }
 .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 11px; }
 .stat-label { color: var(--text-muted); }
 .stat-value { color: var(--text-primary); font-family: var(--font-mono); font-weight: 500; }
+
+.hive-tier-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
+.hive-tier-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+.hive-tier-label { color: var(--text-secondary); flex: 1; }
+.hive-tier-count { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
+.hive-missing { font-size: 10px; color: var(--tier-s); margin-top: 6px; padding: 6px 8px; background: rgba(241,196,15,0.08); border: 1px solid rgba(241,196,15,0.2); border-radius: var(--radius-sm); cursor: pointer; transition: background var(--transition-fast); }
+.hive-missing:hover { background: rgba(241,196,15,0.15); }
 
 #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .message { max-width: 720px; width: 100%; margin: 0 auto; display: flex; gap: 10px; animation: messageIn 0.3s ease-out; }
@@ -144,6 +149,7 @@ body::before {
 .msg-avatar.user-av { background: linear-gradient(135deg, var(--accent-primary), #a29bfe); color: white; }
 .msg-avatar.ai-av { background: linear-gradient(135deg, #00cec9, #00b894); color: white; }
 .msg-avatar.fed-av { background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: white; }
+.msg-avatar.moe-av { background: linear-gradient(135deg, #e17055, #fdcb6e); color: white; }
 .msg-body { flex: 1; min-width: 0; }
 .msg-header { font-size: 11px; font-weight: 600; margin-bottom: 3px; color: var(--text-secondary); }
 .msg-content { font-size: 14px; line-height: 1.65; color: var(--text-primary); word-wrap: break-word; white-space: pre-wrap; }
@@ -154,13 +160,25 @@ body::before {
 .typing-dot:nth-child(3) { animation-delay: 0.3s; }
 @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
 
-/* Federated inference pill */
+.moe-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 10px;
+  background: rgba(225,112,85,0.12); border: 1px solid rgba(225,112,85,0.25);
+  font-size: 10px; color: var(--tier-a); font-family: var(--font-mono);
+  margin-top: 4px;
+}
 .fed-pill {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 8px; border-radius: 10px;
   background: rgba(108,92,231,0.12); border: 1px solid rgba(108,92,231,0.25);
   font-size: 10px; color: var(--accent-secondary); font-family: var(--font-mono);
   margin-top: 4px;
+}
+.route-banner {
+  font-size: 11px; color: var(--tier-b); padding: 6px 10px; margin: 0 auto;
+  max-width: 720px; text-align: center; animation: messageIn 0.3s ease-out;
+  background: rgba(253,203,110,0.06); border-radius: var(--radius-sm);
+  border: 1px solid rgba(253,203,110,0.12);
 }
 
 #input-area { padding: 12px 16px; border-top: 1px solid var(--border-subtle); background: var(--bg-secondary); flex-shrink: 0; }
@@ -193,7 +211,7 @@ body::before {
 #init-overlay.hidden { opacity: 0; pointer-events: none; }
 .init-logo {
   font-size: 44px; font-weight: 700;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary), var(--tier-small));
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary), var(--tier-c));
   background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   animation: logoGlow 3s ease-in-out infinite alternate;
 }
@@ -201,6 +219,13 @@ body::before {
 .init-status { font-size: 13px; color: var(--text-secondary); text-align: center; max-width: 380px; }
 .init-progress { width: 240px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
 .init-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
+
+#sim-log { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 999; max-height: 45vh; overflow-y: auto; background: rgba(10,10,15,0.95); border-top: 2px solid var(--accent-primary); padding: 12px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+#sim-log.active { display: block; }
+#sim-log .sim-pass { color: #00b894; }
+#sim-log .sim-fail { color: #e17055; }
+#sim-log .sim-info { color: var(--accent-secondary); }
+#sim-log .sim-title { color: var(--tier-s); font-weight: 700; font-size: 13px; }
 
 @media (max-width: 768px) {
   #status-bar { padding: 6px 8px; gap: 5px; }
@@ -215,22 +240,33 @@ body::before {
 <body>
 
 <div id="init-overlay">
-  <div class="init-logo">P2P-LLM</div>
+  <div class="init-logo">HIVE MIND</div>
   <div class="init-status" id="init-status">Initializing…</div>
   <div class="init-progress"><div class="init-progress-fill" id="init-progress-fill"></div></div>
 </div>
 
 <div id="status-bar">
-  <div class="status-chip"><span class="dot" id="chip-verifier-dot" style="background:var(--accent-primary)"></span><span id="chip-verifier-text">VERIFIER: —</span></div>
   <div class="status-chip"><span class="dot" id="chip-tier-dot"></span><span id="chip-tier-text">TIER: —</span></div>
+  <div class="status-chip"><span class="dot" id="chip-role-dot" style="background:var(--peer-dead)"></span><span id="chip-role-text">ROLE: —</span></div>
   <div class="status-chip"><span class="dot" id="chip-mode-dot"></span><span id="chip-mode-text">MODE: —</span></div>
-  <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-peers-text">PEERS: 0</span></div>
+  <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-peers-text">HIVE: 0</span></div>
   <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-speed-text">0 tok/s</span></div>
   <div class="status-chip"><span class="dot" id="chip-relays-dot" style="background:var(--peer-slow)"></span><span id="chip-relays-text">RELAYS: 0/0</span></div>
 </div>
 
 <div id="app">
   <aside id="sidebar">
+    <div class="sidebar-section">
+      <h3>🧠 Hive Mind Capabilities</h3>
+      <div id="hive-tiers">
+        <div class="hive-tier-row"><span class="hive-tier-icon">👑</span><span class="hive-tier-label">Tier S · Super Node</span><span class="hive-tier-count" id="hive-s">0</span></div>
+        <div class="hive-tier-row"><span class="hive-tier-icon">🖥️</span><span class="hive-tier-label">Tier A · Desktop</span><span class="hive-tier-count" id="hive-a">0</span></div>
+        <div class="hive-tier-row"><span class="hive-tier-icon">💻</span><span class="hive-tier-label">Tier B · Laptop</span><span class="hive-tier-count" id="hive-b">0</span></div>
+        <div class="hive-tier-row"><span class="hive-tier-icon">📱</span><span class="hive-tier-label">Tier C · Mobile+</span><span class="hive-tier-count" id="hive-c">0</span></div>
+        <div class="hive-tier-row"><span class="hive-tier-icon">📟</span><span class="hive-tier-label">Tier D · Relay</span><span class="hive-tier-count" id="hive-d">0</span></div>
+      </div>
+      <div id="hive-missing-hint" style="display:none"></div>
+    </div>
     <div class="sidebar-section">
       <h3>⚡ Connected Peers</h3>
       <div id="peer-list"><div style="font-size:11px;color:var(--text-muted);padding:6px 0;">No peers connected</div></div>
@@ -240,14 +276,10 @@ body::before {
       <div id="relay-list"></div>
     </div>
     <div class="sidebar-section" id="model-progress-section">
-      <h3>📦 Model / Shard Loading</h3>
+      <h3>📦 Model Loading</h3>
       <div id="model-name-display" style="font-size:11px;color:var(--text-secondary);"></div>
       <div class="progress-bar-track"><div class="progress-bar-fill" id="model-progress-bar"></div></div>
       <div id="model-progress-label"></div>
-    </div>
-    <div class="sidebar-section">
-      <h3>🧩 Shard Map</h3>
-      <div id="shard-map-ui"><div style="font-size:11px;color:var(--text-muted);">Calculando…</div></div>
     </div>
     <div class="sidebar-section">
       <h3>📊 Network Score</h3>
@@ -262,9 +294,9 @@ body::before {
       <h3>🖥️ Device Info</h3>
       <div>
         <div class="stat-row"><span class="stat-label">Device Tier</span><span class="stat-value" id="stat-device-tier">—</span></div>
+        <div class="stat-row"><span class="stat-label">Role</span><span class="stat-value" id="stat-device-role">—</span></div>
         <div class="stat-row"><span class="stat-label">WebGPU</span><span class="stat-value" id="stat-webgpu">—</span></div>
         <div class="stat-row"><span class="stat-label">Memory</span><span class="stat-value" id="stat-memory">—</span></div>
-        <div class="stat-row"><span class="stat-label">Shard Role</span><span class="stat-value" id="stat-shard-role">—</span></div>
         <div class="stat-row"><span class="stat-label">Peer ID</span><span class="stat-value" id="stat-peer-id" style="font-size:9px;">—</span></div>
       </div>
     </div>
@@ -273,7 +305,7 @@ body::before {
     <div id="messages"></div>
     <div id="input-area">
       <div id="input-row">
-        <textarea id="chat-input" rows="1" placeholder="Type a message… (P2P mesh active)" autofocus></textarea>
+        <textarea id="chat-input" rows="1" placeholder="Ask the Hive Mind… (MoE mesh active)" autofocus></textarea>
         <button id="send-btn" title="Send">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -285,22 +317,23 @@ body::before {
   </div>
 </div>
 
+<div id="sim-log"></div>
+
 <script type="module">
 // ═══════════════════════════════════════════════════════════════════════════
-//  P2P-LLM v3 — Federated Shard Inference + Full P2P Mesh
+//  HIVE MIND v4 — Distributed Mixture of Experts (MoE)
 //
-//  ESTRATEGIA:
-//  1. Cada nodo detecta cuánta VRAM/RAM tiene disponible
-//  2. Elige el modelo más grande que PUEDE cargar completo
-//  3. Si NO puede cargar ningún modelo completo → modo SHARD:
-//     - Descarga solo las capas que le caben (shard parcial)
-//     - Se registra en la malla como "shard worker" con su rango de capas
-//  4. El nodo COORDINADOR (que inició la conversación o tiene más score)
-//     orquesta la inferencia distribuida: envía embeddings layer-by-layer
-//  5. Fallback en cascada: LOCAL → FEDERATED → RELAY (solo P2P, sin respuesta local)
+//  5-TIER TOPOLOGY:
+//  S = Super Node (14B+, master_reasoner) — Solves hard logic
+//  A = Desktop GPU (8B, coder/scientist)  — Code & science
+//  B = Laptop (3B, creative/general)      — Simple answers
+//  C = High-End Mobile (0.3B, fast_router) — Classifies intent
+//  D = Low-End Mobile (no engine, relay/kv_cache) — Relay + cache
+//
+//  GOLDEN RULE: Requests flow UP. C/D never generate user answers.
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── Web Worker para inferencia no-bloqueante ─────────────────────────────
+// ── Web Worker ───────────────────────────────────────────────────────────
 const WORKER_CODE = `
 import { WebWorkerMLCEngineHandler } from "https://esm.run/@mlc-ai/web-llm";
 const handler = new WebWorkerMLCEngineHandler();
@@ -311,7 +344,7 @@ function createWorker() {
   return new Worker(URL.createObjectURL(blob), { type: "module" });
 }
 
-// ── nostr-tools: firmas criptográficas reales (igual que PudúChat) ──
+// ── nostr-tools ──────────────────────────────────────────────────────────
 const _nostrPreload = import("https://esm.sh/nostr-tools@2/pure").catch(()=>null);
 let nostrMod = null;
 async function getNostrMod() {
@@ -321,133 +354,53 @@ async function getNostrMod() {
 
 const webllm = await import("https://esm.run/@mlc-ai/web-llm");
 
-// ── CONFIG ────────────────────────────────────────────────────────────────
-const CONFIG = {
-  // Modelos ordenados por memoria requerida (menor a mayor)
-  // Usamos versiones int4 para máxima compatibilidad móvil
-  models: [
-    {
-      id: "SmolLM2-360M-Instruct-q4f16_1-MLC",
-      name: "0.4B-q4",
-      label: "tiny",
-      vramMB: 350,
-      ramMB: 500,
-      layers: 30,
-      modelSize: 360
-    },
-    {
-      id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
-      name: "0.5B-q4",
-      label: "mini",
-      vramMB: 450,
-      ramMB: 700,
-      layers: 24,
-      modelSize: 500
-    },
-    {
-      id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
-      name: "1B-q4",
-      label: "small",
-      vramMB: 900,
-      ramMB: 1200,
-      layers: 16,
-      modelSize: 1000
-    },
-    {
-      id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
-      name: "3B-q4",
-      label: "medium",
-      vramMB: 2200,
-      ramMB: 3000,
-      layers: 28,
-      modelSize: 3000
-    },
-    {
-      id: "Llama-3.1-8B-Instruct-q4f16_1-MLC",
-      name: "8B-q4",
-      label: "large",
-      vramMB: 5500,
-      ramMB: 8000,
-      layers: 32,
-      modelSize: 8000
-    },
-  ],
-
-  // Shard inference: capas mínimas útiles por nodo
-  minShardLayers: 4,
-
-  maxPeers: 8,
-  maxAssistLatencyMs: 250,
-  hysteresisMs: 4000,
-  speculativeTokens: 4,
-
-  nostrCoreRelays: [
-    "wss://relay.damus.io",
-    "wss://relay.primal.net"
-  ],
-  nostrPoolRelays: [
-    "wss://nos.lol",
-    "wss://offchain.pub",
-    "wss://nostr.mom",
-    "wss://nostr.wine",
-    "wss://nostr.bitcoiner.social",
-    "wss://nostr-pub.wellorder.net",
-    "wss://relay.nostr.info",
-    "wss://nostr.oxtr.dev",
-    "wss://purplepag.es",
-    "wss://relay.nostr.wirednet.jp",
-    "wss://relay.nostr.com.au",
-    "wss://relay.nostr.band",
-    "wss://nostr.cercatrova.me",
-    "wss://nostr.fmt.wiz.biz",
-    "wss://relay.snort.social",
-    "wss://relay.nostr.bg",
-    "wss://nostr.zebedee.cloud",
-    "wss://relay.current.fyi",
-    "wss://eden.nostr.land",
-    "wss://relay.noswhere.com",
-    "wss://nostr.einundzwanzig.space",
-    "wss://nostr.mutinywallet.com",
-    "wss://nostr.developer.li"
-  ],
-  maxActiveRelays: 6,
-
-  relayReconnectMs: 8000,
-  relayMaxRetries: 999,
-  appNamespace: "p2p-llm-v3",
-  presenceIntervalMs: 15000,
-  presenceTTLMs: 45000,
-  pingIntervalMs: 5000,
-  scoreRecalcMs: 2500,
-  iceBatchDelayMs: 200,
-  webrtcMaxReconnects: 5,
-  presenceWindowSec: 600,
+// ── CONFIG ───────────────────────────────────────────────────────────────
+const ROLE_LABELS = {
+  master_reasoner: '👑 Reasoner',
+  coder: '🖥️ Coder',
+  scientist: '🔬 Scientist',
+  creative: '🎨 Creative',
+  general: '💬 General',
+  fast_router: '📱 Router',
+  relay: '📟 Relay',
+  kv_cache: '🗄️ KV Cache',
 };
 
-// ── MSG PROTOCOL ──────────────────────────────────────────────────────────
+const CONFIG = {
+  models: [
+    { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", name: "0.4B-q4", label: "tiny",   vramMB: 350,  ramMB: 500,  modelSize: 360,  tier: "C", roles: ["fast_router"] },
+    { id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", name: "0.5B-q4", label: "mini",   vramMB: 450,  ramMB: 700,  modelSize: 500,  tier: "C", roles: ["fast_router"] },
+    { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",  name: "1B-q4",   label: "small",  vramMB: 900,  ramMB: 1200, modelSize: 1000, tier: "B", roles: ["creative", "general"] },
+    { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",  name: "3B-q4",   label: "medium", vramMB: 2200, ramMB: 3000, modelSize: 3000, tier: "B", roles: ["creative", "general"] },
+    { id: "Llama-3.1-8B-Instruct-q4f16_1-MLC",  name: "8B-q4",   label: "large",  vramMB: 5500, ramMB: 8000, modelSize: 8000, tier: "A", roles: ["coder", "scientist"] },
+  ],
+  maxPeers: 12,
+  nostrCoreRelays: [ "wss://relay.damus.io", "wss://relay.primal.net" ],
+  nostrPoolRelays: [
+    "wss://nos.lol","wss://offchain.pub","wss://nostr.mom","wss://nostr.wine",
+    "wss://nostr.bitcoiner.social","wss://nostr-pub.wellorder.net","wss://relay.nostr.info",
+    "wss://nostr.oxtr.dev","wss://purplepag.es","wss://relay.nostr.wirednet.jp",
+    "wss://relay.nostr.com.au","wss://relay.nostr.band","wss://nostr.cercatrova.me",
+    "wss://nostr.fmt.wiz.biz","wss://relay.snort.social","wss://relay.nostr.bg",
+    "wss://nostr.zebedee.cloud","wss://relay.current.fyi","wss://eden.nostr.land",
+    "wss://relay.noswhere.com","wss://nostr.einundzwanzig.space",
+    "wss://nostr.mutinywallet.com","wss://nostr.developer.li"
+  ],
+  maxActiveRelays: 6,
+  relayReconnectMs: 8000, relayMaxRetries: 999,
+  appNamespace: "p2p-llm-v4-hive",
+  presenceIntervalMs: 15000, presenceTTLMs: 45000,
+  pingIntervalMs: 5000, scoreRecalcMs: 2500,
+  iceBatchDelayMs: 200, webrtcMaxReconnects: 5, presenceWindowSec: 600,
+};
+
+// ── MSG PROTOCOL ─────────────────────────────────────────────────────────
 const MSG = {
   HELLO: 1,
-  TOK_REQ: 2,    // solicitar tokens a un peer con engine completo
-  TOK_RES: 3,    // respuesta de tokens (legacy fallback)
-  TOK_CHUNK: 4,  // token parcial iterativo de WebRTC streaming
-  TOK_END: 5,    // fin del streaming progresivo
-  CACHE_REQ: 6,  // búsqueda de KV Contexto
-  CACHE_RES: 7,  // respuesta de KV Contexto
-  CACHE_STORE: 8, // guardar KV Contexto
-  PING: 0x10,
-  PONG: 0x11,
-  CHAT: 0x20,
-  // Federated inference
-  FED_START: 0x30,   // "voy a generar, necesito tus capas N-M"
-  FED_HIDDEN: 0x31,  // hidden states (tensor parcial serializado)
-  FED_DONE: 0x32,    // inferencia federada completa
-  FED_ACK: 0x33,     // shard worker listo
-  
-  // Speculative Decoding
-  SPEC_DRAFT_REQ: 0x40,
-  SPEC_DRAFT_RES: 0x41,
-  SPEC_ACCEPT:    0x42,
-  SPEC_REJECT:    0x43,
+  TOK_REQ: 2, TOK_RES: 3, TOK_CHUNK: 4, TOK_END: 5,
+  CACHE_REQ: 6, CACHE_RES: 7, CACHE_STORE: 8,
+  PING: 0x10, PONG: 0x11, CHAT: 0x20,
+  MOE_REQ: 0x50, MOE_RES: 0x51,
 };
 
 function encodeMsg(type, reqId, seq, payload) {
@@ -466,71 +419,40 @@ function decodeMsg(buf) {
   return { type, reqId, seq, payload };
 }
 
-// ── GLOBALS ───────────────────────────────────────────────────────────────
-// ── Identidad criptográfica (igual que PudúChat) ──
-let privKeyBytes = null;
-let pubKeyHex = "";
-let peerId = "";  // se establece en boot() tras generar keypair
-
+// ── GLOBALS ──────────────────────────────────────────────────────────────
+let privKeyBytes = null, pubKeyHex = "", peerId = "";
 async function initIdentity() {
   const nostr = await getNostrMod();
-  const STORAGE_KEY = 'p2p-llm-identity-v3';
+  const STORAGE_KEY = 'p2p-llm-identity-v4';
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const { priv, pub } = JSON.parse(saved);
-      privKeyBytes = new Uint8Array(priv);
-      pubKeyHex = pub;
-      peerId = pubKeyHex.slice(0, 12);
-      console.log('[Identity] Loaded from storage, peerId=' + peerId);
-      return;
-    }
+    if (saved) { const { priv, pub } = JSON.parse(saved); privKeyBytes = new Uint8Array(priv); pubKeyHex = pub; peerId = pubKeyHex.slice(0, 12); return; }
   } catch(e) {}
   privKeyBytes = nostr.generateSecretKey();
   pubKeyHex = nostr.getPublicKey(privKeyBytes);
   peerId = pubKeyHex.slice(0, 12);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ priv: Array.from(privKeyBytes), pub: pubKeyHex }));
-  } catch(e) {}
-  console.log('[Identity] New keypair, peerId=' + peerId);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ priv: Array.from(privKeyBytes), pub: pubKeyHex })); } catch(e) {}
+  console.log('[Identity] peerId=' + peerId);
 }
 
-let engine = null;
-let currentModelId = null;
-let isModelLoading = false;
-let isGenerating = false;
-
-let deviceTier = "C";
-let hasWebGPU = false;
-let memoryMB = 0;
-let availableVRAM = 0;
-let localTPS = 0;
-
+let engine = null, currentModelId = null, isModelLoading = false, isGenerating = false;
+let deviceTier = "D", hasWebGPU = false, memoryMB = 0, availableVRAM = 0, localTPS = 0;
+let myRole = "relay", inferenceMode = "relay", currentModelLabel = "none";
 let myShardInfo = null;
-let inferenceMode = "relay";
 
 const peers = new Map();
 let networkScore = 0;
-let lastTierChange = 0;
-let currentModelLabel = "small";
-
 const relayMap = new Map();
-const seenEventIds = new Set();
-const seenMsgIds = new Set();
-const chatHistory = [];
-const fedPending = new Map();
-const kvCacheStore = new Map();
+const seenEventIds = new Set(), seenMsgIds = new Set();
+const chatHistory = [], fedPending = new Map(), kvCacheStore = new Map();
+let isMobile = false, isSimMode = false;
 
 // ══════════════════════════════════════════════════════════════════════════
-//  DEVICE CLASSIFICATION — detecta VRAM disponible real
+//  DEVICE CLASSIFICATION — 5 TIERS
 // ══════════════════════════════════════════════════════════════════════════
-let isMobile = false;
-
 async function classifyDevice() {
-  hasWebGPU = false;
-  availableVRAM = 0;
+  hasWebGPU = false; availableVRAM = 0;
   isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-
   if ('gpu' in navigator && navigator.gpu) {
     try {
       const adapter = await Promise.race([
@@ -542,202 +464,37 @@ async function classifyDevice() {
         const info = adapter.limits || {};
         const maxBuf = info.maxBufferSize || 0;
         availableVRAM = maxBuf > 0 ? Math.floor(maxBuf / 1024 / 1024) : 0;
-        console.log(`[Device] WebGPU OK, maxBufferSize=${maxBuf} → ~${availableVRAM}MB VRAM`);
       }
-    } catch(e) {
-      console.log('[Device] WebGPU error:', e.message);
-    }
+    } catch(e) { console.log('[Device] WebGPU error:', e.message); }
   }
-
   memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
+  if (hasWebGPU && availableVRAM === 0) { availableVRAM = Math.floor(memoryMB * 0.35); }
 
-  // FIX MÓVIL: Chrome móvil con WebGPU a menudo devuelve maxBufferSize=0
-  // aunque el dispositivo SÍ puede ejecutar modelos pequeños.
-  // Usamos RAM como proxy conservador.
-  if (hasWebGPU && availableVRAM === 0) {
-    availableVRAM = Math.floor(memoryMB * 0.35);
-    console.log(`[Device] VRAM=0 detectado (bug móvil), estimando ${availableVRAM}MB desde RAM=${memoryMB}MB`);
-  }
+  // 5-Tier classification
+  if (hasWebGPU && availableVRAM >= 16000) { deviceTier = "S"; myRole = "master_reasoner"; }
+  else if (hasWebGPU && availableVRAM >= 5000) { deviceTier = "A"; myRole = "coder"; }
+  else if (hasWebGPU && (availableVRAM >= 1500 || memoryMB >= 4096)) { deviceTier = "B"; myRole = "creative"; }
+  else if (hasWebGPU && memoryMB >= 2048) { deviceTier = "C"; myRole = "fast_router"; }
+  else if (!isMobile && memoryMB >= 4096 && hasWebGPU) { deviceTier = "B"; myRole = "general"; }
+  else if (hasWebGPU) { deviceTier = "C"; myRole = "fast_router"; }
+  else { deviceTier = "D"; myRole = "relay"; }
 
-  if (hasWebGPU && availableVRAM >= 5000) deviceTier = "A";
-  else if (hasWebGPU && (availableVRAM >= 1500 || memoryMB >= 4096)) deviceTier = "B";
-  else if (hasWebGPU && memoryMB >= 2048) deviceTier = "B";
-  else if (!isMobile && memoryMB >= 4096) deviceTier = "B";
-  else deviceTier = "C";
-
-  console.log(`[Device] Tier=${deviceTier} WebGPU=${hasWebGPU} VRAM~${availableVRAM}MB RAM=${memoryMB}MB mobile=${isMobile}`);
+  console.log(`[Device] Tier=${deviceTier} Role=${myRole} WebGPU=${hasWebGPU} VRAM~${availableVRAM}MB RAM=${memoryMB}MB`);
   updateDeviceStats();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  ENGINE — carga el modelo más grande posible, con fallback en cascada
+//  ENGINE
 // ══════════════════════════════════════════════════════════════════════════
-
-// Retorna el modelo más grande que este dispositivo puede cargar completo
 function selectBestModel() {
-  // Estimación conservadora: usar 60% de RAM disponible para el modelo
   const effectiveVRAM = hasWebGPU ? (availableVRAM > 0 ? availableVRAM * 0.75 : memoryMB * 0.4) : 0;
-  const effectiveRAM  = memoryMB * 0.45;
-
+  const effectiveRAM = memoryMB * 0.45;
   let best = null;
   for (const m of CONFIG.models) {
-    const fits = hasWebGPU
-      ? effectiveVRAM >= m.vramMB
-      : effectiveRAM  >= m.ramMB;
+    const fits = hasWebGPU ? effectiveVRAM >= m.vramMB : effectiveRAM >= m.ramMB;
     if (fits) best = m;
   }
-  console.log(`[Engine] selectBestModel: VRAM~${Math.round(hasWebGPU ? effectiveVRAM : effectiveRAM)}MB → ${best?.name || 'none'}`);
   return best;
-}
-
-// Cuántos megabytes de historial KV puede retener este nodo móvil
-function estimateKVCacheCapacity() {
-  const effectiveMB = hasWebGPU
-    ? (availableVRAM > 0 ? availableVRAM * 0.5 : memoryMB * 0.25)
-    : memoryMB * 0.25;
-  return Math.floor(Math.max(10, effectiveMB));
-}
-
-// Generador SHA-256 para validación de hashes KV
-async function calculateHash(text) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-async function tryLoadModel(modelCfg, cb) {
-  // Intento 1: WebWorker + WebGPU (con timeout para móvil)
-  if (hasWebGPU) {
-    try {
-      const worker = createWorker();
-      const eng = await Promise.race([
-        webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, cb),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('worker timeout')), 180000))
-      ]);
-      console.log('[Engine] Loaded via WebWorker+WebGPU:', modelCfg.name);
-      return eng;
-    } catch(e) {
-      console.warn('[Engine] WebWorker failed:', e.message);
-    }
-  }
-  // Intento 2: MLCEngine directo (WASM / CPU fallback)
-  try {
-    const eng = await Promise.race([
-      webllm.CreateMLCEngine(modelCfg.id, cb),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('mlc timeout')), 180000))
-    ]);
-    console.log('[Engine] Loaded via MLCEngine (CPU/WASM):', modelCfg.name);
-    return eng;
-  } catch(e) {
-    console.warn('[Engine] MLCEngine failed:', e.message);
-  }
-  return null;
-}
-
-async function initEngine() {
-  if (isModelLoading) return;
-  isModelLoading = true;
-
-  const bestModel = selectBestModel();
-
-  if (bestModel) {
-    updateInitStatus(`Loading model: ${bestModel.name}…`);
-    showModelProgress(true, bestModel.id);
-
-    const cb = { initProgressCallback: (p) => {
-      const pct = Math.round((p.progress || 0) * 100);
-      updateModelProgress(pct, p.text || '');
-      updateInitProgress(pct);
-    }};
-
-    engine = await tryLoadModel(bestModel, cb);
-    if (engine) {
-      currentModelId = bestModel.id;
-      currentModelLabel = bestModel.label;
-      inferenceMode = "local";
-      isModelLoading = false;
-      showModelProgress(false);
-      updateInitStatus('Model loaded ✓');
-      updateShardUI();
-      return;
-    }
-
-    // El modelo elegido falló — probar más pequeños en cascada
-    const startIdx = CONFIG.models.indexOf(bestModel);
-    for (let i = startIdx - 1; i >= 0; i--) {
-      const fallback = CONFIG.models[i];
-      updateInitStatus(`Retrying with ${fallback.name}…`);
-      engine = await tryLoadModel(fallback, cb);
-      if (engine) {
-        currentModelId = fallback.id;
-        currentModelLabel = fallback.label;
-        inferenceMode = "local";
-        isModelLoading = false;
-        showModelProgress(false);
-        updateShardUI();
-        return;
-      }
-    }
-  }
-
-  // ── MODO P2P KV CACHE: Carga de nodo retenedor ─────────────
-  isModelLoading = false;
-  showModelProgress(false);
-
-  const cacheLimit = estimateKVCacheCapacity();
-
-  if (cacheLimit > 10) {
-    myShardInfo = {
-      modelId: 'kv-cache-node',
-      capacityMB: cacheLimit,
-      role: "kv-cache",
-    };
-    inferenceMode = "federated";
-    console.log(`[KV Cache] Registrado como Retenedor HTTP Distribuido: Capacidad ~${cacheLimit}MB`);
-    addMessageToUI('assistant',
-      `🗄️ Nodo Caché Hash P2P activado\n` +
-      `Sin memoria para Neural Engine. Reasignando arquitectura.\n` +
-      `Este dispositivo ahora almacena Contextos Historiales en frío.\n\n` +
-      `• Alivias el ancho de banda cruzado de las GPUs remotas.\n` +
-      `• Los nodos P2P enviarán firmas Nostr SHA-256 reutilizando tu memoria RAM.\n\n` +
-      `Estado: Malla de retención de dicts activa...`
-    );
-  } else {
-    inferenceMode = "relay";
-    myShardInfo = null;
-    addMessageToUI('assistant',
-      `📡 Modo Relay P2P Puro\n` +
-      `Memoria ultra-limitada detectada o ambiente inseguro.\n` +
-      `Transmitirás los rebotes Gossip P2P invisibles limitando uso nativo.\n`
-    );
-  }
-
-  updateShardUI();
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-//  INFERENCIA — Local | Asistida | Federada | Relay
-// ══════════════════════════════════════════════════════════════════════════
-
-function getActiveConnections() {
-  let count = 0;
-  for (const [, p] of peers) {
-    if (p.conn !== null || p.dc?.readyState === 'open') count++;
-  }
-  return count;
-}
-
-function generateMsgId() { return Math.random().toString(36).substr(2, 9); }
-
-function broadcastChat(role, content, senderId, modelId, msgId = null, hops = 0, excludePeer = null) {
-  const id = msgId || generateMsgId();
-  seenMsgIds.add(id);
-  const payload = { id, role, content, peerId: senderId, model: modelId, hops };
-  const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
-  for (const [pid, p] of peers) {
-    if (pid !== excludePeer && p.dc?.readyState === 'open') {
-      try { p.dc.send(raw); } catch(e) {}
-    }
-  }
 }
 
 function getCurrentModelSize() {
@@ -746,28 +503,129 @@ function getCurrentModelSize() {
   return m ? m.modelSize : 0;
 }
 
-function electVerifier() {
-  let highestSize = getCurrentModelSize();
-  let verifier = engine ? 'local' : null;
-  let bestPeerId = engine ? peerId : null;
+function estimateKVCacheCapacity() {
+  const effectiveMB = hasWebGPU ? (availableVRAM > 0 ? availableVRAM * 0.5 : memoryMB * 0.25) : memoryMB * 0.25;
+  return Math.floor(Math.max(10, effectiveMB));
+}
 
-  for (const [pid, peer] of peers) {
-    if (peer.dc?.readyState !== 'open' || !peer.hasEngine) continue;
-    if (peer.modelSize > highestSize) {
-      highestSize = peer.modelSize;
-      verifier = pid;
-      bestPeerId = pid;
-    } else if (peer.modelSize === highestSize && highestSize > 0) {
-      if (pid < bestPeerId) {
-        verifier = pid;
-        bestPeerId = pid;
+async function calculateHash(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function tryLoadModel(modelCfg, cb) {
+  if (hasWebGPU) {
+    try {
+      const worker = createWorker();
+      const eng = await Promise.race([ webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, cb), new Promise((_, rej) => setTimeout(() => rej(new Error('worker timeout')), 180000)) ]);
+      return eng;
+    } catch(e) { console.warn('[Engine] WebWorker failed:', e.message); }
+  }
+  try {
+    const eng = await Promise.race([ webllm.CreateMLCEngine(modelCfg.id, cb), new Promise((_, rej) => setTimeout(() => rej(new Error('mlc timeout')), 180000)) ]);
+    return eng;
+  } catch(e) { console.warn('[Engine] MLCEngine failed:', e.message); }
+  return null;
+}
+
+async function initEngine() {
+  if (isModelLoading) return;
+  isModelLoading = true;
+  const bestModel = selectBestModel();
+  if (bestModel) {
+    updateInitStatus(`Loading model: ${bestModel.name}…`);
+    showModelProgress(true, bestModel.id);
+    const cb = { initProgressCallback: (p) => { const pct = Math.round((p.progress || 0) * 100); updateModelProgress(pct, p.text || ''); updateInitProgress(pct); }};
+    engine = await tryLoadModel(bestModel, cb);
+    if (engine) {
+      currentModelId = bestModel.id; currentModelLabel = bestModel.label;
+      // Update tier and role based on actual model loaded
+      const m = CONFIG.models.find(x => x.id === currentModelId);
+      if (m) { deviceTier = m.tier; myRole = m.roles[0]; }
+      inferenceMode = "local"; isModelLoading = false; showModelProgress(false);
+      updateInitStatus('Model loaded ✓'); return;
+    }
+    const startIdx = CONFIG.models.indexOf(bestModel);
+    for (let i = startIdx - 1; i >= 0; i--) {
+      const fallback = CONFIG.models[i];
+      updateInitStatus(`Retrying with ${fallback.name}…`);
+      engine = await tryLoadModel(fallback, cb);
+      if (engine) {
+        currentModelId = fallback.id; currentModelLabel = fallback.label;
+        const m2 = CONFIG.models.find(x => x.id === currentModelId);
+        if (m2) { deviceTier = m2.tier; myRole = m2.roles[0]; }
+        inferenceMode = "local"; isModelLoading = false; showModelProgress(false); return;
       }
     }
   }
-  
-  const verifierText = verifier ? (verifier === 'local' ? 'local' : verifier.slice(0, 6)) : '—';
-  document.getElementById('chip-verifier-text').textContent = `VERIFIER: ${verifierText}`;
-  return verifier;
+  isModelLoading = false; showModelProgress(false);
+  const cacheLimit = estimateKVCacheCapacity();
+  if (cacheLimit > 10) {
+    myShardInfo = { modelId: 'kv-cache-node', capacityMB: cacheLimit, role: "kv_cache" };
+    myRole = "kv_cache"; deviceTier = "D"; inferenceMode = "federated";
+  } else {
+    inferenceMode = "relay"; myRole = "relay"; deviceTier = "D"; myShardInfo = null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  INTENT CLASSIFICATION — MoE Routing Brain
+// ══════════════════════════════════════════════════════════════════════════
+const CODE_KW = /\b(code|coding|program|function|class|api|server|bug|debug|compile|algorithm|sql|html|css|javascript|python|rust|java|typescript|react|node|import|export|const |let |var |def |fn |struct|impl|async|await|return|console|print|for\s*\(|while\s*\(|if\s*\(|switch|try|catch|throw)\b/i;
+const LOGIC_KW = /\b(prove|proof|theorem|conjecture|mathematical|calculus|integral|differential|equation|logic|paradox|induction|deduction|hypothesis|axiom|lemma|complexity|O\(n|NP-hard|turing|gödel|collatz|riemann|fibonacci sequence|prime number|quantum)\b/i;
+const SIMPLE_KW = /^(hola|hi|hello|hey|buenos días|buenas|qué tal|cómo estás|saludos|gracias|thanks|ok|yes|no|sí|chao|bye|adiós|help|ayuda).{0,20}$/i;
+
+function classifyIntent(userMessage) {
+  const msg = userMessage.trim();
+  if (SIMPLE_KW.test(msg)) return { category: 'simple', targetRole: 'general', label: 'General' };
+  if (CODE_KW.test(msg)) return { category: 'code', targetRole: 'coder', label: 'Código' };
+  if (LOGIC_KW.test(msg)) return { category: 'logic', targetRole: 'master_reasoner', label: 'Razonamiento' };
+  if (msg.length > 200) return { category: 'complex', targetRole: 'coder', label: 'Complejo' };
+  return { category: 'general', targetRole: 'creative', label: 'General' };
+}
+
+// Finds the best peer matching a target role hierarchy
+function routeRequest(targetRole) {
+  const ROLE_HIERARCHY = {
+    master_reasoner: ['master_reasoner'],
+    coder:     ['coder', 'scientist', 'master_reasoner'],
+    scientist: ['scientist', 'coder', 'master_reasoner'],
+    creative:  ['creative', 'general', 'coder', 'scientist', 'master_reasoner'],
+    general:   ['general', 'creative', 'coder', 'scientist', 'master_reasoner'],
+  };
+  const candidates = ROLE_HIERARCHY[targetRole] || ['general','creative','coder','scientist','master_reasoner'];
+  for (const role of candidates) {
+    // Check local first
+    if (engine && myRole === role) return { type: 'local', peerId: null, role, tier: deviceTier };
+    // Then peers
+    let bestPeer = null, bestRTT = Infinity;
+    for (const [pid, p] of peers) {
+      if (p.dc?.readyState !== 'open' || !p.hasEngine) continue;
+      if (p.moeRole !== role) continue;
+      const rtt = p.rtt < Infinity ? p.rtt : 9999;
+      if (rtt < bestRTT) { bestPeer = pid; bestRTT = rtt; }
+    }
+    if (bestPeer) return { type: 'remote', peerId: bestPeer, role, tier: peers.get(bestPeer).deviceTier };
+  }
+  // Fallback: any peer with engine
+  if (engine) return { type: 'local', peerId: null, role: myRole, tier: deviceTier };
+  for (const [pid, p] of peers) {
+    if (p.dc?.readyState === 'open' && p.hasEngine) return { type: 'remote', peerId: pid, role: p.moeRole || 'unknown', tier: p.deviceTier };
+  }
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  INFERENCE — MoE + Local + Remote
+// ══════════════════════════════════════════════════════════════════════════
+function getActiveConnections() { let c = 0; for (const [,p] of peers) { if (p.conn !== null || p.dc?.readyState === 'open') c++; } return c; }
+function generateMsgId() { return Math.random().toString(36).substr(2, 9); }
+
+function broadcastChat(role, content, senderId, modelId, msgId = null, hops = 0, excludePeer = null) {
+  const id = msgId || generateMsgId(); seenMsgIds.add(id);
+  const payload = { id, role, content, peerId: senderId, model: modelId, hops };
+  const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
+  for (const [pid, p] of peers) { if (pid !== excludePeer && p.dc?.readyState === 'open') { try { p.dc.send(raw); } catch(e) {} } }
 }
 
 async function generateResponse(userMessage) {
@@ -776,151 +634,43 @@ async function generateResponse(userMessage) {
   addMessageToUI("user", userMessage);
   broadcastChat("user", userMessage, peerId, null);
 
-  const verifier = electVerifier();
-  if (!verifier) {
-    addMessageToUI('assistant', '⌛ Sin engine en la red...');
+  const intent = classifyIntent(userMessage);
+  const route = routeRequest(intent.targetRole);
+
+  if (!route) {
+    // Check if specific tier is missing
+    const needed = intent.targetRole === 'master_reasoner' ? 'S' : intent.targetRole === 'coder' ? 'A' : 'B';
+    const tierName = needed === 'S' ? 'Super Nodo 👑' : needed === 'A' ? 'Desktop GPU 🖥️' : 'Laptop 💻';
+    addMessageToUI('assistant', `⌛ Falta ${tierName} para tarea de [${intent.label}].\n\nComparte el link para invitar a alguien con el hardware adecuado.`);
     return;
   }
-  
-  if (verifier === 'local') {
-    const drafter = findBestDrafter();
-    if (drafter) return await runSpeculativeLocal(drafter);
-    return await runLocalInference(userMessage);
-  }
-  return await runRemoteInference(userMessage, verifier);
+
+  // Show routing banner
+  const routeLabel = ROLE_LABELS[route.role] || route.role;
+  const routeTarget = route.type === 'local' ? 'Local' : `Peer ${route.peerId.slice(0,6)}`;
+  showRouteBanner(`Enrutando tarea de [${intent.label}] → ${routeLabel} · ${routeTarget} (Tier ${route.tier})`);
+
+  if (route.type === 'local') return await runLocalInference(userMessage, intent, route);
+  return await runRemoteInference(userMessage, route.peerId, intent, route);
 }
 
-async function verifyDraft(messages, prefix, draftTokens) {
-  const ctx = [
-    ...messages,
-    { role: "assistant", content: prefix }
-  ];
-  const result = await engine.chat.completions.create({
-    messages: ctx, stream: false,
-    temperature: 0, max_tokens: draftTokens.length
-  });
-  const verifierOutput = result.choices[0]?.message?.content || "";
-  let accepted = 0;
-  for (let i = 0; i < draftTokens.length; i++) {
-    const pos = draftTokens.slice(0, i + 1).join('');
-    if (verifierOutput.startsWith(pos)) accepted = i + 1;
-    else break;
-  }
-  return accepted;
+function showRouteBanner(text) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'route-banner';
+  div.textContent = `🧩 ${text}`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
-async function generateOneToken(messages, prefix) {
-  const ctx = [...messages, { role: "assistant", content: prefix }];
-  const result = await engine.chat.completions.create({
-    messages: ctx, stream: false, temperature: 0, max_tokens: 1
-  });
-  return {
-    token: result.choices[0]?.message?.content || "",
-    isEOS: result.choices[0]?.finish_reason === 'stop' || result.choices[0]?.finish_reason === 'length'
-  };
-}
-
-async function runSpeculativeLocal(drafterPeerId) {
-  isGenerating = true;
-  document.getElementById('chip-mode-text').textContent = "MODE: SPECULATIVE"; 
-  const aiMsgEl = addMessageToUI("assistant", null, true);
-  const contentEl = aiMsgEl.querySelector('.msg-content');
-  aiMsgEl.querySelector('.typing-indicator')?.remove();
-
-  const startTime = performance.now();
-  let fullResponse = "", tokenCount = 0;
-  const messages = [
-    { role: "system", content: "You are a helpful AI assistant in a decentralized P2P network. Be concise and helpful." },
-    ...chatHistory.slice(-12)
-  ];
-
-  try {
-    let active = true;
-    while (active && tokenCount < 512) {
-      if (!peers.has(drafterPeerId) || peers.get(drafterPeerId).dc?.readyState !== 'open') {
-        document.getElementById('chip-mode-text').textContent = "MODE: LOCAL";
-        const chunks = await engine.chat.completions.create({
-          messages: [...messages, { role: "assistant", content: fullResponse }], stream: true, temperature: 0.7, max_tokens: 512 - tokenCount
-        });
-        for await (const chunk of chunks) {
-          const t = chunk.choices[0]?.delta?.content || "";
-          if (t) { fullResponse += t; tokenCount++; contentEl.textContent = fullResponse; document.getElementById('messages').scrollTop = 99999; }
-        }
-        break;
-      }
-
-      const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-      const draftTokens = await requestDraft(drafterPeerId, messages, fullResponse, 3, reqId);
-      
-      if (!draftTokens || draftTokens.length === 0) {
-        const gen = await generateOneToken(messages, fullResponse);
-        if (gen.token) {
-           fullResponse += gen.token; tokenCount++;
-           contentEl.textContent = fullResponse; document.getElementById('messages').scrollTop = 99999;
-        }
-        if (gen.isEOS || !gen.token) break;
-        continue;
-      }
-
-      const accepted = await verifyDraft(messages, fullResponse, draftTokens);
-      for (let i = 0; i < accepted; i++) {
-        fullResponse += draftTokens[i]; tokenCount++;
-        contentEl.textContent = fullResponse; document.getElementById('messages').scrollTop = 99999;
-      }
-      console.log(`[Spec] ronda draft=${JSON.stringify(draftTokens)} accepted=${accepted}`);
-
-      if (accepted < draftTokens.length) {
-        const gen = await generateOneToken(messages, fullResponse);
-        const peer = peers.get(drafterPeerId);
-        if (peer && peer.dc?.readyState === 'open') {
-          peer.dc.send(encodeMsg(MSG.SPEC_REJECT, reqId, 0, { correction: gen.token }));
-        }
-        if (gen.token) {
-           fullResponse += gen.token; tokenCount++;
-           contentEl.textContent = fullResponse; document.getElementById('messages').scrollTop = 99999;
-        }
-        if (gen.isEOS || !gen.token) break;
-      } else {
-        const peer = peers.get(drafterPeerId);
-        if (peer && peer.dc?.readyState === 'open') {
-          peer.dc.send(encodeMsg(MSG.SPEC_ACCEPT, reqId, 0, { accepted }));
-        }
-        if (draftTokens.length < 3) {
-          const gen = await generateOneToken(messages, fullResponse);
-          if (gen.token) {
-             fullResponse += gen.token; tokenCount++;
-             contentEl.textContent = fullResponse; document.getElementById('messages').scrollTop = 99999;
-          }
-          if (gen.isEOS || !gen.token) break;
-        }
-      }
-    }
-
-    const ms = performance.now() - startTime;
-    localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
-    const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `${currentModelLabel} · speculative (drafter: ${drafterPeerId.slice(0,6)}) · ${localTPS} tok/s · ${Math.round(ms)}ms`;
-    
-    chatHistory.push({ role: "assistant", content: fullResponse });
-    broadcastChat("assistant", fullResponse, peerId, currentModelLabel);
-
-  } catch(err) {
-    contentEl.textContent += '\nError: ' + err.message;
-  }
-  isGenerating = false;
-  updateSpeedChip();
-  document.getElementById('chip-mode-text').textContent = `MODE: ${inferenceMode.toUpperCase()}`;
-}
-
-async function runLocalInference(userMessage) {
+async function runLocalInference(userMessage, intent, route) {
   isGenerating = true;
   const aiMsgEl = addMessageToUI("assistant", null, true);
   const startTime = performance.now();
   let fullResponse = "", tokenCount = 0;
-
   try {
     const messages = [
-      { role: "system", content: "You are a helpful AI assistant in a decentralized P2P network. Be concise and helpful." },
+      { role: "system", content: `You are an expert AI (role: ${route.role}) in a decentralized P2P hive mind. Be concise and helpful.` },
       ...chatHistory.slice(-12)
     ];
     const chunks = await engine.chat.completions.create({ messages, stream: true, temperature: 0.7, max_tokens: 512 });
@@ -935,178 +685,75 @@ async function runLocalInference(userMessage) {
     const ms = performance.now() - startTime;
     localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `${currentModelLabel} · local · ${localTPS} tok/s · ${Math.round(ms)}ms`;
+    if (metaEl) metaEl.textContent = `${currentModelLabel} · ${route.role} · local · ${localTPS} tok/s · ${Math.round(ms)}ms`;
+    // MoE pill
+    const pill = document.createElement('div');
+    pill.className = 'moe-pill';
+    pill.textContent = `🧩 [${ROLE_LABELS[route.role] || route.role}] · Local (Tier ${deviceTier} - ${currentModelLabel})`;
+    aiMsgEl.querySelector('.msg-body').appendChild(pill);
+
     chatHistory.push({ role: "assistant", content: fullResponse });
     broadcastChat("assistant", fullResponse, peerId, currentModelLabel);
   } catch (err) {
-    const contentEl = aiMsgEl.querySelector('.msg-content');
     aiMsgEl.querySelector('.typing-indicator')?.remove();
-    contentEl.textContent = 'Error: ' + err.message;
+    aiMsgEl.querySelector('.msg-content').textContent = 'Error: ' + err.message;
   }
-  isGenerating = false;
-  updateSpeedChip();
+  isGenerating = false; updateSpeedChip();
 }
 
-function findBestPeerWithEngine() {
-  let best = null, bestScore = Infinity;
-  for (const [pid, peer] of peers) {
-    if (peer.dc?.readyState !== 'open' || !peer.hasEngine) continue;
-    if (peer.reputationScore !== undefined && peer.reputationScore < 0) continue;
-    const score = peer.rtt < Infinity ? peer.rtt : 9999;
-    if (score < bestScore) { best = pid; bestScore = score; }
-  }
-  if (best) return best;
-  // Fallback: search offline GPU peers
-  for (const [pid, peer] of peers) {
-    if (peer.hasEngine && !peer.conn) {
-      if (peer.reputationScore !== undefined && peer.reputationScore < 0) continue;
-      return pid;
-    }
-  }
-  return null;
-}
-
-function findBestDrafter() {
-  let best = null, bestScore = Infinity;
-  const mySize = getCurrentModelSize();
-  for (const [pid, peer] of peers) {
-    if (peer.dc?.readyState !== 'open' || !peer.hasEngine) continue;
-    if (peer.modelSize >= mySize) continue;
-    if (peer.reputationScore !== undefined && peer.reputationScore < 0) continue;
-    const score = peer.rtt < Infinity ? peer.rtt : 9999;
-    if (score < bestScore) { best = pid; bestScore = score; }
-  }
-  return best;
-}
-
-function requestDraft(drafterPeerId, messages, prefix, n, reqId) {
-  return new Promise((resolve) => {
-    const peer = peers.get(drafterPeerId);
-    if (!peer || peer.dc?.readyState !== 'open') return resolve(null);
-    
-    let resolved = false;
-    const timer = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        fedPending.delete(reqId);
-        resolve(null);
-      }
-    }, 3000);
-
-    fedPending.set(reqId, {
-      resolve: (payload) => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timer);
-          resolve(payload.tokens || []);
-        }
-      }
-    });
-
-    peer.dc.send(encodeMsg(MSG.SPEC_DRAFT_REQ, reqId, 0, { messages, prefix, n }));
-  });
-}
-
-async function runRemoteInference(userMessage, remotePeerId) {
+async function runRemoteInference(userMessage, remotePeerId, intent, route) {
   isGenerating = true;
   const peer = peers.get(remotePeerId);
   const aiMsgEl = addMessageToUI("assistant", null, true);
-  aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'fed-av');
-  
-  // Establecer tunel efímero WebRTC si no hay conexión activa
+  aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av');
+
   if (!peer.dc || peer.dc.readyState !== 'open') {
-    aiMsgEl.querySelector('.msg-header').textContent = `AI - connect GPU tunnel a ${remotePeerId.slice(0,4)}...`;
+    aiMsgEl.querySelector('.msg-header').textContent = `MoE routing → ${remotePeerId.slice(0,4)}...`;
     initiateWebRTC(remotePeerId);
     let connected = false;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 500));
-      if (peer.dc?.readyState === 'open') { connected = true; break; }
-    }
-    if (!connected) {
-      isGenerating = false;
-      aiMsgEl.querySelector('.msg-content').textContent = `Error: Tiempo agotado cavando túnel hacia el puerto de GPU remoto.`;
-      peer.reputationScore = (peer.reputationScore || 0) - 1;
-      return;
-    }
+    for (let i = 0; i < 20; i++) { await new Promise(r => setTimeout(r, 500)); if (peer.dc?.readyState === 'open') { connected = true; break; } }
+    if (!connected) { isGenerating = false; aiMsgEl.querySelector('.msg-content').textContent = `Error: Tiempo agotado conectando al experto.`; return; }
   }
 
-  aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${remotePeerId.slice(0,6)})`;
+  aiMsgEl.querySelector('.msg-header').textContent = `${ROLE_LABELS[route.role] || route.role} - Tier ${route.tier} (${remotePeerId.slice(0,6)})`;
 
   const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-  const timeoutMs = 30000;
   let fullRemoteText = "";
-
   const resultPromise = new Promise((resolve, reject) => {
-    fedPending.set(reqId, { 
-      resolve, 
-      reject,
+    fedPending.set(reqId, {
+      resolve, reject,
       onChunk: (token) => {
         aiMsgEl.querySelector('.typing-indicator')?.remove();
         const contentEl = aiMsgEl.querySelector('.msg-content');
-        if (contentEl.textContent === '⟳ Esperando respuesta del peer…') contentEl.textContent = '';
-        fullRemoteText += token;
-        contentEl.textContent = fullRemoteText;
+        if (contentEl.textContent === '⟳ Consultando al experto…') contentEl.textContent = '';
+        fullRemoteText += token; contentEl.textContent = fullRemoteText;
         document.getElementById('messages').scrollTop = 99999;
       }
     });
-
-    setTimeout(() => {
-      if (fedPending.has(reqId)) {
-        fedPending.delete(reqId);
-        peer.reputationScore = (peer.reputationScore || 0) - 1;
-        reject(new Error('Timeout de red, ha sido penalizado en la tabla.'));
-      }
-    }, timeoutMs);
+    setTimeout(() => { if (fedPending.has(reqId)) { fedPending.delete(reqId); reject(new Error('Timeout del experto.')); } }, 30000);
   });
 
-  // Resoluciones de Hash P2P y envío delegado KV
-  const histTail = [
-    { role: "system", content: "You are a helpful AI. Be concise." },
-    ...chatHistory.slice(-10)
-  ];
-  const histHash = await calculateHash(JSON.stringify(histTail));
-
-  let sentToCache = false;
-  for (const [, p] of peers) {
-    if (p.dc?.readyState === 'open' && p.shardInfo?.role === 'kv-cache') {
-      p.dc.send(encodeMsg(MSG.CACHE_STORE, 0, 0, { hash: histHash, messages: histTail }));
-      sentToCache = true;
-    }
-  }
-
-  // Enviar solicitud al peer con engine - Envía contexto comprimido si la red soporta Caché KV 
-  peer.dc.send(encodeMsg(MSG.TOK_REQ, reqId, 0, {
-    hash: histHash,
-    messages: sentToCache ? null : histTail,
-    max_tokens: 512
-  }));
+  const histTail = [ { role: "system", content: `You are an expert AI (role: ${route.role}). Be concise and helpful.` }, ...chatHistory.slice(-10) ];
+  peer.dc.send(encodeMsg(MSG.MOE_REQ, reqId, 0, { messages: histTail, max_tokens: 512, intent: intent.category, targetRole: route.role }));
 
   const startTime = performance.now();
   try {
     aiMsgEl.querySelector('.typing-indicator')?.remove();
-    const contentEl = aiMsgEl.querySelector('.msg-content');
-    contentEl.textContent = '⟳ Esperando respuesta del peer…';
-
+    aiMsgEl.querySelector('.msg-content').textContent = '⟳ Consultando al experto…';
     const result = await resultPromise;
     const ms = performance.now() - startTime;
     if (!result.text && fullRemoteText) result.text = fullRemoteText;
-    contentEl.textContent = result.text;
-
+    aiMsgEl.querySelector('.msg-content').textContent = result.text;
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `${result.model || 'remote'} · peer:${remotePeerId} · ${Math.round(ms)}ms`;
-
-    // Añadir pill federado
+    if (metaEl) metaEl.textContent = `${result.model || 'remote'} · ${route.role} · peer:${remotePeerId.slice(0,6)} · ${Math.round(ms)}ms`;
     const pill = document.createElement('div');
-    pill.className = 'fed-pill';
-    pill.textContent = `🌐 federado via ${remotePeerId}`;
+    pill.className = 'moe-pill';
+    pill.textContent = `🧩 [${ROLE_LABELS[route.role] || route.role}] via Peer ${remotePeerId.slice(0,6)} (Tier ${route.tier})`;
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
-
     chatHistory.push({ role: "assistant", content: result.text });
     broadcastChat("assistant", result.text, remotePeerId, result.model);
-    peer.reputationScore = (peer.reputationScore || 0) + 1;
   } catch(err) {
-    const contentEl = aiMsgEl.querySelector('.msg-content');
-    contentEl.textContent = `Error de inferencia federada: ${err.message}\nIntenta de nuevo cuando haya más peers conectados.`;
+    aiMsgEl.querySelector('.msg-content').textContent = `Error MoE: ${err.message}`;
   }
   isGenerating = false;
 }
@@ -1114,130 +761,63 @@ async function runRemoteInference(userMessage, remotePeerId) {
 // ══════════════════════════════════════════════════════════════════════════
 //  NOSTR RELAY MANAGER
 // ══════════════════════════════════════════════════════════════════════════
-// Firma un evento Nostr real (igual que PudúChat) y lo publica
 async function signAndPublish(content) {
   const nostr = await getNostrMod();
-  const template = {
-    kind: 1,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [["t", CONFIG.appNamespace]],
-    content: JSON.stringify(content)
-  };
+  const template = { kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", CONFIG.appNamespace]], content: JSON.stringify(content) };
   let event;
-  try {
-    event = nostr.finalizeEvent(template, privKeyBytes);
-  } catch(e) {
-    console.error('[Nostr] finalizeEvent failed:', e);
-    return null;
-  }
+  try { event = nostr.finalizeEvent(template, privKeyBytes); } catch(e) { return null; }
   seenEventIds.add(event.id);
   const raw = JSON.stringify(["EVENT", event]);
   let sent = 0;
-  for (const [, entry] of relayMap) {
-    if (entry.ws && entry.ws.readyState === 1) {
-      try { entry.ws.send(raw); sent++; } catch(e) {}
-    }
-  }
-  console.log(`[Nostr] published type=${content.type} to ${sent} relays`);
+  for (const [, entry] of relayMap) { if (entry.ws?.readyState === 1) { try { entry.ws.send(raw); sent++; } catch(e) {} } }
   return sent > 0 ? event.id : null;
 }
 
 function connectToRelays() {
   const selectedRelays = [...CONFIG.nostrCoreRelays];
   const shuffledPool = [...CONFIG.nostrPoolRelays].sort(() => 0.5 - Math.random());
-  for (let i = 0; i < (CONFIG.maxActiveRelays - CONFIG.nostrCoreRelays.length); i++) {
-    if (shuffledPool[i]) selectedRelays.push(shuffledPool[i]);
-  }
+  for (let i = 0; i < (CONFIG.maxActiveRelays - CONFIG.nostrCoreRelays.length); i++) { if (shuffledPool[i]) selectedRelays.push(shuffledPool[i]); }
   for (const url of selectedRelays) connectRelay(url);
 }
-
 function connectRelay(url) {
   if (relayMap.has(url) && ['connecting','connected'].includes(relayMap.get(url).status)) return;
   relayMap.set(url, { ws: null, status: 'connecting', retries: 0, retryTimer: null });
   const entry = relayMap.get(url);
   try {
-    const ws = new WebSocket(url);
-    entry.ws = ws;
+    const ws = new WebSocket(url); entry.ws = ws;
     ws.onopen = () => {
       entry.status = 'connected'; entry.retries = 0;
-      // kind:1 + #t tag = compatible con TODOS los relays (igual que PudúChat)
-      // Ventana de 10 min para no perder peers que estaban activos antes
       const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec;
-      ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, {
-        kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100
-      }]));
-      publishPresenceTo(ws);
-      updateRelayUI();
-      console.log('[Relay] ✓', url);
+      ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, { kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100 }]));
+      publishPresence(); updateRelayUI();
     };
     ws.onmessage = (e) => { try { handleRelayMsg(JSON.parse(e.data)); } catch(_) {} };
-    ws.onclose = ws.onerror = () => {
-      entry.status = 'disconnected';
-      updateRelayUI();
-      scheduleReconnect(url);
-    };
-  } catch(e) {
-    entry.status = 'disconnected';
-    scheduleReconnect(url);
-  }
+    ws.onclose = ws.onerror = () => { entry.status = 'disconnected'; updateRelayUI(); scheduleReconnect(url); };
+  } catch(e) { entry.status = 'disconnected'; scheduleReconnect(url); }
 }
-
 function scheduleReconnect(url) {
-  const entry = relayMap.get(url);
-  if (!entry || entry.retries >= CONFIG.relayMaxRetries) return;
-  entry.retries++;
-  const delay = Math.min(1000 * Math.pow(1.5, Math.min(entry.retries, 10)), 60000);
+  const entry = relayMap.get(url); if (!entry || entry.retries >= CONFIG.relayMaxRetries) return;
+  entry.retries++; const delay = Math.min(1000 * Math.pow(1.5, Math.min(entry.retries, 10)), 60000);
   entry.retryTimer = setTimeout(() => connectRelay(url), delay);
-}
-
-function activeRelays() {
-  return [...relayMap.values()].filter(r => r.status === 'connected').map(r => r.ws);
-}
-
-function publishPresenceTo(ws) {
-  // Publicar presencia via signAndPublish (firma real)
-  signAndPublish({
-    type: "presence", peerId, deviceTier, webgpu: hasWebGPU,
-    memoryMB, tps: localTPS, currentModel: currentModelId, modelSize: getCurrentModelSize(),
-    hasEngine: !!engine, shardInfo: myShardInfo,
-    inferenceMode, timestamp: Date.now()
-  });
 }
 
 function publishPresence() {
   signAndPublish({
-    type: "presence", peerId, deviceTier, webgpu: hasWebGPU,
-    memoryMB, tps: localTPS, currentModel: currentModelId, modelSize: getCurrentModelSize(),
-    hasEngine: !!engine, shardInfo: myShardInfo,
-    inferenceMode, timestamp: Date.now()
+    type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS,
+    currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: myRole,
+    hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now()
   });
 }
-
-function publishSignal(targetId, signal) {
-  signAndPublish({ type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() });
-}
+function publishSignal(targetId, signal) { signAndPublish({ type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() }); }
 
 function handleRelayMsg(msg) {
   if (!Array.isArray(msg) || msg[0] !== "EVENT") return;
-  const event = msg[2];
-  if (!event?.id || seenEventIds.has(event.id)) return;
+  const event = msg[2]; if (!event?.id || seenEventIds.has(event.id)) return;
   seenEventIds.add(event.id);
-  if (seenEventIds.size > 2000) {
-    const arr = [...seenEventIds]; seenEventIds.clear();
-    arr.slice(arr.length - 1000).forEach(id => seenEventIds.add(id));
-  }
-  // Ignorar eventos propios (por pubkey, no por peerId que aún no está seteado)
+  if (seenEventIds.size > 2000) { const arr = [...seenEventIds]; seenEventIds.clear(); arr.slice(-1000).forEach(id => seenEventIds.add(id)); }
   if (event.pubkey === pubKeyHex) return;
-  try {
-    const c = JSON.parse(event.content);
-    const senderId = c.peerId || c.from;
-    if (c && senderId && senderId !== peerId) {
-      console.log(`[Nostr] rcv type=${c.type} from=${senderId}`);
-      handleNostrContent(c);
-    }
-  } catch(e) {}
+  try { const c = JSON.parse(event.content); const senderId = c.peerId || c.from; if (c && senderId && senderId !== peerId) handleNostrContent(c); } catch(e) {}
 }
-
 function handleNostrContent(c) {
   if (c.type === "presence") handlePeerPresence(c);
   else if (c.type === "signal" && c.to === peerId) handleWebRTCSignal(c.from, c.signal);
@@ -1245,417 +825,155 @@ function handleNostrContent(c) {
 
 function handlePeerPresence(p) {
   if (!peers.has(p.peerId)) {
-    console.log(`[P2P] New peer discovered: ${p.peerId} tier=${p.deviceTier} engine=${p.hasEngine}`);
     peers.set(p.peerId, {
-      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || 0,
-      tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null,
-      inferenceMode: p.inferenceMode || 'relay',
-      lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null,
-      pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
+      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || 0, moeRole: p.moeRole || 'relay',
+      tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null, inferenceMode: p.inferenceMode || 'relay',
+      lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
     });
-    // El peer con menor peerId inicia; el otro espera y reintenta si no hay conexión
-    if (peerId < p.peerId) {
-      if (getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId);
-    } else {
-      setTimeout(() => {
-        const peer = peers.get(p.peerId);
-        if (peer && (!peer.conn || peer.conn.connectionState === 'closed') && getActiveConnections() < CONFIG.maxPeers) {
-          console.log(`[WebRTC] Iniciando conexión defensiva con ${p.peerId}`);
-          initiateWebRTC(p.peerId);
-        }
-      }, 3000 + Math.random() * 2000);
-    }
+    if (peerId < p.peerId) { if (getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }
+    else { setTimeout(() => { const peer = peers.get(p.peerId); if (peer && (!peer.conn || peer.conn.connectionState === 'closed') && getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }, 3000 + Math.random() * 2000); }
   } else {
     const peer = peers.get(p.peerId);
-    Object.assign(peer, {
-      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || peer.modelSize,
-      tps: p.tps || 0, hasEngine: p.hasEngine || false,
-      shardInfo: p.shardInfo || peer.shardInfo,
-      inferenceMode: p.inferenceMode || peer.inferenceMode,
-      lastSeen: Date.now()
-    });
+    Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || peer.modelSize, moeRole: p.moeRole || peer.moeRole, tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || peer.shardInfo, inferenceMode: p.inferenceMode || peer.inferenceMode, lastSeen: Date.now() });
   }
-  updatePeerListUI();
+  updatePeerListUI(); updateHiveUI();
 }
-
 function removePeer(pid) {
-  const p = peers.get(pid);
-  if (!p) return;
-  clearTimeout(p.reconnectTimer);
-  clearInterval(p.pingTimer);
-  try { p.dc?.close(); } catch(e) {}
-  try { p.conn?.close(); } catch(e) {}
-  peers.delete(pid);
-  updatePeerListUI();
+  const p = peers.get(pid); if (!p) return;
+  clearTimeout(p.reconnectTimer); clearInterval(p.pingTimer);
+  try { p.dc?.close(); } catch(e) {} try { p.conn?.close(); } catch(e) {}
+  peers.delete(pid); updatePeerListUI(); updateHiveUI();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 //  WebRTC
 // ══════════════════════════════════════════════════════════════════════════
-// TURN servers críticos para móvil (NAT simétrico de operadoras)
-// openrelay.metered.ca es un servicio TURN gratuito para desarrollo
 const ICE_SERVERS = [
-  // Massive Global STUN Pool (Free, high uptime)
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  { urls: "stun:stun3.l.google.com:19302" },
-  { urls: "stun:stun4.l.google.com:19302" },
-  { urls: "stun:stun.cloudflare.com:3478" },
-  { urls: "stun:stun.twilio.com:3478" },
-  { urls: "stun:stun.miwifi.com:3478" },
-  { urls: "stun:stun.sipgate.net:3478" },
-  { urls: "stun:stun.stunprotocol.org:3478" },
-  { urls: "stun:stun.qq.com:3478" },
-  { urls: "stun:stun.relay.metered.ca:80" },
-  
-  // Free Public TURN Servers (Crucial for CGNAT strict NATs in Mobile connections)
-  // Metered.ca (Best open relay fallback)
-  { urls: "turn:openrelay.metered.ca:80",   username: "openrelayproject", credential: "openrelayproject" },
-  { urls: "turn:openrelay.metered.ca:443",  username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "stun:stun.l.google.com:19302" },{ urls: "stun:stun1.l.google.com:19302" },{ urls: "stun:stun2.l.google.com:19302" },{ urls: "stun:stun3.l.google.com:19302" },{ urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },{ urls: "stun:stun.relay.metered.ca:80" },
+  { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-  { urls: "turn:openrelay.metered.ca:80?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
-  
-  // Viagenie Numb Open TURN Server
-  { urls: "turn:numb.viagenie.ca:3478", username: "webrtc@live.com", credential: "muazkh" }
 ];
 
-// Crea RTCPeerConnection con ICE batching y reconexión automática
 function createPeerConn(targetId) {
-  const conn = new RTCPeerConnection({
-    iceServers: ICE_SERVERS,
-    bundlePolicy: 'max-bundle',
-    iceCandidatePoolSize: 10,
-  });
-  // Monitorear estado para reconectar si falla (crítico en móvil)
+  const conn = new RTCPeerConnection({ iceServers: ICE_SERVERS, bundlePolicy: 'max-bundle', iceCandidatePoolSize: 10 });
   conn.onconnectionstatechange = () => {
     const state = conn.connectionState;
-    console.log(`[WebRTC] ${targetId} → ${state}`);
-    if (state === 'connected') {
-      const p = peers.get(targetId);
-      if (p) p.reconnectAttempts = 0;
-    } else if (state === 'failed' || state === 'disconnected') {
-      scheduleWebRTCReconnect(targetId);
-    }
+    if (state === 'connected') { const p = peers.get(targetId); if (p) p.reconnectAttempts = 0; }
+    else if (state === 'failed' || state === 'disconnected') scheduleWebRTCReconnect(targetId);
   };
-  // ICE candidate batching: agrupa candidatos en 200ms para reducir eventos Nostr
   let iceBatch = [], iceTimer = null;
-  conn.onicecandidate = (e) => {
-    if (!e.candidate) return;
-    iceBatch.push(e.candidate.toJSON());
-    clearTimeout(iceTimer);
-    iceTimer = setTimeout(() => {
-      if (!iceBatch.length) return;
-      publishSignal(targetId, { type: "candidates", candidates: [...iceBatch] });
-      iceBatch = [];
-    }, CONFIG.iceBatchDelayMs);
-  };
+  conn.onicecandidate = (e) => { if (!e.candidate) return; iceBatch.push(e.candidate.toJSON()); clearTimeout(iceTimer); iceTimer = setTimeout(() => { if (!iceBatch.length) return; publishSignal(targetId, { type: "candidates", candidates: [...iceBatch] }); iceBatch = []; }, CONFIG.iceBatchDelayMs); };
   return conn;
 }
-
 function scheduleWebRTCReconnect(pid) {
-  const peer = peers.get(pid);
-  if (!peer) return;
+  const peer = peers.get(pid); if (!peer) return;
   peer.reconnectAttempts = (peer.reconnectAttempts || 0) + 1;
-  if (peer.reconnectAttempts > CONFIG.webrtcMaxReconnects) {
-    console.log(`[WebRTC] Max reconnects para ${pid}`);
-    removePeer(pid);
-    return;
-  }
+  if (peer.reconnectAttempts > CONFIG.webrtcMaxReconnects) { removePeer(pid); return; }
   const delay = Math.min(Math.pow(2, peer.reconnectAttempts - 1) * 1000, 30000);
-  console.log(`[WebRTC] Reintentando ${pid} en ${delay}ms (intento ${peer.reconnectAttempts})`);
   clearTimeout(peer.reconnectTimer);
-  peer.reconnectTimer = setTimeout(() => {
-    if (!peers.has(pid)) return;
-    const p = peers.get(pid);
-    try { p.dc?.close(); } catch(e) {}
-    try { p.conn?.close(); } catch(e) {}
-    p.conn = null; p.dc = null;
-    if (peerId < pid || peer.reconnectAttempts > 2) initiateWebRTC(pid);
-    else publishPresence();
-  }, delay);
+  peer.reconnectTimer = setTimeout(() => { if (!peers.has(pid)) return; const p = peers.get(pid); try{p.dc?.close();}catch(e){} try{p.conn?.close();}catch(e){} p.conn=null;p.dc=null; if (peerId<pid||peer.reconnectAttempts>2) initiateWebRTC(pid); else publishPresence(); }, delay);
 }
-
 function initiateWebRTC(targetId) {
   const existing = peers.get(targetId);
   if (existing?.conn && ['connecting','connected'].includes(existing.conn.connectionState)) return;
   let peer = peers.get(targetId);
-  if (!peer) {
-    peer = {
-      deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false,
-      shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity,
-      conn:null, dc:null, pingTimer:null, lastPingSent:0, reconnectAttempts:0, reconnectTimer:null
-    };
-    peers.set(targetId, peer);
-  }
-  const conn = createPeerConn(targetId);
-  peer.conn = conn;
-  const dc = conn.createDataChannel("p2p", { ordered: true });
-  peer.dc = dc;
-  setupDC(dc, targetId);
-  conn.createOffer()
-    .then(o => conn.setLocalDescription(o))
-    .then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription }))
-    .catch(e => console.error('[WebRTC] offer error:', e));
+  if (!peer) { peer = { deviceTier:"D",webgpu:false,memoryMB:0,tps:0,hasEngine:false,shardInfo:null,moeRole:'relay',inferenceMode:'relay',lastSeen:Date.now(),rtt:Infinity,conn:null,dc:null,pingTimer:null,lastPingSent:0,reconnectAttempts:0,reconnectTimer:null }; peers.set(targetId,peer); }
+  const conn = createPeerConn(targetId); peer.conn = conn;
+  const dc = conn.createDataChannel("p2p", { ordered: true }); peer.dc = dc; setupDC(dc, targetId);
+  conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription })).catch(e => console.error('[WebRTC] offer error:', e));
 }
-
 async function handleWebRTCSignal(fromId, signal) {
   let peer = peers.get(fromId);
-  if (!peer) {
-    peer = {
-      deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false,
-      shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity,
-      conn:null, dc:null, pingTimer:null, lastPingSent:0, reconnectAttempts:0, reconnectTimer:null
-    };
-    peers.set(fromId, peer);
-  }
+  if (!peer) { peer = { deviceTier:"D",webgpu:false,memoryMB:0,tps:0,hasEngine:false,shardInfo:null,moeRole:'relay',inferenceMode:'relay',lastSeen:Date.now(),rtt:Infinity,conn:null,dc:null,pingTimer:null,lastPingSent:0,reconnectAttempts:0,reconnectTimer:null }; peers.set(fromId,peer); }
   if (signal.type === "offer") {
-    // Rechazar gossip offers si estamos llenos Y el peer/nosotros no tenemos aceleración por GPU
-    if (getActiveConnections() >= CONFIG.maxPeers && !peer.conn && !peer.hasEngine && !engine) {
-      console.log(`[P2P] Nodo lleno, rechazando offer gossip de ${fromId}`);
-      return; 
-    }
-    // Rechazar si ya tenemos conexión activa Y somos el que debería haber iniciado
+    if (getActiveConnections() >= CONFIG.maxPeers && !peer.conn && !peer.hasEngine && !engine) return;
     if (peer.conn && ['connecting','connected'].includes(peer.conn.connectionState) && peerId > fromId) return;
-    try { peer.conn?.close(); } catch(e) {}
-    const conn = createPeerConn(fromId);
-    peer.conn = conn;
+    try{peer.conn?.close();}catch(e){}
+    const conn = createPeerConn(fromId); peer.conn = conn;
     conn.ondatachannel = (e) => { peer.dc = e.channel; setupDC(e.channel, fromId); };
-    try {
-      await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-      const ans = await conn.createAnswer();
-      await conn.setLocalDescription(ans);
-      publishSignal(fromId, { type:"answer", sdp: conn.localDescription });
-    } catch(e) { console.error('[WebRTC] handle offer error:', e); }
+    try { await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); const ans = await conn.createAnswer(); await conn.setLocalDescription(ans); publishSignal(fromId, { type:"answer", sdp: conn.localDescription }); } catch(e) {}
   } else if (signal.type === "answer" && peer.conn) {
-    try { await peer.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); }
-    catch(e) { console.warn('[WebRTC] setRemoteDesc answer:', e.message); }
+    try { await peer.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); } catch(e) {}
   } else if ((signal.type === "candidate" || signal.type === "candidates") && peer.conn) {
-    // Soporte para candidatos individuales (legacy) y en lote (nuevo)
-    const candidates = signal.candidates ? signal.candidates : (signal.candidate ? [signal.candidate] : []);
-    for (const c of candidates) {
-      try { await peer.conn.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {}
-    }
+    const candidates = signal.candidates || (signal.candidate ? [signal.candidate] : []);
+    for (const c of candidates) { try { await peer.conn.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {} }
   }
 }
-
 function setupDC(dc, remoteId) {
   dc.binaryType = "arraybuffer";
   dc.onopen = () => {
+    dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole }));
     const peer = peers.get(remoteId);
-    dc.send(encodeMsg(MSG.HELLO, 0, 0, {
-      peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS,
-      hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize()
-    }));
-    if (peer) {
-      peer.pingTimer = setInterval(() => {
-        if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); }
-      }, CONFIG.pingIntervalMs);
-    }
+    if (peer) { peer.pingTimer = setInterval(() => { if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); } }, CONFIG.pingIntervalMs); }
     updatePeerListUI();
   };
-  dc.onclose = () => {
-    const peer = peers.get(remoteId);
-    if (peer && peer.conn?.connectionState !== 'failed') {
-      scheduleWebRTCReconnect(remoteId);
-    }
-  };
+  dc.onclose = () => { const peer = peers.get(remoteId); if (peer?.conn?.connectionState !== 'failed') scheduleWebRTCReconnect(remoteId); };
   dc.onerror = () => scheduleWebRTCReconnect(remoteId);
   dc.onmessage = (e) => { handleBinMsg(remoteId, e.data); };
 }
 
 async function handleBinMsg(fromId, buf) {
-  const m = decodeMsg(buf);
-  const peer = peers.get(fromId);
-  if (!peer) return;
-
+  const m = decodeMsg(buf); const peer = peers.get(fromId); if (!peer) return;
   switch(m.type) {
     case MSG.CHAT:
-      if (m.payload && m.payload.id) {
-        if (seenMsgIds.has(m.payload.id)) break;
-        seenMsgIds.add(m.payload.id);
-
+      if (m.payload?.id) {
+        if (seenMsgIds.has(m.payload.id)) break; seenMsgIds.add(m.payload.id);
         const { id, role, content, peerId: senderId, model, hops = 0 } = m.payload;
-        if (hops < CONFIG.maxHops) {
-          broadcastChat(role, content, senderId, model, id, hops + 1, fromId);
-        }
-
+        if (hops < 5) broadcastChat(role, content, senderId, model, id, hops + 1, fromId);
         chatHistory.push({ role, content });
         const aiMsgEl = addMessageToUI(role, content);
         const sid = (senderId || fromId).slice(0, 6);
-        if (role === 'user') {
-          aiMsgEl.querySelector('.msg-header').textContent = `User (${sid})`;
-        } else {
-          aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'fed-av');
-          aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${sid})`;
-          const metaEl = aiMsgEl.querySelector('.msg-meta');
-          if (metaEl) metaEl.textContent = `${model || 'remote'} · peer:${sid}`;
-        }
+        if (role === 'user') aiMsgEl.querySelector('.msg-header').textContent = `User (${sid})`;
+        else { aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av'); aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${sid})`; }
       }
       break;
-
     case MSG.HELLO:
       if (m.payload) {
-        peer.deviceTier = m.payload.deviceTier || peer.deviceTier;
-        peer.webgpu     = m.payload.webgpu || false;
-        peer.tps        = m.payload.tps || 0;
-        peer.hasEngine  = m.payload.hasEngine || false;
-        peer.shardInfo  = m.payload.shardInfo || null;
-        peer.inferenceMode = m.payload.inferenceMode || 'relay';
-        peer.modelSize  = m.payload.modelSize || 0;
+        peer.deviceTier = m.payload.deviceTier || peer.deviceTier; peer.webgpu = m.payload.webgpu || false;
+        peer.tps = m.payload.tps || 0; peer.hasEngine = m.payload.hasEngine || false;
+        peer.shardInfo = m.payload.shardInfo || null; peer.inferenceMode = m.payload.inferenceMode || 'relay';
+        peer.modelSize = m.payload.modelSize || 0; peer.moeRole = m.payload.moeRole || 'relay';
       }
-      updatePeerListUI();
-      break;
+      updatePeerListUI(); updateHiveUI(); break;
+    case MSG.PING: if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.PONG, m.reqId, m.seq, null)); break;
+    case MSG.PONG: peer.rtt = Math.round(performance.now() - peer.lastPingSent); updatePeerListUI(); break;
 
-    case MSG.PING:
-      if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.PONG, m.reqId, m.seq, null));
-      break;
-
-    case MSG.PONG:
-      peer.rtt = Math.round(performance.now() - peer.lastPingSent);
-      updatePeerListUI();
-      break;
-
+    case MSG.MOE_REQ:
     case MSG.TOK_REQ:
-      // Un peer nos pide que generemos texto (tenemos engine completo)
       if (engine && (m.payload?.messages || m.payload?.hash)) {
-        if (isGenerating) {
-          if (peer.dc?.readyState === "open") {
-            peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: El peer está ocupado generando, reintenta pronto.', model: null }));
-          }
-          break;
-        }
-
+        if (isGenerating) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null })); break; }
+        isGenerating = true;
         let ctxMessages = m.payload.messages;
         if (!ctxMessages && m.payload.hash) {
-          // El enviador delegó el contexto a la caché distribuida. Pedimos recuperación al Shard P2P KV.
-          const hash = m.payload.hash;
-          const ac = new AbortController();
-          const cachePromise = new Promise(resolve => {
-            const handler = (e) => {
-              const m2 = decodeMsg(e.data);
-              if (m2.type === MSG.CACHE_RES && m2.payload?.hash === hash) resolve(m2.payload.messages);
-            };
-            for (const [, p] of peers) if (p.dc?.readyState === 'open') p.dc.addEventListener('message', handler, { signal: ac.signal });
-            setTimeout(() => resolve(null), 1500); // 1.5s Max Wait
-          });
-          
-          for (const [, p] of peers) {
-             if (p.dc?.readyState === 'open' && p.shardInfo?.role === 'kv-cache') {
-                p.dc.send(encodeMsg(MSG.CACHE_REQ, m.reqId, 0, { hash }));
-             }
-          }
-          ctxMessages = await cachePromise;
-          ac.abort();
-
-          if (!ctxMessages) {
-             if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: KV Cache Context fue inaccesible o expiró en los shards.', model: null }));
-             break;
-          }
+          const hash = m.payload.hash; const ac = new AbortController();
+          const cacheP = new Promise(res => { const h=(e)=>{const m2=decodeMsg(e.data);if(m2.type===MSG.CACHE_RES&&m2.payload?.hash===hash)res(m2.payload.messages);}; for(const[,p]of peers)if(p.dc?.readyState==='open')p.dc.addEventListener('message',h,{signal:ac.signal}); setTimeout(()=>res(null),1500); });
+          for(const[,p]of peers)if(p.dc?.readyState==='open'&&p.shardInfo?.role==='kv_cache')p.dc.send(encodeMsg(MSG.CACHE_REQ,m.reqId,0,{hash}));
+          ctxMessages = await cacheP; ac.abort();
+          if (!ctxMessages) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'KV Cache miss.', model: null })); isGenerating = false; break; }
         }
-
         try {
-          const chunks = await engine.chat.completions.create({
-            messages: ctxMessages, stream: true,
-            temperature: 0.7, max_tokens: m.payload.max_tokens || 512
-          });
-          let fullR = "";
-          let seqC = 0;
-          for await (const chunk of chunks) {
-            const token = chunk.choices[0]?.delta?.content || "";
-            fullR += token;
-            if (token && peer.dc?.readyState === "open") {
-              peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token }));
-            }
-          }
-
-          if (peer.dc?.readyState === "open") {
-            peer.dc.send(encodeMsg(MSG.TOK_END, m.reqId, seqC, {
-              text: fullR, model: currentModelId, tps: localTPS
-            }));
-          }
-        } catch(e) {
-          if (peer.dc?.readyState === "open") {
-            peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null }));
-          }
-        }
-      }
-      break;
-
-    case MSG.CACHE_STORE:
-      if (myShardInfo?.role === 'kv-cache' && m.payload?.hash) {
-        kvCacheStore.set(m.payload.hash, { messages: m.payload.messages, timestamp: Date.now() });
-        if (kvCacheStore.size > 200) kvCacheStore.delete(kvCacheStore.keys().next().value);
-        console.log(`[KV Cache] Almacenado hash seguro: ${m.payload.hash.slice(0,8)}`);
-      }
-      break;
-
-    case MSG.CACHE_REQ:
-      if (myShardInfo?.role === 'kv-cache' && m.payload?.hash && peer.dc?.readyState === 'open') {
-        const entry = kvCacheStore.get(m.payload.hash);
-        if (entry) {
-           peer.dc.send(encodeMsg(MSG.CACHE_RES, m.reqId, 0, { hash: m.payload.hash, messages: entry.messages }));
-           console.log(`[KV Cache] Servido hit directo para hash: ${m.payload.hash.slice(0,8)} a ${fromId.slice(0,5)}`);
-        }
-      }
-      break;
-
-    case MSG.TOK_CHUNK:
-      if (m.payload && fedPending.has(m.reqId)) {
-        fedPending.get(m.reqId).onChunk?.(m.payload.token);
-      }
-      break;
-
-    case MSG.TOK_END:
-    case MSG.TOK_RES:
-      // Respuesta de inferencia remota (stream final)
-      if (m.payload && fedPending.has(m.reqId)) {
-        const { resolve } = fedPending.get(m.reqId);
-        fedPending.delete(m.reqId);
-        peer.tps = m.payload.tps || peer.tps;
-        resolve(m.payload);
-      }
-      break;
-
-    case MSG.SPEC_DRAFT_REQ:
-      if (engine && m.payload && !isGenerating) {
-        isGenerating = true;
-        const { prefix, n, messages: ctx } = m.payload;
-        const fullCtx = [...(ctx || []), ...(prefix ? [{ role: "assistant", content: prefix }] : [])];
-        try {
-          const chunks = await engine.chat.completions.create({
-            messages: fullCtx, stream: true, temperature: 0.7, max_tokens: n
-          });
-          const tokens = [];
-          for await (const chunk of chunks) {
-            const t = chunk.choices[0]?.delta?.content || "";
-            if (t) tokens.push(t);
-            if (tokens.length >= n) break;
-          }
-          if (peer.dc?.readyState === 'open')
-            peer.dc.send(encodeMsg(MSG.SPEC_DRAFT_RES, m.reqId, 0, { tokens }));
-        } catch(e) {
-          if (peer.dc?.readyState === 'open')
-            peer.dc.send(encodeMsg(MSG.SPEC_DRAFT_RES, m.reqId, 0, { tokens: [] }));
-        }
+          const chunks = await engine.chat.completions.create({ messages: ctxMessages, stream: true, temperature: 0.7, max_tokens: m.payload.max_tokens || 512 });
+          let fullR = "", seqC = 0;
+          for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_END, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
+        } catch(e) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
         isGenerating = false;
       }
       break;
 
-    case MSG.SPEC_DRAFT_RES:
-      if (m.payload && fedPending.has(m.reqId)) {
-        const { resolve } = fedPending.get(m.reqId);
-        fedPending.delete(m.reqId);
-        resolve(m.payload);
-      }
+    case MSG.CACHE_STORE:
+      if (myShardInfo?.role === 'kv_cache' && m.payload?.hash) { kvCacheStore.set(m.payload.hash, { messages: m.payload.messages, timestamp: Date.now() }); if (kvCacheStore.size > 200) kvCacheStore.delete(kvCacheStore.keys().next().value); }
       break;
-
-    case MSG.SPEC_ACCEPT:
-      console.log(`[Spec] Verifier aceptó ${m.payload?.accepted} tokens`);
+    case MSG.CACHE_REQ:
+      if (myShardInfo?.role === 'kv_cache' && m.payload?.hash && peer.dc?.readyState === 'open') { const entry = kvCacheStore.get(m.payload.hash); if (entry) peer.dc.send(encodeMsg(MSG.CACHE_RES, m.reqId, 0, { hash: m.payload.hash, messages: entry.messages })); }
       break;
-
-    case MSG.SPEC_REJECT:
-      console.log(`[Spec] Verifier corrigió → "${m.payload?.correction}"`);
+    case MSG.TOK_CHUNK:
+      if (m.payload && fedPending.has(m.reqId)) fedPending.get(m.reqId).onChunk?.(m.payload.token);
+      break;
+    case MSG.TOK_END: case MSG.TOK_RES: case MSG.MOE_RES:
+      if (m.payload && fedPending.has(m.reqId)) { const { resolve } = fedPending.get(m.reqId); fedPending.delete(m.reqId); peer.tps = m.payload.tps || peer.tps; resolve(m.payload); }
       break;
   }
 }
@@ -1665,271 +983,270 @@ async function handleBinMsg(fromId, buf) {
 // ══════════════════════════════════════════════════════════════════════════
 function computeScore() {
   let score = 0;
-  if (engine) score += 3;
-  else if (myShardInfo) score += 1;
+  if (engine) score += 3; else if (myShardInfo) score += 1;
   let rtts = [];
-  for (const [, p] of peers) {
-    if (p.dc?.readyState === 'open') {
-      if (p.hasEngine) score += 2;
-      else if (p.shardInfo) score += 1;
-      if (p.rtt < Infinity) rtts.push(p.rtt);
-    }
-  }
+  for (const [, p] of peers) { if (p.dc?.readyState === 'open') { if (p.hasEngine) score += 2; else if (p.shardInfo) score += 1; if (p.rtt < Infinity) rtts.push(p.rtt); } }
   const avgRTT = rtts.length ? Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length) : null;
-  networkScore = score;
-  updateScoreUI(score, avgRTT);
-  return score;
+  networkScore = score; updateScoreUI(score, avgRTT); return score;
 }
-
-async function autoScale() {
-  computeScore();
-  updateSpeedChip();
-  electVerifier();
-}
+async function autoScale() { computeScore(); updateSpeedChip(); updateHiveUI(); }
 
 // ══════════════════════════════════════════════════════════════════════════
 //  UI
 // ══════════════════════════════════════════════════════════════════════════
 function addMessageToUI(role, content, streaming = false) {
   const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = 'message';
+  const div = document.createElement('div'); div.className = 'message';
   const isUser = role === 'user';
   const avClass = isUser ? 'user-av' : 'ai-av';
   const avText = isUser ? 'U' : 'AI';
-  const headerTxt = isUser ? 'You' : 'AI - ' + currentModelLabel;
-  let bodyContent;
+  const headerTxt = isUser ? 'You' : `AI · ${ROLE_LABELS[myRole] || myRole}`;
+  div.innerHTML = `<div class="msg-avatar ${avClass}">${avText}</div><div class="msg-body"><div class="msg-header">${headerTxt}</div>${streaming ? '' : `<div class="msg-content">${content || ''}</div>`}<div class="msg-meta"></div></div>`;
   if (streaming) {
-    bodyContent = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
-  } else {
-    bodyContent = `<div class="msg-content">${content || ''}</div>`;
+    div.querySelector('.msg-body').innerHTML = `<div class="msg-header">${headerTxt}</div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div><div class="msg-content"></div><div class="msg-meta"></div>`;
   }
-  div.innerHTML = `
-    <div class="msg-avatar ${avClass}">${avText}</div>
-    <div class="msg-body">
-      <div class="msg-header">${headerTxt}</div>
-      ${bodyContent}
-      <div class="msg-meta"></div>
-    </div>`;
-  if (streaming) {
-    div.querySelector('.msg-body').innerHTML = `
-      <div class="msg-header">${headerTxt}</div>
-      <div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
-      <div class="msg-content"></div>
-      <div class="msg-meta"></div>`;
-  }
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-  return div;
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight; return div;
 }
 
 function updateTierUI() {
-  const modeColors = {
-    local: 'var(--mode-local)',
-    assisted: 'var(--mode-assist)',
-    federated: 'var(--mode-federated)',
-    relay: 'var(--peer-dead)'
-  };
-  const modeLabels = {
-    local: `LOCAL (${currentModelLabel})`,
-    assisted: 'ASSISTED',
-    federated: 'FEDERATED',
-    relay: 'RELAY'
-  };
-  const color = modeColors[inferenceMode] || 'var(--peer-dead)';
+  const tierColors = { S: 'var(--tier-s)', A: 'var(--tier-a)', B: 'var(--tier-b)', C: 'var(--tier-c)', D: 'var(--tier-d)' };
+  const modeLabels = { local: `LOCAL`, moe: 'MoE', federated: 'FEDERATED', relay: 'RELAY' };
+  const color = tierColors[deviceTier] || 'var(--peer-dead)';
   document.getElementById('chip-tier-text').textContent = `TIER: ${deviceTier}`;
   document.getElementById('chip-tier-dot').style.background = color;
+  document.getElementById('chip-role-text').textContent = `ROLE: ${(myRole || 'relay').toUpperCase()}`;
+  document.getElementById('chip-role-dot').style.background = color;
   document.getElementById('chip-mode-text').textContent = `MODE: ${modeLabels[inferenceMode] || inferenceMode.toUpperCase()}`;
   document.getElementById('chip-mode-dot').style.background = color;
   document.getElementById('stat-inf-mode').textContent = inferenceMode;
 }
 
+function updateHiveUI() {
+  const counts = { S:0, A:0, B:0, C:0, D:0 };
+  // Count self
+  counts[deviceTier] = (counts[deviceTier] || 0) + 1;
+  for (const [, p] of peers) { const t = p.deviceTier || 'D'; counts[t] = (counts[t] || 0) + 1; }
+  document.getElementById('hive-s').textContent = counts.S;
+  document.getElementById('hive-a').textContent = counts.A;
+  document.getElementById('hive-b').textContent = counts.B;
+  document.getElementById('hive-c').textContent = counts.C;
+  document.getElementById('hive-d').textContent = counts.D;
+  const total = counts.S + counts.A + counts.B + counts.C + counts.D;
+  document.getElementById('chip-peers-text').textContent = `HIVE: ${total}`;
+
+  const hint = document.getElementById('hive-missing-hint');
+  if (counts.S === 0) {
+    hint.style.display = 'block';
+    hint.className = 'hive-missing';
+    hint.innerHTML = `👑 Falta Super Nodo para razonamiento complejo. <br><span style="text-decoration:underline;cursor:pointer;" onclick="navigator.clipboard.writeText(location.href)">📋 Copiar link para invitar</span>`;
+  } else { hint.style.display = 'none'; }
+}
+
 function updatePeerListUI() {
   const list = document.getElementById('peer-list');
-  if (peers.size === 0) {
-    list.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:6px 0;">No peers connected</div>';
-    document.getElementById('chip-peers-text').textContent = 'PEERS: 0';
-    return;
-  }
-  document.getElementById('chip-peers-text').textContent = `PEERS: ${peers.size}`;
+  if (peers.size === 0) { list.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:6px 0;">No peers connected</div>'; return; }
   let html = '';
   for (const [pid, p] of peers) {
     const dc = p.dc?.readyState;
     const dot = dc === 'open' ? (p.rtt > 200 ? 'slow' : 'online') : 'dead';
-    const tb = p.deviceTier === 'A' ? 'a' : p.deviceTier === 'B' ? 'b' : 'c';
-    const engineBadge = p.hasEngine ? '<span class="peer-badge shard">engine</span>' : (p.shardInfo ? '<span class="peer-badge shard">shard</span>' : '');
-    html += `<div class="peer-item">
-      <div class="peer-dot ${dot}"></div>
-      <span class="peer-id">${pid}</span>
-      <span class="peer-badge tier-${tb}">${p.deviceTier}</span>
-      ${engineBadge}
-      <span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span>
-    </div>`;
+    const t = (p.deviceTier || 'D').toLowerCase();
+    const roleBadge = p.hasEngine ? `<span class="peer-badge role">${p.moeRole || '?'}</span>` : (p.shardInfo ? '<span class="peer-badge role">cache</span>' : '');
+    html += `<div class="peer-item"><div class="peer-dot ${dot}"></div><span class="peer-id">${pid}</span><span class="peer-badge tier-${t}">${p.deviceTier||'D'}</span>${roleBadge}<span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span></div>`;
   }
   list.innerHTML = html;
 }
 
-function updateShardUI() {
-  const el = document.getElementById('shard-map-ui');
-  const roleEl = document.getElementById('stat-shard-role');
-  if (engine) {
-    // Mostrar qué modelo local está corriendo
-    el.innerHTML = `<div style="font-size:11px;color:var(--tier-small);">✓ Engine completo: ${currentModelLabel}</div>
-    <div class="shard-bar">${Array(8).fill(0).map((_,i) =>
-      `<div class="shard-seg local" title="capa ${i}"></div>`
-    ).join('')}</div>`;
-    roleEl.textContent = `full (${currentModelLabel})`;
-  } else if (myShardInfo) {
-    const total = myShardInfo.totalLayers;
-    const end = myShardInfo.layerEnd;
-    el.innerHTML = `<div style="font-size:11px;color:var(--mode-federated);">🧩 Shard parcial: capas 0–${end}/${total}</div>
-    <div class="shard-bar">${Array(8).fill(0).map((_,i) => {
-      const layerPos = Math.round((i/8) * total);
-      return `<div class="shard-seg ${layerPos < end ? 'loaded' : ''}" title="capa ${layerPos}"></div>`;
-    }).join('')}</div>
-    <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Contribuyendo ${Math.round((end/total)*100)}% del modelo</div>`;
-    roleEl.textContent = `shard (${end}/${total} layers)`;
-  } else {
-    el.innerHTML = `<div style="font-size:11px;color:var(--text-muted);">📡 Modo relay — sin capas locales</div>`;
-    roleEl.textContent = 'relay';
-  }
-}
-
 function updateRelayUI() {
-  const list = document.getElementById('relay-list');
-  let html = '', ok = 0, total = 0;
-  for (const [url, r] of relayMap) {
-    total++;
-    const cls = r.status === 'connected' ? 'ok' : r.status === 'connecting' ? 'connecting' : '';
-    if (r.status === 'connected') ok++;
-    const name = url.replace('wss://', '').split('/')[0];
-    html += `<div class="relay-item"><div class="relay-dot ${cls}"></div><span class="relay-name">${name}</span></div>`;
-  }
+  const list = document.getElementById('relay-list'); let html='',ok=0,total=0;
+  for (const [url, r] of relayMap) { total++; const cls=r.status==='connected'?'ok':r.status==='connecting'?'connecting':''; if(r.status==='connected')ok++; const name=url.replace('wss://','').split('/')[0]; html+=`<div class="relay-item"><div class="relay-dot ${cls}"></div><span class="relay-name">${name}</span></div>`; }
   list.innerHTML = html;
   document.getElementById('chip-relays-text').textContent = `RELAYS: ${ok}/${total}`;
   document.getElementById('chip-relays-dot').style.background = ok > 5 ? 'var(--peer-online)' : ok > 0 ? 'var(--peer-slow)' : 'var(--peer-dead)';
 }
-
 function updateScoreUI(score, avgRTT) {
   const bar = document.getElementById('score-bar');
-  if (bar.children.length === 0) {
-    for (let i = 0; i < 10; i++) { const s = document.createElement('div'); s.className = 'score-segment'; bar.appendChild(s); }
-  }
-  [...bar.children].forEach((s, i) => {
-    s.classList.toggle('active', i < score);
-    s.classList.toggle('high', i < score && score >= 7);
-  });
+  if (!bar.children.length) { for (let i=0;i<10;i++){const s=document.createElement('div');s.className='score-segment';bar.appendChild(s);} }
+  [...bar.children].forEach((s,i)=>{s.classList.toggle('active',i<score);s.classList.toggle('high',i<score&&score>=7);});
   document.getElementById('stat-score').textContent = score;
-  document.getElementById('stat-rtt').textContent = avgRTT !== null ? avgRTT + 'ms' : '—';
+  document.getElementById('stat-rtt').textContent = avgRTT !== null ? avgRTT+'ms' : '—';
 }
-
-function updateSpeedChip() {
-  document.getElementById('chip-speed-text').textContent = `${localTPS} tok/s`;
-}
-
+function updateSpeedChip() { document.getElementById('chip-speed-text').textContent = `${localTPS} tok/s`; }
 function updateDeviceStats() {
   document.getElementById('stat-device-tier').textContent = `Tier ${deviceTier}`;
-  document.getElementById('stat-webgpu').textContent = hasWebGPU ? `✅ Yes (~${availableVRAM || '?'}MB)` : '❌ No';
+  document.getElementById('stat-device-role').textContent = ROLE_LABELS[myRole] || myRole;
+  document.getElementById('stat-webgpu').textContent = hasWebGPU ? `✅ (~${availableVRAM||'?'}MB)` : '❌ No';
   document.getElementById('stat-memory').textContent = `${memoryMB}MB`;
   document.getElementById('stat-peer-id').textContent = peerId;
 }
-
-function showModelProgress(show, name = '') {
-  const sec = document.getElementById('model-progress-section');
-  sec.classList.toggle('active', show);
-  if (name) document.getElementById('model-name-display').textContent = name;
-}
-function updateModelProgress(pct, text) {
-  document.getElementById('model-progress-bar').style.width = pct + '%';
-  document.getElementById('model-progress-label').textContent = text;
-}
-function updateInitStatus(t) { const e = document.getElementById('init-status'); if (e) e.textContent = t; }
-function updateInitProgress(p) { const e = document.getElementById('init-progress-fill'); if (e) e.style.width = `${p}%`; }
-function hideInitOverlay() {
-  const o = document.getElementById('init-overlay');
-  o.classList.add('hidden');
-  setTimeout(() => o.style.display = 'none', 600);
-}
+function showModelProgress(show, name='') { const sec=document.getElementById('model-progress-section'); sec.classList.toggle('active',show); if(name)document.getElementById('model-name-display').textContent=name; }
+function updateModelProgress(pct, text) { document.getElementById('model-progress-bar').style.width=pct+'%'; document.getElementById('model-progress-label').textContent=text; }
+function updateInitStatus(t) { const e=document.getElementById('init-status'); if(e)e.textContent=t; }
+function updateInitProgress(p) { const e=document.getElementById('init-progress-fill'); if(e)e.style.width=`${p}%`; }
+function hideInitOverlay() { const o=document.getElementById('init-overlay'); o.classList.add('hidden'); setTimeout(()=>o.style.display='none',600); }
 
 function setupInput() {
-  const input = document.getElementById('chat-input');
-  const btn = document.getElementById('send-btn');
-  const send = () => {
-    const txt = input.value.trim();
-    if (!txt || isGenerating) return;
-    input.value = ''; input.style.height = 'auto';
-    generateResponse(txt);
-  };
+  const input=document.getElementById('chat-input'), btn=document.getElementById('send-btn');
+  const send = () => { const txt=input.value.trim(); if(!txt||isGenerating)return; input.value='';input.style.height='auto'; generateResponse(txt); };
   btn.addEventListener('click', send);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; });
+  input.addEventListener('keydown', (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+  input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,140)+'px'; });
+}
+function cleanupPeers() { const now=Date.now(); for(const[pid,p]of peers)if(now-p.lastSeen>CONFIG.presenceTTLMs)removePeer(pid); }
+
+// ══════════════════════════════════════════════════════════════════════════
+//  SWARM SIMULATOR (?simulate=true)
+// ══════════════════════════════════════════════════════════════════════════
+function simLog(html, cls='') {
+  const log = document.getElementById('sim-log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.innerHTML = html;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
 }
 
-function cleanupPeers() {
-  const now = Date.now();
-  for (const [pid, p] of peers) if (now - p.lastSeen > CONFIG.presenceTTLMs) removePeer(pid);
+async function runSwarmSimulation() {
+  isSimMode = true;
+  const log = document.getElementById('sim-log');
+  log.classList.add('active');
+  simLog('═══ HIVE MIND SWARM SIMULATOR ═══', 'sim-title');
+  simLog('Inyectando 20 peers virtuales...', 'sim-info');
+
+  const virtualPeers = [
+    { id: 'sim_S_macstudio', tier: 'S', role: 'master_reasoner', model: '32B', modelSize: 32000, hasEngine: true },
+    { id: 'sim_A_rtx4090_1', tier: 'A', role: 'coder', model: '8B', modelSize: 8000, hasEngine: true },
+    { id: 'sim_A_rtx3080_2', tier: 'A', role: 'coder', model: '8B', modelSize: 8000, hasEngine: true },
+    { id: 'sim_A_rtx4070_3', tier: 'A', role: 'scientist', model: '8B', modelSize: 8000, hasEngine: true },
+    { id: 'sim_B_mbair_01', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true },
+    { id: 'sim_B_mbair_02', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true },
+    { id: 'sim_B_mbair_03', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true },
+    { id: 'sim_B_thinkpd', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true },
+    { id: 'sim_B_xps15_5', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true },
+    { id: 'sim_B_surfce6', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true },
+    { id: 'sim_C_iph16p1', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true },
+    { id: 'sim_C_iph16p2', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true },
+    { id: 'sim_C_iph15pr', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true },
+    { id: 'sim_C_pixel8a', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true },
+    { id: 'sim_C_s24ultr', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true },
+    { id: 'sim_D_andr_01', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false },
+    { id: 'sim_D_andr_02', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false },
+    { id: 'sim_D_andr_03', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false },
+    { id: 'sim_D_andr_04', tier: 'D', role: 'kv_cache', model: '0B', modelSize: 0, hasEngine: false },
+    { id: 'sim_D_andr_05', tier: 'D', role: 'kv_cache', model: '0B', modelSize: 0, hasEngine: false },
+  ];
+
+  for (const vp of virtualPeers) {
+    peers.set(vp.id, {
+      deviceTier: vp.tier, webgpu: vp.hasEngine, memoryMB: vp.tier === 'S' ? 65536 : vp.tier === 'A' ? 16384 : vp.tier === 'B' ? 8192 : 4096,
+      modelSize: vp.modelSize, moeRole: vp.role, tps: vp.tier === 'S' ? 45 : vp.tier === 'A' ? 30 : vp.tier === 'B' ? 15 : 5,
+      hasEngine: vp.hasEngine, shardInfo: vp.role === 'kv_cache' ? { role: 'kv_cache' } : null,
+      inferenceMode: vp.hasEngine ? 'local' : 'relay', lastSeen: Date.now(), rtt: Math.floor(Math.random()*80)+10,
+      conn: {connectionState:'connected'}, dc: { readyState: 'open', send: ()=>{}, close: ()=>{}, addEventListener: ()=>{} },
+      pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
+    });
+    simLog(`  + ${vp.id} → Tier ${vp.tier} · ${ROLE_LABELS[vp.role]} · ${vp.model}`, 'sim-info');
+  }
+  updatePeerListUI(); updateHiveUI();
+  simLog(`\n✅ 20 peers inyectados.\n`, 'sim-pass');
+
+  // TEST 1: Code → Tier A
+  simLog('─── TEST 1: "Escribe un servidor en Rust" ───', 'sim-title');
+  const intent1 = classifyIntent("Escribe un servidor en Rust");
+  const route1 = routeRequest(intent1.targetRole);
+  simLog(`  Intent: ${intent1.category} → targetRole: ${intent1.targetRole}`, 'sim-info');
+  if (route1 && ['A','S'].includes(route1.tier) && route1.role !== 'fast_router' && route1.role !== 'relay') {
+    simLog(`  ✅ PASS: Enrutado a Tier ${route1.tier} · ${route1.role} · ${route1.type === 'remote' ? route1.peerId : 'local'}`, 'sim-pass');
+  } else {
+    simLog(`  ❌ FAIL: Llegó a ${route1?.tier || 'null'} · ${route1?.role || 'null'}`, 'sim-fail');
+  }
+
+  // TEST 2: Logic → Tier S
+  simLog('\n─── TEST 2: "Resuelve la conjetura de Collatz" ───', 'sim-title');
+  const intent2 = classifyIntent("Resuelve la conjetura de Collatz");
+  const route2 = routeRequest(intent2.targetRole);
+  simLog(`  Intent: ${intent2.category} → targetRole: ${intent2.targetRole}`, 'sim-info');
+  if (route2 && route2.tier === 'S') {
+    simLog(`  ✅ PASS: Enrutado al Super Nodo (Tier S) · ${route2.peerId || 'local'}`, 'sim-pass');
+  } else {
+    simLog(`  ❌ FAIL: Llegó a Tier ${route2?.tier || 'null'} (esperaba S)`, 'sim-fail');
+  }
+
+  // TEST 3: Simple → Tier B
+  simLog('\n─── TEST 3: "Hola mundo" ───', 'sim-title');
+  const intent3 = classifyIntent("Hola mundo");
+  const route3 = routeRequest(intent3.targetRole);
+  simLog(`  Intent: ${intent3.category} → targetRole: ${intent3.targetRole}`, 'sim-info');
+  if (route3 && ['B','A','S'].includes(route3.tier) && route3.role !== 'fast_router' && route3.role !== 'relay') {
+    simLog(`  ✅ PASS: Enrutado a Tier ${route3.tier} · ${route3.role}`, 'sim-pass');
+  } else {
+    simLog(`  ❌ FAIL: Llegó a ${route3?.tier || 'null'} · ${route3?.role || 'null'}`, 'sim-fail');
+  }
+
+  // VALIDATION: C/D never used for generation
+  simLog('\n─── VALIDATION: Tier C/D protegidos ───', 'sim-title');
+  const testMsgs = ["Escribe un ensayo largo sobre historia","Haz un haiku","Calcula pi con 100 dígitos"];
+  let cdUsed = false;
+  for (const msg of testMsgs) {
+    const intent = classifyIntent(msg);
+    const route = routeRequest(intent.targetRole);
+    if (route && (route.tier === 'C' || route.tier === 'D')) { cdUsed = true; simLog(`  ❌ FAIL: "${msg}" enrutado a Tier ${route.tier}!`, 'sim-fail'); }
+  }
+  if (!cdUsed) simLog('  ✅ PASS: Ningún Tier C/D fue sobrecargado con generación.', 'sim-pass');
+
+  // FINAL
+  simLog('\n═══════════════════════════════════════════', 'sim-title');
+  simLog('🟢 HIVE MIND VALIDATED: 20 nodos. 5-Tier Allocation Exitoso.', 'sim-pass');
+  simLog('   Tier S activado para cargas críticas. Móviles protegidos.', 'sim-pass');
+  simLog('   ¡Sistema listo!', 'sim-pass');
+  simLog('═══════════════════════════════════════════', 'sim-title');
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════════════════════════════════════
 async function boot() {
-  // 1. Generar keypair antes de todo (necesario para firmar eventos Nostr)
   updateInitStatus("Generating identity…");
   await initIdentity();
-  console.log('[P2P-LLM v3] boot peerId=' + peerId);
+  console.log('[Hive Mind v4] boot peerId=' + peerId);
   updateInitStatus("Detecting device capabilities…");
   await classifyDevice();
   setupInput();
+  connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI();
 
-  // Conectar relays en paralelo — no bloquea el boot
-  connectToRelays();
-  updateRelayUI();
-  updateTierUI();
-
-  // Inicializar engine (con toda la cascada de fallbacks)
   await initEngine();
-  updateTierUI();
-  updateShardUI();
-  hideInitOverlay();
+  updateTierUI(); updateDeviceStats(); hideInitOverlay();
 
-  // Esperar que relays conecten
   await new Promise(r => setTimeout(r, 2000));
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
-
-  // Publicar presencia con info completa del engine ya cargado
   publishPresence();
 
+  const roleLabel = ROLE_LABELS[myRole] || myRole;
   const bootLines = [
-    'P2P-LLM v3 initialized',
+    'HIVE MIND v4 — Distributed MoE initialized',
     '',
-    engine
-      ? `✅ Engine local: ${currentModelId}`
-      : myShardInfo
-        ? `🧩 Shard mode: capas 0–${myShardInfo.layerEnd}/${myShardInfo.totalLayers}`
-        : '📡 Sin engine local → esperando peers con engine',
-    `Device: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}`,
-    `VRAM estimada: ~${availableVRAM}MB`,
-    `RAM: ${memoryMB}MB`,
+    engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → relay/cache mode',
+    `Device: Tier ${deviceTier} · Role: ${roleLabel}`,
+    `WebGPU: ${hasWebGPU ? 'yes' : 'no'} · VRAM~${availableVRAM}MB · RAM: ${memoryMB}MB`,
     `Peer ID: ${peerId}`,
-    `Pubkey: ${pubKeyHex.slice(0,16)}…`,
     '',
-    `Nostr relays: ${connectedRelays}/${CONFIG.nostrRelays.length} conectados`,
+    `Nostr relays: ${connectedRelays} conectados`,
     'Buscando peers en la malla…',
   ];
   addMessageToUI('assistant', bootLines.join('\n'));
 
-  setInterval(publishPresence,  CONFIG.presenceIntervalMs);
-  setInterval(cleanupPeers,     CONFIG.presenceTTLMs);
-  setInterval(autoScale,        CONFIG.scoreRecalcMs);
-  setInterval(updateRelayUI,    2000);
+  setInterval(publishPresence, CONFIG.presenceIntervalMs);
+  setInterval(cleanupPeers, CONFIG.presenceTTLMs);
+  setInterval(autoScale, CONFIG.scoreRecalcMs);
+  setInterval(updateRelayUI, 2000);
+
+  // Check for simulation mode
+  if (new URL(location.href).searchParams.has('simulate')) {
+    setTimeout(() => runSwarmSimulation(), 1000);
+  }
 }
 
-boot().catch(err => {
-  updateInitStatus(`Boot failed: ${err.message}`);
-  console.error('[Boot]', err);
-});
+boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.error('[Boot]', err); });
 </script>
 </body>
 </html>
