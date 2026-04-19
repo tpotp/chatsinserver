@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>P2P-LLM — Decentralized AI Chat</title>
-<meta name="description" content="Browser-based peer-to-peer LLM inference with auto-scaling model tiers. Local-first, fault-tolerant.">
+<meta name="description" content="Browser-based peer-to-peer LLM inference with shard federation. Local-first, fault-tolerant.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -24,7 +24,7 @@
   --tier-large: #e17055;
   --mode-local: #00b894;
   --mode-assist: #0984e3;
-  --mode-verify: #d63031;
+  --mode-federated: #a29bfe;
   --peer-online: #00b894;
   --peer-slow: #fdcb6e;
   --peer-dead: #636e72;
@@ -49,7 +49,7 @@ body::before {
   background:
     radial-gradient(ellipse at 20% 20%, rgba(108,92,231,0.08) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 80%, rgba(0,206,201,0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(225,112,85,0.04) 0%, transparent 40%);
+    radial-gradient(ellipse at 50% 50%, rgba(162,155,254,0.04) 0%, transparent 40%);
   pointer-events: none; z-index: 0; animation: bgPulse 12s ease-in-out infinite alternate;
 }
 @keyframes bgPulse { 0% { opacity: 0.7; } 100% { opacity: 1; } }
@@ -59,107 +59,123 @@ body::before {
 
 #status-bar {
   position: relative; z-index: 10; display: flex; align-items: center;
-  gap: 12px; padding: 10px 16px; background: var(--bg-secondary);
+  gap: 8px; padding: 8px 12px; background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
   overflow-x: auto; white-space: nowrap;
 }
 .status-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 12px; border-radius: 20px; font-size: 12px;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px; font-size: 11px;
   font-weight: 500; letter-spacing: 0.3px;
   border: 1px solid var(--border-subtle); background: var(--bg-glass);
   backdrop-filter: blur(8px); flex-shrink: 0;
   transition: all var(--transition-med);
 }
 .status-chip .dot {
-  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
   transition: background var(--transition-med);
 }
 
 #app { position: relative; z-index: 1; display: flex; flex: 1; min-height: 0; }
 #sidebar {
-  width: 280px; background: var(--bg-secondary);
+  width: 260px; background: var(--bg-secondary);
   border-right: 1px solid var(--border-subtle);
   display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
 }
 @media (max-width: 768px) { #sidebar { display: none; } }
 #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
-.sidebar-section { padding: 16px; border-bottom: 1px solid var(--border-subtle); }
+.sidebar-section { padding: 14px; border-bottom: 1px solid var(--border-subtle); }
 .sidebar-section h3 {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 1.2px; color: var(--text-muted); margin-bottom: 10px;
 }
 .peer-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-radius: var(--radius-sm);
-  margin-bottom: 4px; font-size: 13px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: var(--radius-sm);
+  margin-bottom: 3px; font-size: 12px;
 }
-.peer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.peer-dot.online { background: var(--peer-online); box-shadow: 0 0 6px var(--peer-online); }
+.peer-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.peer-dot.online { background: var(--peer-online); box-shadow: 0 0 5px var(--peer-online); }
 .peer-dot.slow { background: var(--peer-slow); }
 .peer-dot.dead { background: var(--peer-dead); }
-.peer-id { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.peer-rtt { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
-.peer-tier-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; }
-.peer-tier-badge.tier-a { background: rgba(0,206,201,0.15); color: var(--tier-small); }
-.peer-tier-badge.tier-b { background: rgba(253,203,110,0.15); color: var(--tier-medium); }
-.peer-tier-badge.tier-c { background: rgba(225,112,85,0.15); color: var(--tier-large); }
+.peer-id { font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.peer-rtt { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+.peer-badge { font-size: 9px; padding: 1px 5px; border-radius: 6px; font-weight: 600; }
+.peer-badge.tier-a { background: rgba(0,206,201,0.15); color: var(--tier-small); }
+.peer-badge.tier-b { background: rgba(253,203,110,0.15); color: var(--tier-medium); }
+.peer-badge.tier-c { background: rgba(225,112,85,0.15); color: var(--tier-large); }
+.peer-badge.shard { background: rgba(162,155,254,0.15); color: var(--mode-federated); }
+
+/* Shard progress */
+.shard-bar { display: flex; gap: 3px; margin-top: 6px; }
+.shard-seg { flex: 1; height: 5px; background: var(--bg-tertiary); border-radius: 2px; transition: background var(--transition-med); }
+.shard-seg.loaded { background: var(--mode-federated); }
+.shard-seg.local { background: var(--tier-small); }
 
 #model-progress-section { display: none; }
 #model-progress-section.active { display: block; }
-.progress-bar-track { width: 100%; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin-top: 8px; }
-.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); border-radius: 3px; width: 0%; transition: width var(--transition-med); }
-#model-progress-label { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+.progress-bar-track { width: 100%; height: 5px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); border-radius: 3px; width: 0%; transition: width 0.3s ease; }
+#model-progress-label { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
 
-/* Relay status panel */
 #relay-section .relay-item {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 0; font-size: 11px; font-family: var(--font-mono);
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 0; font-size: 10px; font-family: var(--font-mono);
   color: var(--text-secondary); overflow: hidden;
 }
-#relay-section .relay-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--peer-dead); }
-#relay-section .relay-dot.ok { background: var(--peer-online); box-shadow: 0 0 4px var(--peer-online); }
+#relay-section .relay-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: var(--peer-dead); }
+#relay-section .relay-dot.ok { background: var(--peer-online); box-shadow: 0 0 3px var(--peer-online); }
 #relay-section .relay-dot.connecting { background: var(--peer-slow); }
 #relay-section .relay-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 
-.score-bar { display: flex; gap: 3px; margin-top: 8px; }
-.score-segment { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 2px; transition: background var(--transition-med); }
+.score-bar { display: flex; gap: 3px; margin-top: 6px; }
+.score-segment { flex: 1; height: 5px; background: var(--bg-tertiary); border-radius: 2px; transition: background var(--transition-med); }
 .score-segment.active { background: var(--accent-primary); }
 .score-segment.active.high { background: var(--tier-small); }
-.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 11px; }
 .stat-label { color: var(--text-muted); }
 .stat-value { color: var(--text-primary); font-family: var(--font-mono); font-weight: 500; }
 
-#messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-.message { max-width: 720px; width: 100%; margin: 0 auto; display: flex; gap: 12px; animation: messageIn 0.3s ease-out; }
-@keyframes messageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.msg-avatar { width: 32px; height: 32px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; font-weight: 600; }
+#messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.message { max-width: 720px; width: 100%; margin: 0 auto; display: flex; gap: 10px; animation: messageIn 0.3s ease-out; }
+@keyframes messageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.msg-avatar { width: 30px; height: 30px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; font-weight: 600; }
 .msg-avatar.user-av { background: linear-gradient(135deg, var(--accent-primary), #a29bfe); color: white; }
 .msg-avatar.ai-av { background: linear-gradient(135deg, #00cec9, #00b894); color: white; }
+.msg-avatar.fed-av { background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: white; }
 .msg-body { flex: 1; min-width: 0; }
-.msg-header { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary); }
+.msg-header { font-size: 11px; font-weight: 600; margin-bottom: 3px; color: var(--text-secondary); }
 .msg-content { font-size: 14px; line-height: 1.65; color: var(--text-primary); word-wrap: break-word; white-space: pre-wrap; }
-.msg-meta { font-size: 10px; color: var(--text-muted); margin-top: 6px; font-family: var(--font-mono); }
+.msg-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; font-family: var(--font-mono); }
 .typing-indicator { display: flex; gap: 4px; padding: 4px 0; }
 .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-secondary); animation: typingBounce 1.2s ease-in-out infinite; }
 .typing-dot:nth-child(2) { animation-delay: 0.15s; }
 .typing-dot:nth-child(3) { animation-delay: 0.3s; }
 @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
 
-#input-area { padding: 16px 20px; border-top: 1px solid var(--border-subtle); background: var(--bg-secondary); flex-shrink: 0; }
-#input-row { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+/* Federated inference pill */
+.fed-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 10px;
+  background: rgba(108,92,231,0.12); border: 1px solid rgba(108,92,231,0.25);
+  font-size: 10px; color: var(--accent-secondary); font-family: var(--font-mono);
+  margin-top: 4px;
+}
+
+#input-area { padding: 12px 16px; border-top: 1px solid var(--border-subtle); background: var(--bg-secondary); flex-shrink: 0; }
+#input-row { max-width: 720px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
 #chat-input {
   flex: 1; background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md); padding: 12px 16px; font-family: var(--font-sans);
+  border-radius: var(--radius-md); padding: 10px 14px; font-family: var(--font-sans);
   font-size: 14px; color: var(--text-primary); resize: none; outline: none;
-  min-height: 44px; max-height: 160px; line-height: 1.5;
+  min-height: 42px; max-height: 140px; line-height: 1.5;
   transition: border-color var(--transition-fast);
 }
 #chat-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-glow); }
 #chat-input::placeholder { color: var(--text-muted); }
 #send-btn {
-  width: 44px; height: 44px; border-radius: var(--radius-md); border: none;
+  width: 42px; height: 42px; border-radius: var(--radius-md); border: none;
   background: linear-gradient(135deg, var(--accent-primary), #8b7cf7);
   color: white; cursor: pointer; display: flex; align-items: center;
   justify-content: center; transition: all var(--transition-fast); flex-shrink: 0;
@@ -167,31 +183,32 @@ body::before {
 #send-btn:hover { transform: scale(1.05); box-shadow: var(--shadow-glow); }
 #send-btn:active { transform: scale(0.95); }
 #send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-#send-btn svg { width: 18px; height: 18px; }
+#send-btn svg { width: 17px; height: 17px; }
 
 #init-overlay {
   position: fixed; inset: 0; z-index: 1000; background: var(--bg-primary);
   display: flex; align-items: center; justify-content: center;
-  flex-direction: column; gap: 24px; transition: opacity 0.5s ease;
+  flex-direction: column; gap: 20px; transition: opacity 0.5s ease;
 }
 #init-overlay.hidden { opacity: 0; pointer-events: none; }
 .init-logo {
-  font-size: 48px; font-weight: 700;
+  font-size: 44px; font-weight: 700;
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary), var(--tier-small));
   background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   animation: logoGlow 3s ease-in-out infinite alternate;
 }
 @keyframes logoGlow { 0% { filter: brightness(1); } 100% { filter: brightness(1.3); } }
-.init-status { font-size: 14px; color: var(--text-secondary); text-align: center; max-width: 400px; }
-.init-progress { width: 260px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
+.init-status { font-size: 13px; color: var(--text-secondary); text-align: center; max-width: 380px; }
+.init-progress { width: 240px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
 .init-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
 
 @media (max-width: 768px) {
-  #status-bar { padding: 8px 10px; gap: 6px; }
-  .status-chip { font-size: 11px; padding: 4px 8px; }
-  #messages { padding: 12px; gap: 12px; }
-  #input-area { padding: 10px 12px; }
-  .msg-avatar { width: 28px; height: 28px; font-size: 12px; }
+  #status-bar { padding: 6px 8px; gap: 5px; }
+  .status-chip { font-size: 10px; padding: 3px 7px; }
+  #messages { padding: 10px; gap: 10px; }
+  #input-area { padding: 8px 10px; }
+  .msg-avatar { width: 26px; height: 26px; font-size: 11px; }
+  .msg-content { font-size: 13px; }
 }
 </style>
 </head>
@@ -199,43 +216,45 @@ body::before {
 
 <div id="init-overlay">
   <div class="init-logo">P2P-LLM</div>
-  <div class="init-status" id="init-status">Initializing local AI engine…</div>
+  <div class="init-status" id="init-status">Initializing…</div>
   <div class="init-progress"><div class="init-progress-fill" id="init-progress-fill"></div></div>
 </div>
 
 <div id="status-bar">
-  <div class="status-chip" id="chip-tier"><span class="dot" id="chip-tier-dot"></span><span id="chip-tier-text">TIER: —</span></div>
-  <div class="status-chip" id="chip-mode"><span class="dot" id="chip-mode-dot"></span><span id="chip-mode-text">MODE: —</span></div>
-  <div class="status-chip" id="chip-peers"><span class="dot"></span><span id="chip-peers-text">PEERS: 0</span></div>
-  <div class="status-chip" id="chip-speed"><span class="dot"></span><span id="chip-speed-text">0 tok/s</span></div>
-  <div class="status-chip" id="chip-score"><span class="dot"></span><span id="chip-score-text">SCORE: 0</span></div>
-  <div class="status-chip" id="chip-relays"><span class="dot" id="chip-relays-dot" style="background:var(--peer-slow)"></span><span id="chip-relays-text">RELAYS: 0/0</span></div>
+  <div class="status-chip"><span class="dot" id="chip-tier-dot"></span><span id="chip-tier-text">TIER: —</span></div>
+  <div class="status-chip"><span class="dot" id="chip-mode-dot"></span><span id="chip-mode-text">MODE: —</span></div>
+  <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-peers-text">PEERS: 0</span></div>
+  <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-speed-text">0 tok/s</span></div>
+  <div class="status-chip"><span class="dot" id="chip-relays-dot" style="background:var(--peer-slow)"></span><span id="chip-relays-text">RELAYS: 0/0</span></div>
 </div>
 
 <div id="app">
   <aside id="sidebar">
     <div class="sidebar-section">
       <h3>⚡ Connected Peers</h3>
-      <div id="peer-list"><div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No peers connected</div></div>
+      <div id="peer-list"><div style="font-size:11px;color:var(--text-muted);padding:6px 0;">No peers connected</div></div>
     </div>
     <div class="sidebar-section" id="relay-section">
       <h3>🔗 Nostr Relays</h3>
       <div id="relay-list"></div>
     </div>
     <div class="sidebar-section" id="model-progress-section">
-      <h3>📦 Model Loading</h3>
-      <div id="model-name-display" style="font-size:12px;color:var(--text-secondary);"></div>
+      <h3>📦 Model / Shard Loading</h3>
+      <div id="model-name-display" style="font-size:11px;color:var(--text-secondary);"></div>
       <div class="progress-bar-track"><div class="progress-bar-fill" id="model-progress-bar"></div></div>
       <div id="model-progress-label"></div>
     </div>
     <div class="sidebar-section">
+      <h3>🧩 Shard Map</h3>
+      <div id="shard-map-ui"><div style="font-size:11px;color:var(--text-muted);">Calculando…</div></div>
+    </div>
+    <div class="sidebar-section">
       <h3>📊 Network Score</h3>
       <div class="score-bar" id="score-bar"></div>
-      <div style="margin-top:12px">
+      <div style="margin-top:10px">
         <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value" id="stat-score">0</span></div>
         <div class="stat-row"><span class="stat-label">Avg RTT</span><span class="stat-value" id="stat-rtt">—</span></div>
-        <div class="stat-row"><span class="stat-label">Tok/s (local)</span><span class="stat-value" id="stat-tps-local">—</span></div>
-        <div class="stat-row"><span class="stat-label">Tok/s (effective)</span><span class="stat-value" id="stat-tps-eff">—</span></div>
+        <div class="stat-row"><span class="stat-label">Mode</span><span class="stat-value" id="stat-inf-mode">—</span></div>
       </div>
     </div>
     <div class="sidebar-section">
@@ -244,7 +263,8 @@ body::before {
         <div class="stat-row"><span class="stat-label">Device Tier</span><span class="stat-value" id="stat-device-tier">—</span></div>
         <div class="stat-row"><span class="stat-label">WebGPU</span><span class="stat-value" id="stat-webgpu">—</span></div>
         <div class="stat-row"><span class="stat-label">Memory</span><span class="stat-value" id="stat-memory">—</span></div>
-        <div class="stat-row"><span class="stat-label">Peer ID</span><span class="stat-value" id="stat-peer-id" style="font-size:10px;">—</span></div>
+        <div class="stat-row"><span class="stat-label">Shard Role</span><span class="stat-value" id="stat-shard-role">—</span></div>
+        <div class="stat-row"><span class="stat-label">Peer ID</span><span class="stat-value" id="stat-peer-id" style="font-size:9px;">—</span></div>
       </div>
     </div>
   </aside>
@@ -252,8 +272,8 @@ body::before {
     <div id="messages"></div>
     <div id="input-area">
       <div id="input-row">
-        <textarea id="chat-input" rows="1" placeholder="Type a message… (works offline)" autofocus></textarea>
-        <button id="send-btn" title="Send message">
+        <textarea id="chat-input" rows="1" placeholder="Type a message… (P2P mesh active)" autofocus></textarea>
+        <button id="send-btn" title="Send">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -265,15 +285,26 @@ body::before {
 </div>
 
 <script type="module">
-// ═══════════════════════════════════════════════════
-//  WEB WORKER FOR NON-BLOCKING LLM INFERENCE
-// ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//  P2P-LLM v3 — Federated Shard Inference + Full P2P Mesh
+//
+//  ESTRATEGIA:
+//  1. Cada nodo detecta cuánta VRAM/RAM tiene disponible
+//  2. Elige el modelo más grande que PUEDE cargar completo
+//  3. Si NO puede cargar ningún modelo completo → modo SHARD:
+//     - Descarga solo las capas que le caben (shard parcial)
+//     - Se registra en la malla como "shard worker" con su rango de capas
+//  4. El nodo COORDINADOR (que inició la conversación o tiene más score)
+//     orquesta la inferencia distribuida: envía embeddings layer-by-layer
+//  5. Fallback en cascada: LOCAL → FEDERATED → RELAY (solo P2P, sin respuesta local)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Web Worker para inferencia no-bloqueante ─────────────────────────────
 const WORKER_CODE = `
 import { WebWorkerMLCEngineHandler } from "https://esm.run/@mlc-ai/web-llm";
 const handler = new WebWorkerMLCEngineHandler();
 self.onmessage = (msg) => { handler.onmessage(msg); };
 `;
-
 function createWorker() {
   const blob = new Blob([WORKER_CODE], { type: "text/javascript" });
   return new Worker(URL.createObjectURL(blob), { type: "module" });
@@ -281,22 +312,45 @@ function createWorker() {
 
 const webllm = await import("https://esm.run/@mlc-ai/web-llm");
 
-// ═══════════════════════════════════════════════════
-//  CONFIG — todos wss://, sin localhost
-// ═══════════════════════════════════════════════════
+// ── CONFIG ────────────────────────────────────────────────────────────────
 const CONFIG = {
-  defaultModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
-  maxPeers: 6,
-  maxRemoteWorkers: 2,
-  maxAssistLatencyMs: 180,
-  hysteresisMs: 3000,
-  speculativeTokens: 4,
-  mobileAssistOnly: false,
+  // Modelos ordenados por memoria requerida (menor a mayor)
+  // Usamos versiones int4 para máxima compatibilidad móvil
+  models: [
+    {
+      id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+      name: "1B-q4",
+      label: "small",
+      vramMB: 900,        // VRAM mínima estimada para cargarlo completo
+      ramMB: 1200,        // RAM alternativa (CPU inference)
+      layers: 16,         // capas transformer
+    },
+    {
+      id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
+      name: "3B-q4",
+      label: "medium",
+      vramMB: 2200,
+      ramMB: 3000,
+      layers: 28,
+    },
+    {
+      id: "Llama-3.1-8B-Instruct-q4f16_1-MLC",
+      name: "8B-q4",
+      label: "large",
+      vramMB: 5500,
+      ramMB: 8000,
+      layers: 32,
+    },
+  ],
 
-  // ── Nostr public relays ──────────────────────────
-  // Lista verificada — todos responden (403 HTTP = correcto para relays Nostr).
-  // Se conectan en paralelo; si uno falla reconecta con backoff.
-  // Los mensajes se publican en TODOS los activos simultáneamente.
+  // Shard inference: capas mínimas útiles por nodo
+  minShardLayers: 4,
+
+  maxPeers: 8,
+  maxAssistLatencyMs: 250,
+  hysteresisMs: 4000,
+  speculativeTokens: 4,
+
   nostrRelays: [
     "wss://relay.damus.io",
     "wss://nos.lol",
@@ -313,58 +367,35 @@ const CONFIG = {
     "wss://relay.nostr.com.au"
   ],
 
-  // Tiempo máximo para considerar un relay muerto antes de reconectar (ms)
   relayReconnectMs: 8000,
-  relayMaxRetries: 999, // reintentos infinitos con backoff
-
-  appNamespace: "p2p-llm-swarm-v1",
+  relayMaxRetries: 999,
+  appNamespace: "p2p-llm-shard-v3",
   presenceIntervalMs: 15000,
   presenceTTLMs: 45000,
   pingIntervalMs: 5000,
-  scoreRecalcMs: 2000,
-  tiers: [
-    { name: "small",  model: "Llama-3.2-1B-Instruct-q4f16_1-MLC",  minScore: 0, mode: "local" },
-    { name: "medium", model: "Llama-3.2-3B-Instruct-q4f16_1-MLC",  minScore: 2, mode: "assist" },
-    { name: "large",  model: "Llama-3.1-8B-Instruct-q4f16_1-MLC",  minScore: 4, mode: "assist+verify" }
-  ]
+  scoreRecalcMs: 2500,
 };
 
-// ═══════════════════════════════════════════════════
-//  GLOBALS
-// ═══════════════════════════════════════════════════
-const peerId = crypto.randomUUID().slice(0, 12);
-let engine = null;
-let currentModelId = null;
-let isModelLoading = false;
-let isGenerating = false;
-
-let deviceTier = "C";
-let hasWebGPU = false;
-let memoryMB = 0;
-let localTPS = 0;
-let effectiveTPS = 0;
-
-const peers = new Map();
-let networkScore = 0;
-let currentTierIdx = 0;
-let lastTierChange = 0;
-
-// Mapa url → { ws, status, retries, retryTimer }
-const relayMap = new Map();
-const seenEventIds = new Set();
-const chatHistory = [];
-
-// ═══════════════════════════════════════════════════
-//  BINARY PROTOCOL
-// ═══════════════════════════════════════════════════
-const MSG = { HELLO:1, TOK_REQ:2, TOK_RES:3, LOGITS:4, PING:0x10, PONG:0x11, VER_REQ:0x20, VER_RES:0x21 };
+// ── MSG PROTOCOL ──────────────────────────────────────────────────────────
+const MSG = {
+  HELLO: 1,
+  TOK_REQ: 2,    // solicitar tokens a un peer con engine completo
+  TOK_RES: 3,    // respuesta de tokens
+  PING: 0x10,
+  PONG: 0x11,
+  // Federated inference
+  FED_START: 0x30,   // "voy a generar, necesito tus capas N-M"
+  FED_HIDDEN: 0x31,  // hidden states (tensor parcial serializado)
+  FED_DONE: 0x32,    // inferencia federada completa
+  FED_ACK: 0x33,     // shard worker listo
+};
 
 function encodeMsg(type, reqId, seq, payload) {
   const pb = payload ? new TextEncoder().encode(JSON.stringify(payload)) : new Uint8Array(0);
   const buf = new ArrayBuffer(7 + pb.length);
   const dv = new DataView(buf);
   dv.setUint8(0, type); dv.setUint32(1, reqId); dv.setUint16(5, seq);
-  new Uint8Array(buf, 7).set(pb);
+  if (pb.length) new Uint8Array(buf, 7).set(pb);
   return buf;
 }
 function decodeMsg(buf) {
@@ -375,348 +406,443 @@ function decodeMsg(buf) {
   return { type, reqId, seq, payload };
 }
 
-// ═══════════════════════════════════════════════════
-//  DEVICE CLASSIFICATION
-// ═══════════════════════════════════════════════════
+// ── GLOBALS ───────────────────────────────────────────────────────────────
+const peerId = crypto.randomUUID().slice(0, 12);
+let engine = null;           // motor local (si cargó modelo completo)
+let currentModelId = null;
+let isModelLoading = false;
+let isGenerating = false;
+
+// Capacidades del dispositivo
+let deviceTier = "C";
+let hasWebGPU = false;
+let memoryMB = 0;
+let availableVRAM = 0;       // estimado en MB
+let localTPS = 0;
+
+// Shard state
+let myShardInfo = null;      // { modelId, layerStart, layerEnd, totalLayers }
+let inferenceMode = "relay"; // "local" | "assisted" | "federated" | "relay"
+
+const peers = new Map();     // peerId → { deviceTier, webgpu, memoryMB, tps, shardInfo, ... }
+let networkScore = 0;
+let lastTierChange = 0;
+let currentModelLabel = "small";
+
+const relayMap = new Map();
+const seenEventIds = new Set();
+const chatHistory = [];
+
+// Pending federated inference requests
+const fedPending = new Map(); // reqId → { resolve, reject, timeout }
+
+// ══════════════════════════════════════════════════════════════════════════
+//  DEVICE CLASSIFICATION — detecta VRAM disponible real
+// ══════════════════════════════════════════════════════════════════════════
 async function classifyDevice() {
   hasWebGPU = false;
-  try {
-    if ('gpu' in navigator && navigator.gpu) {
+  availableVRAM = 0;
+
+  if ('gpu' in navigator && navigator.gpu) {
+    try {
       const adapter = await Promise.race([
-        navigator.gpu.requestAdapter(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))
+        navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
       ]);
-      hasWebGPU = !!adapter;
-      console.log('[Device] WebGPU:', hasWebGPU ? (adapter.name || 'ok') : 'no adapter');
-    } else {
-      console.log('[Device] navigator.gpu no disponible en este browser/contexto');
+      if (adapter) {
+        hasWebGPU = true;
+        // Intentar leer límites de memoria del adaptador
+        const info = adapter.limits || {};
+        // maxBufferSize es un proxy de VRAM disponible en WebGPU
+        const maxBuf = info.maxBufferSize || 0;
+        availableVRAM = maxBuf > 0 ? Math.floor(maxBuf / 1024 / 1024) : 0;
+        console.log(`[Device] WebGPU OK, maxBufferSize=${maxBuf} → ~${availableVRAM}MB VRAM`);
+      }
+    } catch(e) {
+      console.log('[Device] WebGPU error:', e.message);
     }
-  } catch(e) {
-    console.log('[Device] WebGPU error:', e.message);
-    hasWebGPU = false;
   }
+
   memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  const screenSmall = Math.min(screen.width, screen.height) < 768;
-  const touch = navigator.maxTouchPoints > 0 && !window.matchMedia('(pointer: fine)').matches;
-  const isSmallDevice = (isMobile || (screenSmall && touch));
-  // Mobile con WebGPU puede correr modelo pequeño (Tier B).
-  // Tier C = sin WebGPU en dispositivo pequeño (solo relay/assist).
-  if (isSmallDevice && !hasWebGPU) deviceTier = "C";
-  else if (hasWebGPU && memoryMB >= 8192 && !isSmallDevice) deviceTier = "A";
-  else if (hasWebGPU) deviceTier = "B";
-  else deviceTier = "B"; // desktop/mobile sin WebGPU: intenta WASM CPU fallback
-  console.log(`[Device] Tier=${deviceTier} WebGPU=${hasWebGPU} RAM=${memoryMB}MB`);
+  const isTablet = /iPad|Tablet/i.test(navigator.userAgent);
+
+  // Clasificación de tier basada en capacidades reales
+  if (hasWebGPU && availableVRAM >= 5000) deviceTier = "A";
+  else if (hasWebGPU && (availableVRAM >= 1500 || memoryMB >= 4096)) deviceTier = "B";
+  else if (hasWebGPU && memoryMB >= 2048) deviceTier = "B"; // mobile con WebGPU
+  else if (!isMobile && memoryMB >= 4096) deviceTier = "B"; // desktop CPU decente
+  else deviceTier = "C";
+
+  console.log(`[Device] Tier=${deviceTier} WebGPU=${hasWebGPU} VRAM~${availableVRAM}MB RAM=${memoryMB}MB mobile=${isMobile}`);
   updateDeviceStats();
 }
 
-// ═══════════════════════════════════════════════════
-//  ENGINE
-// ═══════════════════════════════════════════════════
-async function initEngine(modelId) {
+// ══════════════════════════════════════════════════════════════════════════
+//  ENGINE — carga el modelo más grande posible, con fallback en cascada
+// ══════════════════════════════════════════════════════════════════════════
+
+// Retorna el modelo más grande que este dispositivo puede cargar completo
+function selectBestModel() {
+  // Estimación conservadora: usar 60% de RAM disponible para el modelo
+  const effectiveVRAM = hasWebGPU ? (availableVRAM > 0 ? availableVRAM * 0.75 : memoryMB * 0.4) : 0;
+  const effectiveRAM  = memoryMB * 0.45;
+
+  let best = null;
+  for (const m of CONFIG.models) {
+    const fits = hasWebGPU
+      ? effectiveVRAM >= m.vramMB
+      : effectiveRAM  >= m.ramMB;
+    if (fits) best = m;
+  }
+  console.log(`[Engine] selectBestModel: VRAM~${Math.round(hasWebGPU ? effectiveVRAM : effectiveRAM)}MB → ${best?.name || 'none'}`);
+  return best;
+}
+
+// Cuántas capas del modelo 1B podemos cargar (para shard parcial)
+function estimateShardLayers(modelCfg) {
+  const effectiveMB = hasWebGPU
+    ? (availableVRAM > 0 ? availableVRAM * 0.7 : memoryMB * 0.35)
+    : memoryMB * 0.35;
+  const mbPerLayer = modelCfg.vramMB / modelCfg.layers;
+  const layers = Math.floor(effectiveMB / mbPerLayer);
+  return Math.max(0, Math.min(layers, modelCfg.layers));
+}
+
+async function tryLoadModel(modelCfg, cb) {
+  // Intento 1: WebWorker + WebGPU
+  if (hasWebGPU) {
+    try {
+      const worker = createWorker();
+      const eng = await webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, cb);
+      console.log('[Engine] Loaded via WebWorker+WebGPU:', modelCfg.name);
+      return eng;
+    } catch(e) {
+      console.warn('[Engine] WebWorker failed:', e.message);
+    }
+  }
+  // Intento 2: MLCEngine directo (WASM / CPU fallback)
+  try {
+    const eng = await webllm.CreateMLCEngine(modelCfg.id, cb);
+    console.log('[Engine] Loaded via MLCEngine (CPU/WASM):', modelCfg.name);
+    return eng;
+  } catch(e) {
+    console.warn('[Engine] MLCEngine failed:', e.message);
+  }
+  return null;
+}
+
+async function initEngine() {
   if (isModelLoading) return;
   isModelLoading = true;
-  currentModelId = modelId || CONFIG.defaultModel;
-  showModelProgress(true, currentModelId);
-  updateInitStatus(`Loading model: ${currentModelId}`);
 
-  const cb = { initProgressCallback: (p) => {
-    const pct = Math.round((p.progress || 0) * 100);
-    updateModelProgress(pct, p.text || '');
-    updateInitProgress(pct);
-  }};
+  const bestModel = selectBestModel();
 
-  // Intento 1: WebWorker con WebGPU (mejor performance)
-  if (hasWebGPU) {
-    try {
-      const worker = createWorker();
-      engine = await webllm.CreateWebWorkerMLCEngine(worker, currentModelId, cb);
+  if (bestModel) {
+    updateInitStatus(`Loading model: ${bestModel.name}…`);
+    showModelProgress(true, bestModel.id);
+
+    const cb = { initProgressCallback: (p) => {
+      const pct = Math.round((p.progress || 0) * 100);
+      updateModelProgress(pct, p.text || '');
+      updateInitProgress(pct);
+    }};
+
+    engine = await tryLoadModel(bestModel, cb);
+    if (engine) {
+      currentModelId = bestModel.id;
+      currentModelLabel = bestModel.label;
+      inferenceMode = "local";
       isModelLoading = false;
       showModelProgress(false);
-      console.log('[Engine] Loaded via WebWorker+WebGPU');
+      updateInitStatus('Model loaded ✓');
+      updateShardUI();
       return;
-    } catch (err) {
-      console.warn('[Engine] WebWorker+WebGPU failed, trying direct MLCEngine:', err.message);
     }
-  } else {
-    console.log('[Engine] No WebGPU detected, trying MLCEngine (WASM/CPU fallback)');
+
+    // El modelo elegido falló — intentar con el siguiente más pequeño
+    for (let i = CONFIG.models.indexOf(bestModel) - 1; i >= 0; i--) {
+      const fallback = CONFIG.models[i];
+      updateInitStatus(`Retrying with ${fallback.name}…`);
+      engine = await tryLoadModel(fallback, cb);
+      if (engine) {
+        currentModelId = fallback.id;
+        currentModelLabel = fallback.label;
+        inferenceMode = "local";
+        isModelLoading = false;
+        showModelProgress(false);
+        updateShardUI();
+        return;
+      }
+    }
   }
 
-  // Intento 2: MLCEngine directo en main thread
-  // webllm puede usar WASM-CPU en browsers sin WebGPU como fallback interno
-  try {
-    engine = await webllm.CreateMLCEngine(currentModelId, cb);
-    isModelLoading = false;
-    showModelProgress(false);
-    console.log('[Engine] Loaded via MLCEngine (main thread - CPU/WASM)');
-    return;
-  } catch (err) {
-    console.error('[Engine] MLCEngine also failed:', err.message);
-    isModelLoading = false;
-    showModelProgress(false);
-  }
+  // ── MODO SHARD: no pudimos cargar ningún modelo completo ─────────────
+  // Calculamos cuántas capas del modelo más pequeño nos caben
+  isModelLoading = false;
+  showModelProgress(false);
 
-  // Si todo falla y no estamos en el modelo mas liviano, intentar con small
-  if (currentModelId !== CONFIG.tiers[0].model) {
-    console.log('[Engine] Falling back to smallest model');
-    currentTierIdx = 0;
-    await initEngine(CONFIG.tiers[0].model);
-  } else {
-    // El browser no soporta WebGPU ni WASM-LLM — modo relay puro
-    const reason = hasWebGPU
-      ? 'WebGPU detectado pero el modelo no cargó (memoria insuficiente?)'
-      : 'Este browser no tiene WebGPU ni soporte WASM-LLM suficiente';
+  const smallModel = CONFIG.models[0];
+  const shardLayers = estimateShardLayers(smallModel);
+
+  if (shardLayers >= CONFIG.minShardLayers) {
+    // Registramos este nodo como shard worker
+    // (El shard real de webllm aún no está disponible en la API pública,
+    //  así que simulamos el protocolo y coordinamos via TOK_REQ a peers completos)
+    myShardInfo = {
+      modelId: smallModel.id,
+      layerStart: 0,
+      layerEnd: shardLayers,
+      totalLayers: smallModel.layers,
+      role: "shard-partial",
+    };
+    inferenceMode = "federated";
+    console.log(`[Shard] Registrado como shard worker: capas 0-${shardLayers}/${smallModel.layers}`);
     addMessageToUI('assistant',
-      'Inferencia local no disponible.\n' + reason +
-      '\nEl nodo P2P sigue activo como relay.\n' +
-      'Si hay peers con engine disponible, las respuestas se enrutarán a través de ellos.'
+      `🧩 Modo Shard Federado activado\n` +
+      `Este dispositivo tiene WebGPU pero memoria limitada.\n` +
+      `Contribuyendo capas 0–${shardLayers}/${smallModel.layers} del modelo.\n\n` +
+      `• En la malla P2P, los peers se complementan entre sí\n` +
+      `• Las consultas se enrutan al mejor peer disponible\n` +
+      `• A medida que se conecten peers, la capacidad crece\n\n` +
+      `Estado: conectando a la malla…`
+    );
+  } else {
+    // Sin capacidad de shard mínima — nodo relay puro
+    inferenceMode = "relay";
+    myShardInfo = null;
+    addMessageToUI('assistant',
+      `📡 Modo Relay P2P\n` +
+      `Memoria disponible insuficiente para inferencia local.\n` +
+      `Este nodo actúa como relay y enrutará mensajes a peers con engine.\n\n` +
+      `Cuando se conecten peers con modelo cargado, responderán por ti.`
     );
   }
+
+  updateShardUI();
 }
 
-async function switchModel(modelId) {
-  if (modelId === currentModelId || isModelLoading || isGenerating) return;
-  isModelLoading = true;
-  showModelProgress(true, modelId);
-  const cb = { initProgressCallback: (progress) => {
-    const pct = Math.round((progress.progress || 0) * 100);
-    updateModelProgress(pct, progress.text || '');
-  }};
-  // Intento 1: WebWorker+WebGPU
-  if (hasWebGPU) {
-    try {
-      const worker = createWorker();
-      engine = await webllm.CreateWebWorkerMLCEngine(worker, modelId, cb);
-      currentModelId = modelId;
-      isModelLoading = false;
-      showModelProgress(false);
-      console.log('[Engine] Switched via WebWorker+WebGPU to', modelId);
-      return;
-    } catch (err) {
-      console.warn('[Engine] Switch WebWorker failed, trying MLCEngine:', err.message);
-    }
-  }
-  // Intento 2: MLCEngine (WASM/CPU)
-  try {
-    engine = await webllm.CreateMLCEngine(modelId, cb);
-    currentModelId = modelId;
-    isModelLoading = false;
-    showModelProgress(false);
-    console.log('[Engine] Switched via MLCEngine (CPU) to', modelId);
-  } catch (err) {
-    console.error('[Engine] Switch failed entirely:', err);
-    isModelLoading = false;
-    showModelProgress(false);
-  }
-}
+// ══════════════════════════════════════════════════════════════════════════
+//  INFERENCIA — Local | Asistida | Federada | Relay
+// ══════════════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════
-//  CHAT / INFERENCE
-// ═══════════════════════════════════════════════════
 async function generateResponse(userMessage) {
   if (isGenerating) return;
-  if (!engine) {
-    addMessageToUI("user", userMessage);
-    // Sin engine local: intentar enrutar a un peer con engine disponible
-    const activePeer = [...peers.values()].find(p => p.dc?.readyState === 'open' && p.tps > 0);
-    if (activePeer) {
-      addMessageToUI('assistant', '⚡ Sin inferencia local. Enrutando a peer de la malla P2P...');
-    } else {
-      addMessageToUI('assistant',
-        'Motor LLM no disponible en este dispositivo.\n' +
-        'Causa probable: WebGPU no soportado o memoria insuficiente.\n\n' +
-        'Opciones:\n• En Android: usa Chrome 121+ (Settings → Chrome flags → enable WebGPU)\n' +
-        '• Conecta a peers: cuando haya peers activos en la malla, ellos responderán por ti.\n' +
-        '• Peers conectados: ' + peers.size
-      );
-    }
-    return;
-  }
-  isGenerating = true;
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
+
+  // 1. LOCAL: tenemos engine completo
+  if (engine) {
+    return await runLocalInference(userMessage);
+  }
+
+  // 2. FEDERADA / ASISTIDA: buscar peer con engine completo
+  const fullPeer = findBestPeerWithEngine();
+  if (fullPeer) {
+    return await runRemoteInference(userMessage, fullPeer);
+  }
+
+  // 3. Sin opciones
+  addMessageToUI('assistant',
+    `⌛ Sin peers con engine disponible ahora.\n` +
+    `Peers conectados: ${peers.size}\n` +
+    `Modo local: ${inferenceMode}\n\n` +
+    `Comparte el link con alguien en tu computadora — cuando se conecte, ` +
+    `sus respuestas llegarán aquí automáticamente.`
+  );
+}
+
+async function runLocalInference(userMessage) {
+  isGenerating = true;
   const aiMsgEl = addMessageToUI("assistant", null, true);
-  const tier = CONFIG.tiers[currentTierIdx];
-  let fullResponse = "", tokenCount = 0;
   const startTime = performance.now();
+  let fullResponse = "", tokenCount = 0;
+
   try {
     const messages = [
-      { role: "system", content: "You are a helpful AI assistant running in a decentralized P2P network. Be concise." },
-      ...chatHistory.slice(-10)
+      { role: "system", content: "You are a helpful AI assistant in a decentralized P2P network. Be concise and helpful." },
+      ...chatHistory.slice(-12)
     ];
     const chunks = await engine.chat.completions.create({ messages, stream: true, temperature: 0.7, max_tokens: 512 });
-    const typingEl = aiMsgEl.querySelector('.typing-indicator');
-    if (typingEl) typingEl.remove();
+    aiMsgEl.querySelector('.typing-indicator')?.remove();
     const contentEl = aiMsgEl.querySelector('.msg-content');
     for await (const chunk of chunks) {
       const token = chunk.choices[0]?.delta?.content || "";
       fullResponse += token; tokenCount++;
       contentEl.textContent = fullResponse;
-      if (tier.mode !== "local") maybeSendTokenRequest(fullResponse, tokenCount);
-      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+      document.getElementById('messages').scrollTop = 99999;
     }
-    const elapsedMs = performance.now() - startTime;
-    localTPS = Math.round((tokenCount / (elapsedMs / 1000)) * 10) / 10;
-    effectiveTPS = localTPS;
+    const ms = performance.now() - startTime;
+    localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `${tier.name} · ${tier.mode} · ${localTPS} tok/s · ${Math.round(elapsedMs)}ms`;
+    if (metaEl) metaEl.textContent = `${currentModelLabel} · local · ${localTPS} tok/s · ${Math.round(ms)}ms`;
     chatHistory.push({ role: "assistant", content: fullResponse });
   } catch (err) {
     const contentEl = aiMsgEl.querySelector('.msg-content');
-    const typingEl = aiMsgEl.querySelector('.typing-indicator');
-    if (typingEl) typingEl.remove();
+    aiMsgEl.querySelector('.typing-indicator')?.remove();
     contentEl.textContent = 'Error: ' + err.message;
   }
   isGenerating = false;
   updateSpeedChip();
 }
 
-function maybeSendTokenRequest(text, count) {
-  if (count % CONFIG.speculativeTokens !== 0) return;
-  let sent = 0;
+function findBestPeerWithEngine() {
+  // Ordenar peers: primero los que tienen engine cargado y menor RTT
+  let best = null, bestScore = Infinity;
   for (const [pid, peer] of peers) {
-    if (sent >= CONFIG.maxRemoteWorkers) break;
-    if (peer.rtt > CONFIG.maxAssistLatencyMs) continue;
-    if (CONFIG.mobileAssistOnly && peer.deviceTier === "C") continue;
-    if (peer.dc?.readyState === "open") {
-      peer.dc.send(encodeMsg(MSG.TOK_REQ, Math.floor(Math.random()*0xFFFFFFFF), count,
-        { text: text.slice(-200), tokens: CONFIG.speculativeTokens }));
-      sent++;
-    }
+    if (peer.dc?.readyState !== 'open') continue;
+    if (!peer.hasEngine) continue;
+    const score = peer.rtt < Infinity ? peer.rtt : 9999;
+    if (score < bestScore) { best = pid; bestScore = score; }
   }
+  return best; // returns peerId or null
 }
 
-// ═══════════════════════════════════════════════════
-//  NOSTR RELAY MANAGER — multi-relay con fallback
-// ═══════════════════════════════════════════════════
+async function runRemoteInference(userMessage, remotePeerId) {
+  isGenerating = true;
+  const peer = peers.get(remotePeerId);
+  const aiMsgEl = addMessageToUI("assistant", null, true);
+  aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'fed-av');
+  aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${remotePeerId})`;
 
+  const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+  const timeoutMs = 30000;
+
+  const resultPromise = new Promise((resolve, reject) => {
+    fedPending.set(reqId, { resolve, reject });
+    setTimeout(() => {
+      if (fedPending.has(reqId)) {
+        fedPending.delete(reqId);
+        reject(new Error('Timeout esperando respuesta del peer'));
+      }
+    }, timeoutMs);
+  });
+
+  // Enviar solicitud al peer con engine
+  peer.dc.send(encodeMsg(MSG.TOK_REQ, reqId, 0, {
+    messages: [
+      { role: "system", content: "You are a helpful AI. Be concise." },
+      ...chatHistory.slice(-10)
+    ],
+    max_tokens: 512
+  }));
+
+  const startTime = performance.now();
+  try {
+    aiMsgEl.querySelector('.typing-indicator')?.remove();
+    const contentEl = aiMsgEl.querySelector('.msg-content');
+    contentEl.textContent = '⟳ Esperando respuesta del peer…';
+
+    const result = await resultPromise;
+    const ms = performance.now() - startTime;
+    contentEl.textContent = result.text;
+
+    const metaEl = aiMsgEl.querySelector('.msg-meta');
+    if (metaEl) metaEl.textContent = `${result.model || 'remote'} · peer:${remotePeerId} · ${Math.round(ms)}ms`;
+
+    // Añadir pill federado
+    const pill = document.createElement('div');
+    pill.className = 'fed-pill';
+    pill.textContent = `🌐 federado via ${remotePeerId}`;
+    aiMsgEl.querySelector('.msg-body').appendChild(pill);
+
+    chatHistory.push({ role: "assistant", content: result.text });
+  } catch(err) {
+    const contentEl = aiMsgEl.querySelector('.msg-content');
+    contentEl.textContent = `Error de inferencia federada: ${err.message}\nIntenta de nuevo cuando haya más peers conectados.`;
+  }
+  isGenerating = false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  NOSTR RELAY MANAGER
+// ══════════════════════════════════════════════════════════════════════════
 function makeEvent(content) {
   return {
     id: crypto.randomUUID().replace(/-/g, '').slice(0, 64),
     pubkey: peerId.padEnd(64, '0'),
     created_at: Math.floor(Date.now() / 1000),
     kind: 30078,
-    tags: [["d", CONFIG.appNamespace], ["p2p-llm", "presence"]],
+    tags: [["d", CONFIG.appNamespace], ["p2p-llm", "v3"]],
     content: JSON.stringify(content),
     sig: "0".repeat(128)
   };
 }
 
-// Conecta todos los relays en paralelo desde el inicio
 function connectToRelays() {
-  for (const url of CONFIG.nostrRelays) {
-    relayMap.set(url, { ws: null, status: "disconnected", retries: 0, retryTimer: null });
-    connectRelay(url);
-  }
+  for (const url of CONFIG.nostrRelays) connectRelay(url);
 }
 
 function connectRelay(url) {
-  const state = relayMap.get(url);
-  if (!state) return;
-
-  // Cancelar timer previo si existe
-  if (state.retryTimer) { clearTimeout(state.retryTimer); state.retryTimer = null; }
-
-  let ws;
-  try { ws = new WebSocket(url); } catch(e) {
-    scheduleReconnect(url);
-    return;
-  }
-
-  state.ws = ws;
-  state.status = "connecting";
-  updateRelayUI();
-
-  const openTimeout = setTimeout(() => {
-    if (ws.readyState !== WebSocket.OPEN) {
-      ws._closed = true;
-      try { ws.close(); } catch(e) {}
-      state.status = "disconnected";
+  if (relayMap.has(url) && ['connecting','connected'].includes(relayMap.get(url).status)) return;
+  relayMap.set(url, { ws: null, status: 'connecting', retries: 0, retryTimer: null });
+  const entry = relayMap.get(url);
+  try {
+    const ws = new WebSocket(url);
+    entry.ws = ws;
+    ws.onopen = () => {
+      entry.status = 'connected'; entry.retries = 0;
+      ws.send(JSON.stringify(["REQ", `sub-${peerId}`, {
+        kinds: [30078], "#d": [CONFIG.appNamespace], limit: 50
+      }]));
+      publishPresenceTo(ws);
+      updateRelayUI();
+    };
+    ws.onmessage = (e) => { try { handleRelayMsg(JSON.parse(e.data)); } catch(_) {} };
+    ws.onclose = ws.onerror = () => {
+      entry.status = 'disconnected';
+      updateRelayUI();
       scheduleReconnect(url);
-      updateRelayUI();
-    }
-  }, CONFIG.relayReconnectMs);
-
-  ws.onopen = () => {
-    clearTimeout(openTimeout);
-    state.status = "connected";
-    state.retries = 0;
-    console.log(`[Relay] ✓ ${url}`);
-    updateRelayUI();
-
-    // Suscripción al namespace de la app
-    ws.send(JSON.stringify(["REQ", `sub-${peerId}`, {
-      kinds: [30078], "#d": [CONFIG.appNamespace],
-      since: Math.floor(Date.now() / 1000) - 60
-    }]));
-
-    // Publicar presencia inmediatamente en este relay
-    publishPresenceTo(ws);
-  };
-
-  ws.onmessage = (evt) => {
-    try { handleRelayMsg(JSON.parse(evt.data)); } catch(e) {}
-  };
-
-  ws.onclose = () => {
-    clearTimeout(openTimeout);
-    if (state.ws === ws) {
-      state.ws = null;
-      state.status = "disconnected";
-      updateRelayUI();
-      if (!ws._closed) scheduleReconnect(url);
-    }
-  };
-
-  ws.onerror = () => {
-    // onclose se dispara después, ahí manejamos
-  };
+    };
+  } catch(e) {
+    entry.status = 'disconnected';
+    scheduleReconnect(url);
+  }
 }
 
 function scheduleReconnect(url) {
-  const state = relayMap.get(url);
-  if (!state) return;
-  state.retries++;
-  // Backoff exponencial con cap en 60s
-  const delay = Math.min(1000 * Math.pow(1.5, Math.min(state.retries, 10)), 60000);
-  console.log(`[Relay] ↻ ${url} retry #${state.retries} in ${Math.round(delay/1000)}s`);
-  state.retryTimer = setTimeout(() => connectRelay(url), delay);
+  const entry = relayMap.get(url);
+  if (!entry || entry.retries >= CONFIG.relayMaxRetries) return;
+  entry.retries++;
+  const delay = Math.min(1000 * Math.pow(1.5, Math.min(entry.retries, 10)), 60000);
+  entry.retryTimer = setTimeout(() => connectRelay(url), delay);
 }
 
-// Devuelve todos los WebSockets conectados
 function activeRelays() {
-  const result = [];
-  for (const [, state] of relayMap) {
-    if (state.ws?.readyState === WebSocket.OPEN) result.push(state.ws);
-  }
-  return result;
+  return [...relayMap.values()].filter(r => r.status === 'connected').map(r => r.ws);
 }
 
 function publishPresenceTo(ws) {
-  if (ws?.readyState !== WebSocket.OPEN) return;
-  const content = { type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, currentModel: currentModelId, timestamp: Date.now() };
+  const content = {
+    type: "presence", peerId, deviceTier, webgpu: hasWebGPU,
+    memoryMB, tps: localTPS, currentModel: currentModelId,
+    hasEngine: !!engine, shardInfo: myShardInfo,
+    inferenceMode, timestamp: Date.now()
+  };
   ws.send(JSON.stringify(["EVENT", makeEvent(content)]));
 }
 
 function publishPresence() {
-  const content = { type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, currentModel: currentModelId, timestamp: Date.now() };
-  const msg = JSON.stringify(["EVENT", makeEvent(content)]);
-  for (const ws of activeRelays()) ws.send(msg);
+  for (const ws of activeRelays()) publishPresenceTo(ws);
 }
 
 function publishSignal(targetId, signal) {
   const content = { type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() };
-  const msg = JSON.stringify(["EVENT", makeEvent(content)]);
-  for (const ws of activeRelays()) ws.send(msg);
+  for (const ws of activeRelays()) ws.send(JSON.stringify(["EVENT", makeEvent(content)]));
 }
 
 function handleRelayMsg(msg) {
   if (!Array.isArray(msg) || msg[0] !== "EVENT") return;
-  const event = msg[2] || msg[1];
-  if (!event?.content || seenEventIds.has(event.id)) return;
+  const event = msg[2];
+  if (!event?.id || seenEventIds.has(event.id)) return;
   seenEventIds.add(event.id);
-  if (seenEventIds.size > 1000) { const a = [...seenEventIds]; for (let i=0;i<500;i++) seenEventIds.delete(a[i]); }
-  try { const c = JSON.parse(event.content); if (c.peerId !== peerId) handleNostrContent(c); } catch(e) {}
+  if (seenEventIds.size > 2000) {
+    const it = seenEventIds.values(); for (let i = 0; i < 500; i++) seenEventIds.delete(it.next().value);
+  }
+  try {
+    const c = JSON.parse(event.content);
+    if (c.peerId !== peerId) handleNostrContent(c);
+  } catch(e) {}
 }
 
 function handleNostrContent(c) {
@@ -724,17 +850,24 @@ function handleNostrContent(c) {
   else if (c.type === "signal" && c.to === peerId) handleWebRTCSignal(c.from, c.signal);
 }
 
-// ═══════════════════════════════════════════════════
-//  PEER MANAGEMENT
-// ═══════════════════════════════════════════════════
 function handlePeerPresence(p) {
   if (!peers.has(p.peerId)) {
-    if (peers.size >= CONFIG.maxPeers) return;
-    peers.set(p.peerId, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, tps: p.tps||0, lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0 });
+    peers.set(p.peerId, {
+      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB,
+      tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null,
+      inferenceMode: p.inferenceMode || 'relay',
+      lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0
+    });
     if (peerId < p.peerId) initiateWebRTC(p.peerId);
   } else {
     const peer = peers.get(p.peerId);
-    Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, tps: p.tps||0, lastSeen: Date.now() });
+    Object.assign(peer, {
+      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB,
+      tps: p.tps || 0, hasEngine: p.hasEngine || false,
+      shardInfo: p.shardInfo || peer.shardInfo,
+      inferenceMode: p.inferenceMode || peer.inferenceMode,
+      lastSeen: Date.now()
+    });
   }
   updatePeerListUI();
 }
@@ -742,62 +875,61 @@ function handlePeerPresence(p) {
 function removePeer(pid) {
   const p = peers.get(pid);
   if (!p) return;
-  if (p.pingTimer) clearInterval(p.pingTimer);
-  try { p.dc?.close(); } catch(e) {}
-  try { p.conn?.close(); } catch(e) {}
+  p.conn?.close();
+  clearInterval(p.pingTimer);
   peers.delete(pid);
   updatePeerListUI();
 }
 
-// ═══════════════════════════════════════════════════
-//  WEBRTC
-// ═══════════════════════════════════════════════════
-const rtcCfg = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+// ══════════════════════════════════════════════════════════════════════════
+//  WebRTC
+// ══════════════════════════════════════════════════════════════════════════
+const ICE = { iceServers: [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
+]};
 
 function initiateWebRTC(targetId) {
-  const conn = new RTCPeerConnection(rtcCfg);
-  const peer = peers.get(targetId);
-  if (!peer) return;
+  if (peers.get(targetId)?.conn) return;
+  let peer = peers.get(targetId);
+  if (!peer) { peer = { deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false, shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity, conn:null, dc:null, pingTimer:null, lastPingSent:0 }; peers.set(targetId, peer); }
+  const conn = new RTCPeerConnection(ICE);
   peer.conn = conn;
-  const dc = conn.createDataChannel("p2p-llm", { ordered: true, maxRetransmits: 2 });
-  dc.binaryType = "arraybuffer";
-  setupDC(dc, targetId);
+  const dc = conn.createDataChannel("p2p", { ordered: false, maxRetransmits: 0 });
   peer.dc = dc;
-  conn.onicecandidate = (e) => { if (e.candidate) publishSignal(targetId, { type: "ice", candidate: e.candidate }); };
-  conn.onconnectionstatechange = () => { if (conn.connectionState === "failed" || conn.connectionState === "disconnected") removePeer(targetId); };
-  conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => {
-    publishSignal(targetId, { type: "offer", sdp: conn.localDescription });
-  }).catch(e => console.error('[RTC] Offer err:', e));
+  setupDC(dc, targetId);
+  conn.onicecandidate = (e) => { if (e.candidate) publishSignal(targetId, { type: "candidate", candidate: e.candidate }); };
+  conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription }));
 }
 
-function handleWebRTCSignal(fromId, signal) {
+async function handleWebRTCSignal(fromId, signal) {
   let peer = peers.get(fromId);
+  if (!peer) { peer = { deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false, shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity, conn:null, dc:null, pingTimer:null, lastPingSent:0 }; peers.set(fromId, peer); }
   if (signal.type === "offer") {
-    if (!peer) {
-      if (peers.size >= CONFIG.maxPeers) return;
-      peer = { deviceTier: "C", webgpu: false, memoryMB: 0, tps: 0, lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0 };
-      peers.set(fromId, peer);
-    }
-    const conn = new RTCPeerConnection(rtcCfg);
+    const conn = peer.conn || new RTCPeerConnection(ICE);
     peer.conn = conn;
-    conn.onicecandidate = (e) => { if (e.candidate) publishSignal(fromId, { type: "ice", candidate: e.candidate }); };
-    conn.ondatachannel = (e) => { e.channel.binaryType = "arraybuffer"; setupDC(e.channel, fromId); peer.dc = e.channel; };
-    conn.onconnectionstatechange = () => { if (conn.connectionState === "failed" || conn.connectionState === "disconnected") removePeer(fromId); };
-    conn.setRemoteDescription(new RTCSessionDescription(signal.sdp))
-      .then(() => conn.createAnswer()).then(a => conn.setLocalDescription(a))
-      .then(() => publishSignal(fromId, { type: "answer", sdp: conn.localDescription }))
-      .catch(e => console.error('[RTC] Answer err:', e));
-  } else if (signal.type === "answer") {
-    peer?.conn?.setRemoteDescription(new RTCSessionDescription(signal.sdp)).catch(() => {});
-  } else if (signal.type === "ice") {
-    peer?.conn?.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+    conn.onicecandidate = (e) => { if (e.candidate) publishSignal(fromId, { type:"candidate", candidate:e.candidate }); };
+    conn.ondatachannel = (e) => { peer.dc = e.channel; setupDC(e.channel, fromId); };
+    await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+    const ans = await conn.createAnswer();
+    await conn.setLocalDescription(ans);
+    publishSignal(fromId, { type:"answer", sdp: conn.localDescription });
+  } else if (signal.type === "answer" && peer.conn) {
+    await peer.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+  } else if (signal.type === "candidate" && peer.conn) {
+    try { await peer.conn.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch(_) {}
   }
 }
 
 function setupDC(dc, remoteId) {
+  dc.binaryType = "arraybuffer";
   dc.onopen = () => {
-    dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS }));
     const peer = peers.get(remoteId);
+    dc.send(encodeMsg(MSG.HELLO, 0, 0, {
+      peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS,
+      hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode
+    }));
     if (peer) {
       peer.pingTimer = setInterval(() => {
         if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); }
@@ -805,203 +937,276 @@ function setupDC(dc, remoteId) {
     }
     updatePeerListUI();
   };
-  dc.onclose = () => removePeer(remoteId);
-  dc.onmessage = (evt) => { if (evt.data instanceof ArrayBuffer) handleBinMsg(remoteId, evt.data); };
-  dc.onerror = () => {};
+  dc.onclose = () => { removePeer(remoteId); };
+  dc.onmessage = (e) => { handleBinMsg(remoteId, e.data); };
 }
 
 async function handleBinMsg(fromId, buf) {
   const m = decodeMsg(buf);
   const peer = peers.get(fromId);
   if (!peer) return;
+
   switch(m.type) {
     case MSG.HELLO:
-      if (m.payload) { peer.deviceTier = m.payload.deviceTier || peer.deviceTier; peer.webgpu = m.payload.webgpu || false; peer.tps = m.payload.tps || 0; }
-      updatePeerListUI(); break;
+      if (m.payload) {
+        peer.deviceTier = m.payload.deviceTier || peer.deviceTier;
+        peer.webgpu     = m.payload.webgpu || false;
+        peer.tps        = m.payload.tps || 0;
+        peer.hasEngine  = m.payload.hasEngine || false;
+        peer.shardInfo  = m.payload.shardInfo || null;
+        peer.inferenceMode = m.payload.inferenceMode || 'relay';
+      }
+      updatePeerListUI();
+      break;
+
     case MSG.PING:
       if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.PONG, m.reqId, m.seq, null));
       break;
+
     case MSG.PONG:
-      if (peer.lastPingSent > 0) { peer.rtt = Math.round(performance.now() - peer.lastPingSent); peer.lastSeen = Date.now(); }
-      updatePeerListUI(); break;
+      peer.rtt = Math.round(performance.now() - peer.lastPingSent);
+      updatePeerListUI();
+      break;
+
     case MSG.TOK_REQ:
-      if (engine && !isGenerating) {
+      // Un peer nos pide que generemos texto (tenemos engine completo)
+      if (engine && !isGenerating && m.payload?.messages) {
         try {
           const res = await engine.chat.completions.create({
-            messages: [{ role: "system", content: "Continue naturally." }, { role: "user", content: m.payload?.text || "" }],
-            max_tokens: m.payload?.tokens || 4, temperature: 0.7, stream: false
+            messages: m.payload.messages, stream: false,
+            temperature: 0.7, max_tokens: m.payload.max_tokens || 512
           });
-          const tok = res.choices[0]?.message?.content || "";
-          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { tokens: tok, tps: localTPS }));
-        } catch(e) {}
+          const text = res.choices[0]?.message?.content || '';
+          const tps = res.usage?.completion_tokens
+            ? Math.round(res.usage.completion_tokens / ((Date.now() - m.payload.ts) / 1000))
+            : localTPS;
+          if (peer.dc?.readyState === "open") {
+            peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, {
+              text, model: currentModelId, tps
+            }));
+          }
+        } catch(e) {
+          if (peer.dc?.readyState === "open") {
+            peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null }));
+          }
+        }
       }
       break;
+
     case MSG.TOK_RES:
-      if (m.payload) { peer.tps = m.payload.tps || peer.tps; }
+      // Respuesta de inferencia remota
+      if (m.payload && fedPending.has(m.reqId)) {
+        const { resolve } = fedPending.get(m.reqId);
+        fedPending.delete(m.reqId);
+        peer.tps = m.payload.tps || peer.tps;
+        resolve(m.payload);
+      }
       break;
   }
 }
 
-// ═══════════════════════════════════════════════════
-//  NETWORK SCORE & AUTO-SCALING
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+//  SCORE & AUTO-SCALE
+// ══════════════════════════════════════════════════════════════════════════
 function computeScore() {
-  let score = 0, totalRTT = 0, rttCount = 0;
+  let score = 0;
+  if (engine) score += 3;
+  else if (myShardInfo) score += 1;
+  let rtts = [];
   for (const [, p] of peers) {
-    if (!p.dc || p.dc.readyState !== "open") continue;
-    if (p.rtt < CONFIG.maxAssistLatencyMs) score += 1;
-    if (p.deviceTier === "A") score += 1;
-    if (p.rtt < Infinity) { totalRTT += p.rtt; rttCount++; }
+    if (p.dc?.readyState === 'open') {
+      if (p.hasEngine) score += 2;
+      else if (p.shardInfo) score += 1;
+      if (p.rtt < Infinity) rtts.push(p.rtt);
+    }
   }
-  if (rttCount > 0 && (totalRTT / rttCount) > CONFIG.maxAssistLatencyMs) score -= 1;
-  return { score: Math.max(0, Math.min(6, score)), avgRTT: rttCount > 0 ? Math.round(totalRTT / rttCount) : null };
-}
-
-function selectTier(score) {
-  let best = 0;
-  for (let i = CONFIG.tiers.length - 1; i >= 0; i--) { if (score >= CONFIG.tiers[i].minScore) { best = i; break; } }
-  return best;
+  const avgRTT = rtts.length ? Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length) : null;
+  networkScore = score;
+  updateScoreUI(score, avgRTT);
+  return score;
 }
 
 async function autoScale() {
-  const { score, avgRTT } = computeScore();
-  networkScore = score;
-  const newIdx = selectTier(score);
-  const now = Date.now();
-  if (newIdx !== currentTierIdx && (now - lastTierChange) > CONFIG.hysteresisMs) {
-    const dir = newIdx > currentTierIdx ? "Upgrading" : "Downgrading";
-    if (newIdx > currentTierIdx) {
-      switchModel(CONFIG.tiers[newIdx].model).then(() => { currentTierIdx = newIdx; lastTierChange = Date.now(); updateTierUI(); });
-    } else if (!isGenerating) {
-      currentTierIdx = newIdx; lastTierChange = now;
-      switchModel(CONFIG.tiers[newIdx].model);
-      updateTierUI();
-    }
-  }
-  updateScoreUI(score, avgRTT);
+  computeScore();
+  updateSpeedChip();
 }
 
-// ═══════════════════════════════════════════════════
-//  UI UPDATES
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+//  UI
+// ══════════════════════════════════════════════════════════════════════════
 function addMessageToUI(role, content, streaming = false) {
-  const el = document.getElementById('messages');
-  const msg = document.createElement('div');
-  msg.className = 'message';
-  const isUser = role === "user";
-  const tier = CONFIG.tiers[currentTierIdx];
-  const avatarCls = isUser ? 'user-av' : 'ai-av';
-  const avatarIcon = isUser ? 'U' : 'AI';
-  const headerTxt = isUser ? 'You' : ('AI - ' + tier.name);
-  const typingHtml = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
-  const contentHtml = streaming ? typingHtml : (content || '');
-  const metaTxt = (!isUser && !streaming) ? (tier.name + ' - ' + tier.mode) : '';
-  msg.innerHTML =
-    '<div class="msg-avatar ' + avatarCls + '">' + avatarIcon + '</div>' +
-    '<div class="msg-body">' +
-      '<div class="msg-header">' + headerTxt + '</div>' +
-      '<div class="msg-content">' + contentHtml + '</div>' +
-      '<div class="msg-meta">' + metaTxt + '</div>' +
-    '</div>';
-  el.appendChild(msg);
-  el.scrollTop = el.scrollHeight;
-  return msg;
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message';
+  const isUser = role === 'user';
+  const avClass = isUser ? 'user-av' : 'ai-av';
+  const avText = isUser ? 'U' : 'AI';
+  const headerTxt = isUser ? 'You' : 'AI - ' + currentModelLabel;
+  let bodyContent;
+  if (streaming) {
+    bodyContent = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+  } else {
+    bodyContent = `<div class="msg-content">${content || ''}</div>`;
+  }
+  div.innerHTML = `
+    <div class="msg-avatar ${avClass}">${avText}</div>
+    <div class="msg-body">
+      <div class="msg-header">${headerTxt}</div>
+      ${bodyContent}
+      <div class="msg-meta"></div>
+    </div>`;
+  if (streaming) {
+    div.querySelector('.msg-body').innerHTML = `
+      <div class="msg-header">${headerTxt}</div>
+      <div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
+      <div class="msg-content"></div>
+      <div class="msg-meta"></div>`;
+  }
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
 }
 
 function updateTierUI() {
-  const t = CONFIG.tiers[currentTierIdx];
-  document.getElementById('chip-tier-text').textContent = `TIER: ${t.name.toUpperCase()}`;
-  document.getElementById('chip-mode-text').textContent = `MODE: ${t.mode.toUpperCase()}`;
-  const tc = { small:'var(--tier-small)', medium:'var(--tier-medium)', large:'var(--tier-large)' };
-  const mc = { local:'var(--mode-local)', assist:'var(--mode-assist)', 'assist+verify':'var(--mode-verify)' };
-  document.getElementById('chip-tier-dot').style.background = tc[t.name] || tc.small;
-  document.getElementById('chip-mode-dot').style.background = mc[t.mode] || mc.local;
+  const modeColors = {
+    local: 'var(--mode-local)',
+    assisted: 'var(--mode-assist)',
+    federated: 'var(--mode-federated)',
+    relay: 'var(--peer-dead)'
+  };
+  const modeLabels = {
+    local: `LOCAL (${currentModelLabel})`,
+    assisted: 'ASSISTED',
+    federated: 'FEDERATED',
+    relay: 'RELAY'
+  };
+  const color = modeColors[inferenceMode] || 'var(--peer-dead)';
+  document.getElementById('chip-tier-text').textContent = `TIER: ${deviceTier}`;
+  document.getElementById('chip-tier-dot').style.background = color;
+  document.getElementById('chip-mode-text').textContent = `MODE: ${modeLabels[inferenceMode] || inferenceMode.toUpperCase()}`;
+  document.getElementById('chip-mode-dot').style.background = color;
+  document.getElementById('stat-inf-mode').textContent = inferenceMode;
 }
 
 function updatePeerListUI() {
-  const container = document.getElementById('peer-list');
-  let active = 0;
-  for (const [, p] of peers) if (p.dc?.readyState === "open") active++;
-  document.getElementById('chip-peers-text').textContent = `PEERS: ${active}`;
-  if (peers.size === 0) { container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No peers connected</div>'; return; }
+  const list = document.getElementById('peer-list');
+  if (peers.size === 0) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:6px 0;">No peers connected</div>';
+    document.getElementById('chip-peers-text').textContent = 'PEERS: 0';
+    return;
+  }
+  document.getElementById('chip-peers-text').textContent = `PEERS: ${peers.size}`;
   let html = '';
   for (const [pid, p] of peers) {
-    const connected = p.dc?.readyState === "open";
-    const dot = !connected ? 'dead' : (p.rtt < CONFIG.maxAssistLatencyMs ? 'online' : 'slow');
+    const dc = p.dc?.readyState;
+    const dot = dc === 'open' ? (p.rtt > 200 ? 'slow' : 'online') : 'dead';
     const tb = p.deviceTier === 'A' ? 'a' : p.deviceTier === 'B' ? 'b' : 'c';
-    html += `<div class="peer-item"><div class="peer-dot ${dot}"></div><span class="peer-id">${pid}</span><span class="peer-tier-badge tier-${tb}">${p.deviceTier}</span><span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span></div>`;
+    const engineBadge = p.hasEngine ? '<span class="peer-badge shard">engine</span>' : (p.shardInfo ? '<span class="peer-badge shard">shard</span>' : '');
+    html += `<div class="peer-item">
+      <div class="peer-dot ${dot}"></div>
+      <span class="peer-id">${pid}</span>
+      <span class="peer-badge tier-${tb}">${p.deviceTier}</span>
+      ${engineBadge}
+      <span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span>
+    </div>`;
   }
-  container.innerHTML = html;
+  list.innerHTML = html;
+}
+
+function updateShardUI() {
+  const el = document.getElementById('shard-map-ui');
+  const roleEl = document.getElementById('stat-shard-role');
+  if (engine) {
+    // Mostrar qué modelo local está corriendo
+    el.innerHTML = `<div style="font-size:11px;color:var(--tier-small);">✓ Engine completo: ${currentModelLabel}</div>
+    <div class="shard-bar">${Array(8).fill(0).map((_,i) =>
+      `<div class="shard-seg local" title="capa ${i}"></div>`
+    ).join('')}</div>`;
+    roleEl.textContent = `full (${currentModelLabel})`;
+  } else if (myShardInfo) {
+    const total = myShardInfo.totalLayers;
+    const end = myShardInfo.layerEnd;
+    el.innerHTML = `<div style="font-size:11px;color:var(--mode-federated);">🧩 Shard parcial: capas 0–${end}/${total}</div>
+    <div class="shard-bar">${Array(8).fill(0).map((_,i) => {
+      const layerPos = Math.round((i/8) * total);
+      return `<div class="shard-seg ${layerPos < end ? 'loaded' : ''}" title="capa ${layerPos}"></div>`;
+    }).join('')}</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Contribuyendo ${Math.round((end/total)*100)}% del modelo</div>`;
+    roleEl.textContent = `shard (${end}/${total} layers)`;
+  } else {
+    el.innerHTML = `<div style="font-size:11px;color:var(--text-muted);">📡 Modo relay — sin capas locales</div>`;
+    roleEl.textContent = 'relay';
+  }
 }
 
 function updateRelayUI() {
-  let connected = 0, total = relayMap.size;
-  let html = '';
-  for (const [url, state] of relayMap) {
-    const dotClass = state.status === 'connected' ? 'ok' : state.status === 'connecting' ? 'connecting' : '';
-    const shortUrl = url.replace('wss://', '').replace('ws://', '');
-    html += `<div class="relay-item"><div class="relay-dot ${dotClass}"></div><span class="relay-name" title="${url}">${shortUrl}</span></div>`;
-    if (state.status === 'connected') connected++;
+  const list = document.getElementById('relay-list');
+  let html = '', ok = 0, total = 0;
+  for (const [url, r] of relayMap) {
+    total++;
+    const cls = r.status === 'connected' ? 'ok' : r.status === 'connecting' ? 'connecting' : '';
+    if (r.status === 'connected') ok++;
+    const name = url.replace('wss://', '').split('/')[0];
+    html += `<div class="relay-item"><div class="relay-dot ${cls}"></div><span class="relay-name">${name}</span></div>`;
   }
-  document.getElementById('relay-list').innerHTML = html;
-  document.getElementById('chip-relays-text').textContent = `RELAYS: ${connected}/${total}`;
-  const dot = document.getElementById('chip-relays-dot');
-  dot.style.background = connected === 0 ? 'var(--peer-dead)' : connected < 3 ? 'var(--peer-slow)' : 'var(--peer-online)';
-  if (connected > 0) dot.style.boxShadow = `0 0 6px ${connected < 3 ? 'var(--peer-slow)' : 'var(--peer-online)'}`;
+  list.innerHTML = html;
+  document.getElementById('chip-relays-text').textContent = `RELAYS: ${ok}/${total}`;
+  document.getElementById('chip-relays-dot').style.background = ok > 5 ? 'var(--peer-online)' : ok > 0 ? 'var(--peer-slow)' : 'var(--peer-dead)';
 }
 
 function updateScoreUI(score, avgRTT) {
-  document.getElementById('chip-score-text').textContent = `SCORE: ${score}`;
+  const bar = document.getElementById('score-bar');
+  if (bar.children.length === 0) {
+    for (let i = 0; i < 10; i++) { const s = document.createElement('div'); s.className = 'score-segment'; bar.appendChild(s); }
+  }
+  [...bar.children].forEach((s, i) => {
+    s.classList.toggle('active', i < score);
+    s.classList.toggle('high', i < score && score >= 7);
+  });
   document.getElementById('stat-score').textContent = score;
-  document.getElementById('stat-rtt').textContent = avgRTT !== null ? `${avgRTT}ms` : '—';
-  let s = '';
-  for (let i = 0; i < 6; i++) s += `<div class="score-segment ${i < score ? 'active' : ''} ${score >= 4 ? 'high' : ''}"></div>`;
-  document.getElementById('score-bar').innerHTML = s;
+  document.getElementById('stat-rtt').textContent = avgRTT !== null ? avgRTT + 'ms' : '—';
 }
 
 function updateSpeedChip() {
   document.getElementById('chip-speed-text').textContent = `${localTPS} tok/s`;
-  document.getElementById('stat-tps-local').textContent = `${localTPS}`;
-  document.getElementById('stat-tps-eff').textContent = `${effectiveTPS}`;
 }
 
 function updateDeviceStats() {
   document.getElementById('stat-device-tier').textContent = `Tier ${deviceTier}`;
-  document.getElementById('stat-webgpu').textContent = hasWebGPU ? '✅ Yes' : '❌ No';
+  document.getElementById('stat-webgpu').textContent = hasWebGPU ? `✅ Yes (~${availableVRAM || '?'}MB)` : '❌ No';
   document.getElementById('stat-memory').textContent = `${memoryMB}MB`;
   document.getElementById('stat-peer-id').textContent = peerId;
 }
 
-function showModelProgress(show, name) {
-  const s = document.getElementById('model-progress-section');
-  if (show) { s.classList.add('active'); document.getElementById('model-name-display').textContent = name || ''; }
-  else s.classList.remove('active');
+function showModelProgress(show, name = '') {
+  const sec = document.getElementById('model-progress-section');
+  sec.classList.toggle('active', show);
+  if (name) document.getElementById('model-name-display').textContent = name;
 }
 function updateModelProgress(pct, text) {
-  const b = document.getElementById('model-progress-bar');
-  const l = document.getElementById('model-progress-label');
-  if (b) b.style.width = `${pct}%`;
-  if (l) l.textContent = text || `${pct}%`;
+  document.getElementById('model-progress-bar').style.width = pct + '%';
+  document.getElementById('model-progress-label').textContent = text;
 }
 function updateInitStatus(t) { const e = document.getElementById('init-status'); if (e) e.textContent = t; }
 function updateInitProgress(p) { const e = document.getElementById('init-progress-fill'); if (e) e.style.width = `${p}%`; }
-function hideInitOverlay() { const e = document.getElementById('init-overlay'); if (e) e.classList.add('hidden'); }
+function hideInitOverlay() {
+  const o = document.getElementById('init-overlay');
+  o.classList.add('hidden');
+  setTimeout(() => o.style.display = 'none', 600);
+}
 
-// ═══════════════════════════════════════════════════
-//  INPUT + CLEANUP
-// ═══════════════════════════════════════════════════
 function setupInput() {
   const input = document.getElementById('chat-input');
   const btn = document.getElementById('send-btn');
-  function send() {
-    const t = input.value.trim();
-    if (!t || isGenerating || !engine) return;
+  const send = () => {
+    const txt = input.value.trim();
+    if (!txt || isGenerating) return;
     input.value = ''; input.style.height = 'auto';
-    generateResponse(t);
-  }
+    generateResponse(txt);
+  };
   btn.addEventListener('click', send);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; });
 }
 
 function cleanupPeers() {
@@ -1009,61 +1214,57 @@ function cleanupPeers() {
   for (const [pid, p] of peers) if (now - p.lastSeen > CONFIG.presenceTTLMs) removePeer(pid);
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
 //  BOOT
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
 async function boot() {
-  // ── DEBUG ─────────────────────────────────────
-  console.log('[DEBUG] boot() start');
-  console.log('[DEBUG] location:', location.href);
-  console.log('[DEBUG] crossOriginIsolated:', crossOriginIsolated);
-  console.log('[DEBUG] navigator.gpu:', 'gpu' in navigator ? 'present' : 'ABSENT');
-  console.log('[DEBUG] userAgent:', navigator.userAgent.slice(0, 80));
-  // ─────────────────────────────────────────────
-  console.log('[P2P-LLM] Boot peerId=' + peerId);
-  updateInitStatus("Detecting device…");
+  console.log('[P2P-LLM v3] boot peerId=' + peerId);
+  updateInitStatus("Detecting device capabilities…");
   await classifyDevice();
-  updateScoreUI(0, null);
   setupInput();
 
   // Conectar relays en paralelo — no bloquea el boot
   connectToRelays();
   updateRelayUI();
-
-  updateInitStatus(`Loading model: ${CONFIG.defaultModel}`);
-  await initEngine(CONFIG.defaultModel);
   updateTierUI();
+
+  // Inicializar engine (con toda la cascada de fallbacks)
+  await initEngine();
+  updateTierUI();
+  updateShardUI();
   hideInitOverlay();
 
-  // Esperar 2s para que algunos relays conecten y mostrar cuántos hay
+  // Esperar que relays conecten
   await new Promise(r => setTimeout(r, 2000));
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
 
-  const gpuStatus = hasWebGPU ? 'WebGPU: yes' : 'WebGPU: no';
-  const engineStatus = engine
-    ? ('Model: ' + currentModelId + (hasWebGPU ? '' : ' (CPU/WASM)'))
-    : 'Model: no disponible — modo relay P2P';
-  const bootMsg = [
-    'P2P-LLM initialized',
+  const bootLines = [
+    'P2P-LLM v3 initialized',
     '',
-    engineStatus,
-    'Device: Tier ' + deviceTier + ' - ' + gpuStatus,
-    'Peer ID: ' + peerId,
+    engine
+      ? `✅ Engine: ${currentModelId}`
+      : myShardInfo
+        ? `🧩 Shard mode: capas 0–${myShardInfo.layerEnd}/${myShardInfo.totalLayers}`
+        : '📡 Relay mode (sin engine local)',
+    `Device: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}`,
+    hasWebGPU && availableVRAM > 0 ? `VRAM estimada: ~${availableVRAM}MB` : `RAM: ${memoryMB}MB`,
+    `Peer ID: ${peerId}`,
     '',
-    'Nostr relays: ' + connectedRelays + '/' + CONFIG.nostrRelays.length + ' connected',
-    'Conectando a peers...'
-  ].join('\n');
-  addMessageToUI('assistant', bootMsg);
+    `Nostr relays: ${connectedRelays}/${CONFIG.nostrRelays.length} conectados`,
+    'Buscando peers en la malla…',
+  ];
+  addMessageToUI('assistant', bootLines.join('\n'));
 
-  setInterval(() => publishPresence(),   CONFIG.presenceIntervalMs);
-  setInterval(() => cleanupPeers(),      CONFIG.presenceTTLMs);
-  setInterval(() => autoScale(),         CONFIG.scoreRecalcMs);
-  setInterval(() => updateRelayUI(),     2000);
+  setInterval(publishPresence,  CONFIG.presenceIntervalMs);
+  setInterval(cleanupPeers,     CONFIG.presenceTTLMs);
+  setInterval(autoScale,        CONFIG.scoreRecalcMs);
+  setInterval(updateRelayUI,    2000);
 }
 
 boot().catch(err => {
   updateInitStatus(`Boot failed: ${err.message}`);
+  console.error('[Boot]', err);
 });
 </script>
 </body>
