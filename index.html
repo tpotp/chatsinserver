@@ -442,6 +442,12 @@ const MSG = {
   FED_HIDDEN: 0x31,  // hidden states (tensor parcial serializado)
   FED_DONE: 0x32,    // inferencia federada completa
   FED_ACK: 0x33,     // shard worker listo
+  
+  // Speculative Decoding
+  SPEC_DRAFT_REQ: 0x40,
+  SPEC_DRAFT_RES: 0x41,
+  SPEC_ACCEPT:    0x42,
+  SPEC_REJECT:    0x43,
 };
 
 function encodeMsg(type, reqId, seq, payload) {
@@ -832,6 +838,47 @@ function findBestPeerWithEngine() {
     }
   }
   return null;
+}
+
+function findBestDrafter() {
+  let best = null, bestScore = Infinity;
+  const mySize = getCurrentModelSize();
+  for (const [pid, peer] of peers) {
+    if (peer.dc?.readyState !== 'open' || !peer.hasEngine) continue;
+    if (peer.modelSize >= mySize) continue;
+    if (peer.reputationScore !== undefined && peer.reputationScore < 0) continue;
+    const score = peer.rtt < Infinity ? peer.rtt : 9999;
+    if (score < bestScore) { best = pid; bestScore = score; }
+  }
+  return best;
+}
+
+function requestDraft(drafterPeerId, messages, prefix, n, reqId) {
+  return new Promise((resolve) => {
+    const peer = peers.get(drafterPeerId);
+    if (!peer || peer.dc?.readyState !== 'open') return resolve(null);
+    
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        fedPending.delete(reqId);
+        resolve(null);
+      }
+    }, 3000);
+
+    fedPending.set(reqId, {
+      resolve: (payload) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          resolve(payload.tokens || []);
+        }
+      }
+    });
+
+    peer.dc.send(encodeMsg(MSG.SPEC_DRAFT_REQ, reqId, 0, { messages, prefix, n }));
+  });
 }
 
 async function runRemoteInference(userMessage, remotePeerId) {
@@ -1442,6 +1489,47 @@ async function handleBinMsg(fromId, buf) {
         peer.tps = m.payload.tps || peer.tps;
         resolve(m.payload);
       }
+      break;
+
+    case MSG.SPEC_DRAFT_REQ:
+      if (engine && m.payload && !isGenerating) {
+        isGenerating = true;
+        const { prefix, n, messages: ctx } = m.payload;
+        const fullCtx = [...(ctx || []), ...(prefix ? [{ role: "assistant", content: prefix }] : [])];
+        try {
+          const chunks = await engine.chat.completions.create({
+            messages: fullCtx, stream: true, temperature: 0.7, max_tokens: n
+          });
+          const tokens = [];
+          for await (const chunk of chunks) {
+            const t = chunk.choices[0]?.delta?.content || "";
+            if (t) tokens.push(t);
+            if (tokens.length >= n) break;
+          }
+          if (peer.dc?.readyState === 'open')
+            peer.dc.send(encodeMsg(MSG.SPEC_DRAFT_RES, m.reqId, 0, { tokens }));
+        } catch(e) {
+          if (peer.dc?.readyState === 'open')
+            peer.dc.send(encodeMsg(MSG.SPEC_DRAFT_RES, m.reqId, 0, { tokens: [] }));
+        }
+        isGenerating = false;
+      }
+      break;
+
+    case MSG.SPEC_DRAFT_RES:
+      if (m.payload && fedPending.has(m.reqId)) {
+        const { resolve } = fedPending.get(m.reqId);
+        fedPending.delete(m.reqId);
+        resolve(m.payload);
+      }
+      break;
+
+    case MSG.SPEC_ACCEPT:
+      console.log(`[Spec] Verifier aceptó ${m.payload?.accepted} tokens`);
+      break;
+
+    case MSG.SPEC_REJECT:
+      console.log(`[Spec] Verifier corrigió → "${m.payload?.correction}"`);
       break;
   }
 }
