@@ -375,21 +375,36 @@ const CONFIG = {
   hysteresisMs: 4000,
   speculativeTokens: 4,
 
-  nostrRelays: [
+  nostrCoreRelays: [
     "wss://relay.damus.io",
+    "wss://relay.primal.net"
+  ],
+  nostrPoolRelays: [
     "wss://nos.lol",
     "wss://offchain.pub",
     "wss://nostr.mom",
     "wss://nostr.wine",
-    "wss://relay.primal.net",
     "wss://nostr.bitcoiner.social",
     "wss://nostr-pub.wellorder.net",
     "wss://relay.nostr.info",
     "wss://nostr.oxtr.dev",
     "wss://purplepag.es",
     "wss://relay.nostr.wirednet.jp",
-    "wss://relay.nostr.com.au"
+    "wss://relay.nostr.com.au",
+    "wss://relay.nostr.band",
+    "wss://nostr.cercatrova.me",
+    "wss://nostr.fmt.wiz.biz",
+    "wss://relay.snort.social",
+    "wss://relay.nostr.bg",
+    "wss://nostr.zebedee.cloud",
+    "wss://relay.current.fyi",
+    "wss://eden.nostr.land",
+    "wss://relay.noswhere.com",
+    "wss://nostr.einundzwanzig.space",
+    "wss://nostr.mutinywallet.com",
+    "wss://nostr.developer.li"
   ],
+  maxActiveRelays: 6,
 
   relayReconnectMs: 8000,
   relayMaxRetries: 999,
@@ -903,7 +918,12 @@ async function signAndPublish(content) {
 }
 
 function connectToRelays() {
-  for (const url of CONFIG.nostrRelays) connectRelay(url);
+  const selectedRelays = [...CONFIG.nostrCoreRelays];
+  const shuffledPool = [...CONFIG.nostrPoolRelays].sort(() => 0.5 - Math.random());
+  for (let i = 0; i < (CONFIG.maxActiveRelays - CONFIG.nostrCoreRelays.length); i++) {
+    if (shuffledPool[i]) selectedRelays.push(shuffledPool[i]);
+  }
+  for (const url of selectedRelays) connectRelay(url);
 }
 
 function connectRelay(url) {
@@ -1050,14 +1070,29 @@ function removePeer(pid) {
 // TURN servers críticos para móvil (NAT simétrico de operadoras)
 // openrelay.metered.ca es un servicio TURN gratuito para desarrollo
 const ICE_SERVERS = [
+  // Massive Global STUN Pool (Free, high uptime)
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
   { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:stun.twilio.com:3478" },
+  { urls: "stun:stun.miwifi.com:3478" },
+  { urls: "stun:stun.sipgate.net:3478" },
+  { urls: "stun:stun.stunprotocol.org:3478" },
+  { urls: "stun:stun.qq.com:3478" },
   { urls: "stun:stun.relay.metered.ca:80" },
+  
+  // Free Public TURN Servers (Crucial for CGNAT strict NATs in Mobile connections)
+  // Metered.ca (Best open relay fallback)
   { urls: "turn:openrelay.metered.ca:80",   username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turn:openrelay.metered.ca:443",  username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turn:openrelay.metered.ca:80?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+  
+  // Viagenie Numb Open TURN Server
+  { urls: "turn:numb.viagenie.ca:3478", username: "webrtc@live.com", credential: "muazkh" }
 ];
 
 // Crea RTCPeerConnection con ICE batching y reconexión automática
