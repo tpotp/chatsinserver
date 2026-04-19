@@ -291,7 +291,7 @@ const CONFIG = {
   maxAssistLatencyMs: 180,
   hysteresisMs: 3000,
   speculativeTokens: 4,
-  mobileAssistOnly: true,
+  mobileAssistOnly: false,
 
   // ── Nostr public relays ──────────────────────────
   // Lista verificada — todos responden (403 HTTP = correcto para relays Nostr).
@@ -399,9 +399,13 @@ async function classifyDevice() {
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   const screenSmall = Math.min(screen.width, screen.height) < 768;
   const touch = navigator.maxTouchPoints > 0 && !window.matchMedia('(pointer: fine)').matches;
-  if (isMobile || (screenSmall && touch)) deviceTier = "C";
-  else if (hasWebGPU && memoryMB >= 8192) deviceTier = "A";
-  else deviceTier = "B";
+  const isSmallDevice = (isMobile || (screenSmall && touch));
+  // Mobile con WebGPU puede correr modelo pequeño (Tier B).
+  // Tier C = sin WebGPU en dispositivo pequeño (solo relay/assist).
+  if (isSmallDevice && !hasWebGPU) deviceTier = "C";
+  else if (hasWebGPU && memoryMB >= 8192 && !isSmallDevice) deviceTier = "A";
+  else if (hasWebGPU) deviceTier = "B";
+  else deviceTier = "B"; // desktop/mobile sin WebGPU: intenta WASM CPU fallback
   console.log(`[Device] Tier=${deviceTier} WebGPU=${hasWebGPU} RAM=${memoryMB}MB`);
   updateDeviceStats();
 }
@@ -422,24 +426,29 @@ async function initEngine(modelId) {
     updateInitProgress(pct);
   }};
 
-  // Intento 1: WebWorker (mejor performance, necesita WebGPU)
-  try {
-    const worker = createWorker();
-    engine = await webllm.CreateWebWorkerMLCEngine(worker, currentModelId, cb);
-    isModelLoading = false;
-    showModelProgress(false);
-    console.log('[Engine] Loaded via WebWorker+WebGPU');
-    return;
-  } catch (err) {
-    console.warn('[Engine] WebWorker failed, trying MLCEngine fallback:', err.message);
+  // Intento 1: WebWorker con WebGPU (mejor performance)
+  if (hasWebGPU) {
+    try {
+      const worker = createWorker();
+      engine = await webllm.CreateWebWorkerMLCEngine(worker, currentModelId, cb);
+      isModelLoading = false;
+      showModelProgress(false);
+      console.log('[Engine] Loaded via WebWorker+WebGPU');
+      return;
+    } catch (err) {
+      console.warn('[Engine] WebWorker+WebGPU failed, trying direct MLCEngine:', err.message);
+    }
+  } else {
+    console.log('[Engine] No WebGPU detected, trying MLCEngine (WASM/CPU fallback)');
   }
 
-  // Intento 2: MLCEngine directo en main thread (funciona sin WebGPU en algunos browsers)
+  // Intento 2: MLCEngine directo en main thread
+  // webllm puede usar WASM-CPU en browsers sin WebGPU como fallback interno
   try {
     engine = await webllm.CreateMLCEngine(currentModelId, cb);
     isModelLoading = false;
     showModelProgress(false);
-    console.log('[Engine] Loaded via MLCEngine (main thread)');
+    console.log('[Engine] Loaded via MLCEngine (main thread - CPU/WASM)');
     return;
   } catch (err) {
     console.error('[Engine] MLCEngine also failed:', err.message);
@@ -447,34 +456,55 @@ async function initEngine(modelId) {
     showModelProgress(false);
   }
 
-  // Si todo falla y no estamos en el modelo mas liviano, bajar a small
+  // Si todo falla y no estamos en el modelo mas liviano, intentar con small
   if (currentModelId !== CONFIG.tiers[0].model) {
     console.log('[Engine] Falling back to smallest model');
     currentTierIdx = 0;
     await initEngine(CONFIG.tiers[0].model);
   } else {
-    // El browser definitivamente no soporta WebGPU/WASM-LLM
-    // Dejar engine=null y notificar al usuario
-    addMessageToUI('assistant', 'Tu browser no soporta WebGPU.\nPrueba Chrome/Edge.\nEl relay P2P sigue activo.');
+    // El browser no soporta WebGPU ni WASM-LLM — modo relay puro
+    const reason = hasWebGPU
+      ? 'WebGPU detectado pero el modelo no cargó (memoria insuficiente?)'
+      : 'Este browser no tiene WebGPU ni soporte WASM-LLM suficiente';
+    addMessageToUI('assistant',
+      'Inferencia local no disponible.\n' + reason +
+      '\nEl nodo P2P sigue activo como relay.\n' +
+      'Si hay peers con engine disponible, las respuestas se enrutarán a través de ellos.'
+    );
   }
 }
 
 async function switchModel(modelId) {
   if (modelId === currentModelId || isModelLoading || isGenerating) return;
+  isModelLoading = true;
   showModelProgress(true, modelId);
+  const cb = { initProgressCallback: (progress) => {
+    const pct = Math.round((progress.progress || 0) * 100);
+    updateModelProgress(pct, progress.text || '');
+  }};
+  // Intento 1: WebWorker+WebGPU
+  if (hasWebGPU) {
+    try {
+      const worker = createWorker();
+      engine = await webllm.CreateWebWorkerMLCEngine(worker, modelId, cb);
+      currentModelId = modelId;
+      isModelLoading = false;
+      showModelProgress(false);
+      console.log('[Engine] Switched via WebWorker+WebGPU to', modelId);
+      return;
+    } catch (err) {
+      console.warn('[Engine] Switch WebWorker failed, trying MLCEngine:', err.message);
+    }
+  }
+  // Intento 2: MLCEngine (WASM/CPU)
   try {
-    const worker = createWorker();
-    engine = await webllm.CreateWebWorkerMLCEngine(worker, modelId, {
-      initProgressCallback: (progress) => {
-        const pct = Math.round((progress.progress || 0) * 100);
-        updateModelProgress(pct, progress.text || '');
-      }
-    });
+    engine = await webllm.CreateMLCEngine(modelId, cb);
     currentModelId = modelId;
     isModelLoading = false;
     showModelProgress(false);
+    console.log('[Engine] Switched via MLCEngine (CPU) to', modelId);
   } catch (err) {
-    console.error('[Engine] Switch failed:', err);
+    console.error('[Engine] Switch failed entirely:', err);
     isModelLoading = false;
     showModelProgress(false);
   }
@@ -487,7 +517,19 @@ async function generateResponse(userMessage) {
   if (isGenerating) return;
   if (!engine) {
     addMessageToUI("user", userMessage);
-    addMessageToUI('assistant', 'Motor LLM no disponible.\nTu browser no soporta WebGPU.\nPrueba Chrome 113+ o Edge en escritorio con GPU habilitada.');
+    // Sin engine local: intentar enrutar a un peer con engine disponible
+    const activePeer = [...peers.values()].find(p => p.dc?.readyState === 'open' && p.tps > 0);
+    if (activePeer) {
+      addMessageToUI('assistant', '⚡ Sin inferencia local. Enrutando a peer de la malla P2P...');
+    } else {
+      addMessageToUI('assistant',
+        'Motor LLM no disponible en este dispositivo.\n' +
+        'Causa probable: WebGPU no soportado o memoria insuficiente.\n\n' +
+        'Opciones:\n• En Android: usa Chrome 121+ (Settings → Chrome flags → enable WebGPU)\n' +
+        '• Conecta a peers: cuando haya peers activos en la malla, ellos responderán por ti.\n' +
+        '• Peers conectados: ' + peers.size
+      );
+    }
     return;
   }
   isGenerating = true;
@@ -998,8 +1040,10 @@ async function boot() {
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
 
-  const gpuStatus = hasWebGPU ? 'WebGPU: yes' : 'WebGPU: no (CPU mode)';
-  const engineStatus = engine ? ('Model: ' + currentModelId) : 'Model: no disponible (sin WebGPU)';
+  const gpuStatus = hasWebGPU ? 'WebGPU: yes' : 'WebGPU: no';
+  const engineStatus = engine
+    ? ('Model: ' + currentModelId + (hasWebGPU ? '' : ' (CPU/WASM)'))
+    : 'Model: no disponible — modo relay P2P';
   const bootMsg = [
     'P2P-LLM initialized',
     '',
