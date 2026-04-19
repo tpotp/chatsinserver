@@ -221,6 +221,7 @@ body::before {
 </div>
 
 <div id="status-bar">
+  <div class="status-chip"><span class="dot" id="chip-verifier-dot" style="background:var(--accent-primary)"></span><span id="chip-verifier-text">VERIFIER: —</span></div>
   <div class="status-chip"><span class="dot" id="chip-tier-dot"></span><span id="chip-tier-text">TIER: —</span></div>
   <div class="status-chip"><span class="dot" id="chip-mode-dot"></span><span id="chip-mode-text">MODE: —</span></div>
   <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-peers-text">PEERS: 0</span></div>
@@ -332,6 +333,7 @@ const CONFIG = {
       vramMB: 350,
       ramMB: 500,
       layers: 30,
+      modelSize: 360
     },
     {
       id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
@@ -340,6 +342,7 @@ const CONFIG = {
       vramMB: 450,
       ramMB: 700,
       layers: 24,
+      modelSize: 500
     },
     {
       id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
@@ -348,6 +351,7 @@ const CONFIG = {
       vramMB: 900,
       ramMB: 1200,
       layers: 16,
+      modelSize: 1000
     },
     {
       id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
@@ -356,6 +360,7 @@ const CONFIG = {
       vramMB: 2200,
       ramMB: 3000,
       layers: 28,
+      modelSize: 3000
     },
     {
       id: "Llama-3.1-8B-Instruct-q4f16_1-MLC",
@@ -364,6 +369,7 @@ const CONFIG = {
       vramMB: 5500,
       ramMB: 8000,
       layers: 32,
+      modelSize: 8000
     },
   ],
 
@@ -728,31 +734,50 @@ function broadcastChat(role, content, senderId, modelId, msgId = null, hops = 0,
   }
 }
 
+function getCurrentModelSize() {
+  if (!currentModelId) return 0;
+  const m = CONFIG.models.find(x => x.id === currentModelId);
+  return m ? m.modelSize : 0;
+}
+
+function electVerifier() {
+  let highestSize = getCurrentModelSize();
+  let verifier = engine ? 'local' : null;
+  let bestPeerId = engine ? peerId : null;
+
+  for (const [pid, peer] of peers) {
+    if (peer.dc?.readyState !== 'open' || !peer.hasEngine) continue;
+    if (peer.modelSize > highestSize) {
+      highestSize = peer.modelSize;
+      verifier = pid;
+      bestPeerId = pid;
+    } else if (peer.modelSize === highestSize && highestSize > 0) {
+      if (pid < bestPeerId) {
+        verifier = pid;
+        bestPeerId = pid;
+      }
+    }
+  }
+  
+  const verifierText = verifier ? (verifier === 'local' ? 'local' : verifier.slice(0, 6)) : '—';
+  document.getElementById('chip-verifier-text').textContent = `VERIFIER: ${verifierText}`;
+  return verifier;
+}
+
 async function generateResponse(userMessage) {
   if (isGenerating) return;
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
   broadcastChat("user", userMessage, peerId, null);
 
-  // 1. LOCAL: tenemos engine completo
-  if (engine) {
-    return await runLocalInference(userMessage);
+  const verifier = electVerifier();
+  if (!verifier) {
+    addMessageToUI('assistant', '⌛ Sin engine en la red...');
+    return;
   }
-
-  // 2. FEDERADA / ASISTIDA: buscar peer con engine completo
-  const fullPeer = findBestPeerWithEngine();
-  if (fullPeer) {
-    return await runRemoteInference(userMessage, fullPeer);
-  }
-
-  // 3. Sin opciones
-  addMessageToUI('assistant',
-    `⌛ Sin peers con engine disponible ahora.\n` +
-    `Peers conectados: ${peers.size}\n` +
-    `Modo local: ${inferenceMode}\n\n` +
-    `Comparte el link con alguien en tu computadora — cuando se conecte, ` +
-    `sus respuestas llegarán aquí automáticamente.`
-  );
+  
+  if (verifier === 'local') return await runLocalInference(userMessage);
+  return await runRemoteInference(userMessage, verifier);
 }
 
 async function runLocalInference(userMessage) {
@@ -1000,7 +1025,7 @@ function publishPresenceTo(ws) {
   // Publicar presencia via signAndPublish (firma real)
   signAndPublish({
     type: "presence", peerId, deviceTier, webgpu: hasWebGPU,
-    memoryMB, tps: localTPS, currentModel: currentModelId,
+    memoryMB, tps: localTPS, currentModel: currentModelId, modelSize: getCurrentModelSize(),
     hasEngine: !!engine, shardInfo: myShardInfo,
     inferenceMode, timestamp: Date.now()
   });
@@ -1009,7 +1034,7 @@ function publishPresenceTo(ws) {
 function publishPresence() {
   signAndPublish({
     type: "presence", peerId, deviceTier, webgpu: hasWebGPU,
-    memoryMB, tps: localTPS, currentModel: currentModelId,
+    memoryMB, tps: localTPS, currentModel: currentModelId, modelSize: getCurrentModelSize(),
     hasEngine: !!engine, shardInfo: myShardInfo,
     inferenceMode, timestamp: Date.now()
   });
@@ -1049,7 +1074,7 @@ function handlePeerPresence(p) {
   if (!peers.has(p.peerId)) {
     console.log(`[P2P] New peer discovered: ${p.peerId} tier=${p.deviceTier} engine=${p.hasEngine}`);
     peers.set(p.peerId, {
-      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB,
+      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || 0,
       tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null,
       inferenceMode: p.inferenceMode || 'relay',
       lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null,
@@ -1070,7 +1095,7 @@ function handlePeerPresence(p) {
   } else {
     const peer = peers.get(p.peerId);
     Object.assign(peer, {
-      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB,
+      deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || peer.modelSize,
       tps: p.tps || 0, hasEngine: p.hasEngine || false,
       shardInfo: p.shardInfo || peer.shardInfo,
       inferenceMode: p.inferenceMode || peer.inferenceMode,
@@ -1247,7 +1272,7 @@ function setupDC(dc, remoteId) {
     const peer = peers.get(remoteId);
     dc.send(encodeMsg(MSG.HELLO, 0, 0, {
       peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS,
-      hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode
+      hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize()
     }));
     if (peer) {
       peer.pingTimer = setInterval(() => {
@@ -1304,6 +1329,7 @@ async function handleBinMsg(fromId, buf) {
         peer.hasEngine  = m.payload.hasEngine || false;
         peer.shardInfo  = m.payload.shardInfo || null;
         peer.inferenceMode = m.payload.inferenceMode || 'relay';
+        peer.modelSize  = m.payload.modelSize || 0;
       }
       updatePeerListUI();
       break;
@@ -1444,6 +1470,7 @@ function computeScore() {
 async function autoScale() {
   computeScore();
   updateSpeedChip();
+  electVerifier();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
