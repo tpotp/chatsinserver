@@ -112,6 +112,17 @@ body::before {
 .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); border-radius: 3px; width: 0%; transition: width var(--transition-med); }
 #model-progress-label { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
 
+/* Relay status panel */
+#relay-section .relay-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 0; font-size: 11px; font-family: var(--font-mono);
+  color: var(--text-secondary); overflow: hidden;
+}
+#relay-section .relay-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--peer-dead); }
+#relay-section .relay-dot.ok { background: var(--peer-online); box-shadow: 0 0 4px var(--peer-online); }
+#relay-section .relay-dot.connecting { background: var(--peer-slow); }
+#relay-section .relay-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
 .score-bar { display: flex; gap: 3px; margin-top: 8px; }
 .score-segment { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 2px; transition: background var(--transition-med); }
 .score-segment.active { background: var(--accent-primary); }
@@ -198,6 +209,7 @@ body::before {
   <div class="status-chip" id="chip-peers"><span class="dot"></span><span id="chip-peers-text">PEERS: 0</span></div>
   <div class="status-chip" id="chip-speed"><span class="dot"></span><span id="chip-speed-text">0 tok/s</span></div>
   <div class="status-chip" id="chip-score"><span class="dot"></span><span id="chip-score-text">SCORE: 0</span></div>
+  <div class="status-chip" id="chip-relays"><span class="dot" id="chip-relays-dot" style="background:var(--peer-slow)"></span><span id="chip-relays-text">RELAYS: 0/0</span></div>
 </div>
 
 <div id="app">
@@ -205,6 +217,10 @@ body::before {
     <div class="sidebar-section">
       <h3>⚡ Connected Peers</h3>
       <div id="peer-list"><div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No peers connected</div></div>
+    </div>
+    <div class="sidebar-section" id="relay-section">
+      <h3>🔗 Nostr Relays</h3>
+      <div id="relay-list"></div>
     </div>
     <div class="sidebar-section" id="model-progress-section">
       <h3>📦 Model Loading</h3>
@@ -252,26 +268,21 @@ body::before {
 // ═══════════════════════════════════════════════════
 //  WEB WORKER FOR NON-BLOCKING LLM INFERENCE
 // ═══════════════════════════════════════════════════
-// We create the worker inline as a blob so everything stays in one file.
 const WORKER_CODE = `
 import { WebWorkerMLCEngineHandler } from "https://esm.run/@mlc-ai/web-llm";
 const handler = new WebWorkerMLCEngineHandler();
-self.onmessage = (msg) => {
-  handler.onmessage(msg);
-};
+self.onmessage = (msg) => { handler.onmessage(msg); };
 `;
 
 function createWorker() {
   const blob = new Blob([WORKER_CODE], { type: "text/javascript" });
-  const url = URL.createObjectURL(blob);
-  return new Worker(url, { type: "module" });
+  return new Worker(URL.createObjectURL(blob), { type: "module" });
 }
 
-// Dynamically import CreateWebWorkerMLCEngine from web-llm
 const webllm = await import("https://esm.run/@mlc-ai/web-llm");
 
 // ═══════════════════════════════════════════════════
-//  CONFIG
+//  CONFIG — todos wss://, sin localhost
 // ═══════════════════════════════════════════════════
 const CONFIG = {
   defaultModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
@@ -281,12 +292,38 @@ const CONFIG = {
   hysteresisMs: 3000,
   speculativeTokens: 4,
   mobileAssistOnly: true,
+
+  // ── Nostr public relays ──────────────────────────
+  // Se intentan todos en paralelo. Si uno falla, el
+  // sistema sigue funcionando con los demás.
+  // Los mensajes se publican en TODOS los conectados.
   nostrRelays: [
-    "ws://localhost:7777",
     "wss://relay.damus.io",
     "wss://nos.lol",
-    "wss://relay.nostr.band"
+    "wss://relay.nostr.band",
+    "wss://nostr.wine",
+    "wss://relay.snort.social",
+    "wss://nostr-pub.wellorder.net",
+    "wss://relay.current.fyi",
+    "wss://nostr.oxtr.dev",
+    "wss://relay.primal.net",
+    "wss://nostr.fmt.wiz.biz",
+    "wss://relay.nostr.info",
+    "wss://nostr.zbd.gg",
+    "wss://relay.nostrati.com",
+    "wss://nostr.bitcoiner.social",
+    "wss://relay.nostr.bg",
+    "wss://nostr.stakey.net",
+    "wss://nostr.cercatrova.me",
+    "wss://nostr.inosta.cc",
+    "wss://nostr.rocks",
+    "wss://relay.nostr.com.au"
   ],
+
+  // Tiempo máximo para considerar un relay muerto antes de reconectar (ms)
+  relayReconnectMs: 8000,
+  relayMaxRetries: 999, // reintentos infinitos con backoff
+
   appNamespace: "p2p-llm-swarm-v1",
   presenceIntervalMs: 15000,
   presenceTTLMs: 45000,
@@ -319,7 +356,8 @@ let networkScore = 0;
 let currentTierIdx = 0;
 let lastTierChange = 0;
 
-const relayConnections = [];
+// Mapa url → { ws, status, retries, retryTimer }
+const relayMap = new Map();
 const seenEventIds = new Set();
 const chatHistory = [];
 
@@ -360,7 +398,7 @@ async function classifyDevice() {
 }
 
 // ═══════════════════════════════════════════════════
-//  ENGINE (WEB WORKER — NON-BLOCKING)
+//  ENGINE
 // ═══════════════════════════════════════════════════
 async function initEngine(modelId) {
   if (isModelLoading) return;
@@ -368,7 +406,6 @@ async function initEngine(modelId) {
   currentModelId = modelId || CONFIG.defaultModel;
   showModelProgress(true, currentModelId);
   updateInitStatus(`Loading model: ${currentModelId}`);
-
   try {
     const worker = createWorker();
     engine = await webllm.CreateWebWorkerMLCEngine(worker, currentModelId, {
@@ -380,13 +417,11 @@ async function initEngine(modelId) {
     });
     isModelLoading = false;
     showModelProgress(false);
-    console.log(`[Engine] Model loaded: ${currentModelId}`);
   } catch (err) {
     console.error('[Engine] Load failed:', err);
     isModelLoading = false;
     showModelProgress(false);
     if (currentModelId !== CONFIG.tiers[0].model) {
-      console.log('[Engine] Falling back to small');
       currentTierIdx = 0;
       await initEngine(CONFIG.tiers[0].model);
     }
@@ -395,7 +430,6 @@ async function initEngine(modelId) {
 
 async function switchModel(modelId) {
   if (modelId === currentModelId || isModelLoading || isGenerating) return;
-  console.log(`[Engine] Switching to: ${modelId}`);
   showModelProgress(true, modelId);
   try {
     const worker = createWorker();
@@ -408,7 +442,6 @@ async function switchModel(modelId) {
     currentModelId = modelId;
     isModelLoading = false;
     showModelProgress(false);
-    console.log(`[Engine] Switched to: ${modelId}`);
   } catch (err) {
     console.error('[Engine] Switch failed:', err);
     isModelLoading = false;
@@ -425,42 +458,32 @@ async function generateResponse(userMessage) {
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
   const aiMsgEl = addMessageToUI("assistant", null, true);
-
   const tier = CONFIG.tiers[currentTierIdx];
   let fullResponse = "", tokenCount = 0;
   const startTime = performance.now();
-
   try {
     const messages = [
       { role: "system", content: "You are a helpful AI assistant running in a decentralized P2P network. Be concise." },
       ...chatHistory.slice(-10)
     ];
-    const chunks = await engine.chat.completions.create({
-      messages, stream: true, temperature: 0.7, max_tokens: 512,
-    });
-
+    const chunks = await engine.chat.completions.create({ messages, stream: true, temperature: 0.7, max_tokens: 512 });
     const typingEl = aiMsgEl.querySelector('.typing-indicator');
     if (typingEl) typingEl.remove();
     const contentEl = aiMsgEl.querySelector('.msg-content');
-
     for await (const chunk of chunks) {
       const token = chunk.choices[0]?.delta?.content || "";
-      fullResponse += token;
-      tokenCount++;
+      fullResponse += token; tokenCount++;
       contentEl.textContent = fullResponse;
       if (tier.mode !== "local") maybeSendTokenRequest(fullResponse, tokenCount);
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     }
-
     const elapsedMs = performance.now() - startTime;
     localTPS = Math.round((tokenCount / (elapsedMs / 1000)) * 10) / 10;
     effectiveTPS = localTPS;
-
     const metaEl = aiMsgEl.querySelector('.msg-meta');
     if (metaEl) metaEl.textContent = `${tier.name} · ${tier.mode} · ${localTPS} tok/s · ${Math.round(elapsedMs)}ms`;
     chatHistory.push({ role: "assistant", content: fullResponse });
   } catch (err) {
-    console.error('[Chat] Error:', err);
     const contentEl = aiMsgEl.querySelector('.msg-content');
     const typingEl = aiMsgEl.querySelector('.typing-indicator');
     if (typingEl) typingEl.remove();
@@ -486,8 +509,9 @@ function maybeSendTokenRequest(text, count) {
 }
 
 // ═══════════════════════════════════════════════════
-//  NOSTR SIGNALING
+//  NOSTR RELAY MANAGER — multi-relay con fallback
 // ═══════════════════════════════════════════════════
+
 function makeEvent(content) {
   return {
     id: crypto.randomUUID().replace(/-/g, '').slice(0, 64),
@@ -500,45 +524,112 @@ function makeEvent(content) {
   };
 }
 
+// Conecta todos los relays en paralelo desde el inicio
 function connectToRelays() {
-  for (const url of CONFIG.nostrRelays) connectRelay(url);
+  for (const url of CONFIG.nostrRelays) {
+    relayMap.set(url, { ws: null, status: "disconnected", retries: 0, retryTimer: null });
+    connectRelay(url);
+  }
 }
 
 function connectRelay(url) {
+  const state = relayMap.get(url);
+  if (!state) return;
+
+  // Cancelar timer previo si existe
+  if (state.retryTimer) { clearTimeout(state.retryTimer); state.retryTimer = null; }
+
   let ws;
-  try { ws = new WebSocket(url); } catch(e) { return; }
-  ws._url = url;
+  try { ws = new WebSocket(url); } catch(e) {
+    scheduleReconnect(url);
+    return;
+  }
+
+  state.ws = ws;
+  state.status = "connecting";
+  updateRelayUI();
+
+  const openTimeout = setTimeout(() => {
+    if (ws.readyState !== WebSocket.OPEN) {
+      ws._closed = true;
+      try { ws.close(); } catch(e) {}
+      state.status = "disconnected";
+      scheduleReconnect(url);
+      updateRelayUI();
+    }
+  }, CONFIG.relayReconnectMs);
+
   ws.onopen = () => {
-    console.log(`[Nostr] Connected: ${url}`);
-    relayConnections.push(ws);
+    clearTimeout(openTimeout);
+    state.status = "connected";
+    state.retries = 0;
+    console.log(`[Relay] ✓ ${url}`);
+    updateRelayUI();
+
+    // Suscripción al namespace de la app
     ws.send(JSON.stringify(["REQ", `sub-${peerId}`, {
       kinds: [30078], "#d": [CONFIG.appNamespace],
       since: Math.floor(Date.now() / 1000) - 60
     }]));
-    publishPresence(ws);
+
+    // Publicar presencia inmediatamente en este relay
+    publishPresenceTo(ws);
   };
+
   ws.onmessage = (evt) => {
     try { handleRelayMsg(JSON.parse(evt.data)); } catch(e) {}
   };
+
   ws.onclose = () => {
-    const idx = relayConnections.indexOf(ws);
-    if (idx >= 0) relayConnections.splice(idx, 1);
-    if (!ws._closed) setTimeout(() => connectRelay(url), 5000);
+    clearTimeout(openTimeout);
+    if (state.ws === ws) {
+      state.ws = null;
+      state.status = "disconnected";
+      updateRelayUI();
+      if (!ws._closed) scheduleReconnect(url);
+    }
   };
-  ws.onerror = () => {};
+
+  ws.onerror = () => {
+    // onclose se dispara después, ahí manejamos
+  };
 }
 
-function publishPresence(specificWs) {
+function scheduleReconnect(url) {
+  const state = relayMap.get(url);
+  if (!state) return;
+  state.retries++;
+  // Backoff exponencial con cap en 60s
+  const delay = Math.min(1000 * Math.pow(1.5, Math.min(state.retries, 10)), 60000);
+  console.log(`[Relay] ↻ ${url} retry #${state.retries} in ${Math.round(delay/1000)}s`);
+  state.retryTimer = setTimeout(() => connectRelay(url), delay);
+}
+
+// Devuelve todos los WebSockets conectados
+function activeRelays() {
+  const result = [];
+  for (const [, state] of relayMap) {
+    if (state.ws?.readyState === WebSocket.OPEN) result.push(state.ws);
+  }
+  return result;
+}
+
+function publishPresenceTo(ws) {
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  const content = { type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, currentModel: currentModelId, timestamp: Date.now() };
+  ws.send(JSON.stringify(["EVENT", makeEvent(content)]));
+}
+
+function publishPresence() {
   const content = { type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, currentModel: currentModelId, timestamp: Date.now() };
   const msg = JSON.stringify(["EVENT", makeEvent(content)]);
-  if (specificWs?.readyState === WebSocket.OPEN) specificWs.send(msg);
-  else for (const ws of relayConnections) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+  for (const ws of activeRelays()) ws.send(msg);
 }
 
 function publishSignal(targetId, signal) {
   const content = { type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() };
   const msg = JSON.stringify(["EVENT", makeEvent(content)]);
-  for (const ws of relayConnections) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+  for (const ws of activeRelays()) ws.send(msg);
 }
 
 function handleRelayMsg(msg) {
@@ -563,7 +654,6 @@ function handlePeerPresence(p) {
     if (peers.size >= CONFIG.maxPeers) return;
     peers.set(p.peerId, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, tps: p.tps||0, lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0 });
     if (peerId < p.peerId) initiateWebRTC(p.peerId);
-    console.log(`[Peers] Discovered: ${p.peerId} (Tier ${p.deviceTier})`);
   } else {
     const peer = peers.get(p.peerId);
     Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, tps: p.tps||0, lastSeen: Date.now() });
@@ -578,7 +668,6 @@ function removePeer(pid) {
   try { p.dc?.close(); } catch(e) {}
   try { p.conn?.close(); } catch(e) {}
   peers.delete(pid);
-  console.log(`[Peers] Removed: ${pid}`);
   updatePeerListUI();
 }
 
@@ -629,7 +718,6 @@ function handleWebRTCSignal(fromId, signal) {
 
 function setupDC(dc, remoteId) {
   dc.onopen = () => {
-    console.log(`[DC] Opened: ${remoteId}`);
     dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS }));
     const peer = peers.get(remoteId);
     if (peer) {
@@ -671,7 +759,7 @@ async function handleBinMsg(fromId, buf) {
       }
       break;
     case MSG.TOK_RES:
-      if (m.payload) { peer.tps = m.payload.tps || peer.tps; console.log(`[Assist] Got tokens from ${fromId}`); }
+      if (m.payload) { peer.tps = m.payload.tps || peer.tps; }
       break;
   }
 }
@@ -704,10 +792,8 @@ async function autoScale() {
   const now = Date.now();
   if (newIdx !== currentTierIdx && (now - lastTierChange) > CONFIG.hysteresisMs) {
     const dir = newIdx > currentTierIdx ? "Upgrading" : "Downgrading";
-    console.log(`[AutoScale] ${dir}: ${CONFIG.tiers[currentTierIdx].name} → ${CONFIG.tiers[newIdx].name}`);
     if (newIdx > currentTierIdx) {
-      const target = CONFIG.tiers[newIdx].model;
-      switchModel(target).then(() => { currentTierIdx = newIdx; lastTierChange = Date.now(); updateTierUI(); });
+      switchModel(CONFIG.tiers[newIdx].model).then(() => { currentTierIdx = newIdx; lastTierChange = Date.now(); updateTierUI(); });
     } else if (!isGenerating) {
       currentTierIdx = newIdx; lastTierChange = now;
       switchModel(CONFIG.tiers[newIdx].model);
@@ -762,6 +848,22 @@ function updatePeerListUI() {
     html += `<div class="peer-item"><div class="peer-dot ${dot}"></div><span class="peer-id">${pid}</span><span class="peer-tier-badge tier-${tb}">${p.deviceTier}</span><span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span></div>`;
   }
   container.innerHTML = html;
+}
+
+function updateRelayUI() {
+  let connected = 0, total = relayMap.size;
+  let html = '';
+  for (const [url, state] of relayMap) {
+    const dotClass = state.status === 'connected' ? 'ok' : state.status === 'connecting' ? 'connecting' : '';
+    const shortUrl = url.replace('wss://', '').replace('ws://', '');
+    html += `<div class="relay-item"><div class="relay-dot ${dotClass}"></div><span class="relay-name" title="${url}">${shortUrl}</span></div>`;
+    if (state.status === 'connected') connected++;
+  }
+  document.getElementById('relay-list').innerHTML = html;
+  document.getElementById('chip-relays-text').textContent = `RELAYS: ${connected}/${total}`;
+  const dot = document.getElementById('chip-relays-dot');
+  dot.style.background = connected === 0 ? 'var(--peer-dead)' : connected < 3 ? 'var(--peer-slow)' : 'var(--peer-online)';
+  if (connected > 0) dot.style.boxShadow = `0 0 6px ${connected < 3 ? 'var(--peer-slow)' : 'var(--peer-online)'}`;
 }
 
 function updateScoreUI(score, avgRTT) {
@@ -820,7 +922,7 @@ function setupInput() {
 
 function cleanupPeers() {
   const now = Date.now();
-  for (const [pid, p] of peers) if (now - p.lastSeen > CONFIG.presenceTTLMs) { console.log(`[Peers] Stale: ${pid}`); removePeer(pid); }
+  for (const [pid, p] of peers) if (now - p.lastSeen > CONFIG.presenceTTLMs) removePeer(pid);
 }
 
 // ═══════════════════════════════════════════════════
@@ -833,22 +935,25 @@ async function boot() {
   updateScoreUI(0, null);
   setupInput();
 
-  updateInitStatus(`Loading model in Web Worker: ${CONFIG.defaultModel}`);
+  // Iniciar conexión a relays en paralelo, sin bloquear el boot
+  connectToRelays();
+
+  updateInitStatus(`Loading model: ${CONFIG.defaultModel}`);
   await initEngine(CONFIG.defaultModel);
   updateTierUI();
   hideInitOverlay();
 
-  addMessageToUI("assistant", `🌐 P2P-LLM initialized\n\nModel: ${currentModelId}\nDevice: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}\nPeer ID: ${peerId}\n\nConnecting to peers via Nostr…`);
+  addMessageToUI("assistant",
+    `🌐 **P2P-LLM initialized**\n\nRunning locally with model: ${currentModelId}\nDevice: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}\n\nConnecting to peers via Nostr…`
+  );
 
-  connectToRelays();
-  setInterval(() => publishPresence(), CONFIG.presenceIntervalMs);
-  setInterval(() => cleanupPeers(), CONFIG.presenceTTLMs);
-  setInterval(() => autoScale(), CONFIG.scoreRecalcMs);
-  console.log('[P2P-LLM] Boot complete');
+  setInterval(() => publishPresence(),   CONFIG.presenceIntervalMs);
+  setInterval(() => cleanupPeers(),      CONFIG.presenceTTLMs);
+  setInterval(() => autoScale(),         CONFIG.scoreRecalcMs);
+  setInterval(() => updateRelayUI(),     3000); // refresca estado de relays cada 3s
 }
 
 boot().catch(err => {
-  console.error('[P2P-LLM] Boot failed:', err);
   updateInitStatus(`Boot failed: ${err.message}`);
 });
 </script>

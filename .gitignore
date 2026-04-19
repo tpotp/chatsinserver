@@ -1,5 +1,9 @@
-﻿node_modules/
+node_modules/
 .env
 .env.local
 .vercel
 *.log
+relay.js
+package.json
+package-lock.json
+deploy.bat
