@@ -326,12 +326,28 @@ const CONFIG = {
   // Usamos versiones int4 para máxima compatibilidad móvil
   models: [
     {
+      id: "SmolLM2-360M-Instruct-q4f16_1-MLC",
+      name: "0.4B-q4",
+      label: "tiny",
+      vramMB: 350,
+      ramMB: 500,
+      layers: 30,
+    },
+    {
+      id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
+      name: "0.5B-q4",
+      label: "mini",
+      vramMB: 450,
+      ramMB: 700,
+      layers: 24,
+    },
+    {
       id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
       name: "1B-q4",
       label: "small",
-      vramMB: 900,        // VRAM mínima estimada para cargarlo completo
-      ramMB: 1200,        // RAM alternativa (CPU inference)
-      layers: 16,         // capas transformer
+      vramMB: 900,
+      ramMB: 1200,
+      layers: 16,
     },
     {
       id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
@@ -382,6 +398,9 @@ const CONFIG = {
   presenceTTLMs: 45000,
   pingIntervalMs: 5000,
   scoreRecalcMs: 2500,
+  iceBatchDelayMs: 200,
+  webrtcMaxReconnects: 5,
+  presenceWindowSec: 600,
 };
 
 // ── MSG PROTOCOL ──────────────────────────────────────────────────────────
@@ -470,21 +489,22 @@ const fedPending = new Map();
 // ══════════════════════════════════════════════════════════════════════════
 //  DEVICE CLASSIFICATION — detecta VRAM disponible real
 // ══════════════════════════════════════════════════════════════════════════
+let isMobile = false;
+
 async function classifyDevice() {
   hasWebGPU = false;
   availableVRAM = 0;
+  isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
   if ('gpu' in navigator && navigator.gpu) {
     try {
       const adapter = await Promise.race([
         navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
       ]);
       if (adapter) {
         hasWebGPU = true;
-        // Intentar leer límites de memoria del adaptador
         const info = adapter.limits || {};
-        // maxBufferSize es un proxy de VRAM disponible en WebGPU
         const maxBuf = info.maxBufferSize || 0;
         availableVRAM = maxBuf > 0 ? Math.floor(maxBuf / 1024 / 1024) : 0;
         console.log(`[Device] WebGPU OK, maxBufferSize=${maxBuf} → ~${availableVRAM}MB VRAM`);
@@ -495,14 +515,19 @@ async function classifyDevice() {
   }
 
   memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
-  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  const isTablet = /iPad|Tablet/i.test(navigator.userAgent);
 
-  // Clasificación de tier basada en capacidades reales
+  // FIX MÓVIL: Chrome móvil con WebGPU a menudo devuelve maxBufferSize=0
+  // aunque el dispositivo SÍ puede ejecutar modelos pequeños.
+  // Usamos RAM como proxy conservador.
+  if (hasWebGPU && availableVRAM === 0) {
+    availableVRAM = Math.floor(memoryMB * 0.35);
+    console.log(`[Device] VRAM=0 detectado (bug móvil), estimando ${availableVRAM}MB desde RAM=${memoryMB}MB`);
+  }
+
   if (hasWebGPU && availableVRAM >= 5000) deviceTier = "A";
   else if (hasWebGPU && (availableVRAM >= 1500 || memoryMB >= 4096)) deviceTier = "B";
-  else if (hasWebGPU && memoryMB >= 2048) deviceTier = "B"; // mobile con WebGPU
-  else if (!isMobile && memoryMB >= 4096) deviceTier = "B"; // desktop CPU decente
+  else if (hasWebGPU && memoryMB >= 2048) deviceTier = "B";
+  else if (!isMobile && memoryMB >= 4096) deviceTier = "B";
   else deviceTier = "C";
 
   console.log(`[Device] Tier=${deviceTier} WebGPU=${hasWebGPU} VRAM~${availableVRAM}MB RAM=${memoryMB}MB mobile=${isMobile}`);
@@ -541,11 +566,14 @@ function estimateShardLayers(modelCfg) {
 }
 
 async function tryLoadModel(modelCfg, cb) {
-  // Intento 1: WebWorker + WebGPU
+  // Intento 1: WebWorker + WebGPU (con timeout para móvil)
   if (hasWebGPU) {
     try {
       const worker = createWorker();
-      const eng = await webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, cb);
+      const eng = await Promise.race([
+        webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, cb),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('worker timeout')), 180000))
+      ]);
       console.log('[Engine] Loaded via WebWorker+WebGPU:', modelCfg.name);
       return eng;
     } catch(e) {
@@ -554,7 +582,10 @@ async function tryLoadModel(modelCfg, cb) {
   }
   // Intento 2: MLCEngine directo (WASM / CPU fallback)
   try {
-    const eng = await webllm.CreateMLCEngine(modelCfg.id, cb);
+    const eng = await Promise.race([
+      webllm.CreateMLCEngine(modelCfg.id, cb),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('mlc timeout')), 180000))
+    ]);
     console.log('[Engine] Loaded via MLCEngine (CPU/WASM):', modelCfg.name);
     return eng;
   } catch(e) {
@@ -591,8 +622,9 @@ async function initEngine() {
       return;
     }
 
-    // El modelo elegido falló — intentar con el siguiente más pequeño
-    for (let i = CONFIG.models.indexOf(bestModel) - 1; i >= 0; i--) {
+    // El modelo elegido falló — probar más pequeños en cascada
+    const startIdx = CONFIG.models.indexOf(bestModel);
+    for (let i = startIdx - 1; i >= 0; i--) {
       const fallback = CONFIG.models[i];
       updateInitStatus(`Retrying with ${fallback.name}…`);
       engine = await tryLoadModel(fallback, cb);
@@ -830,9 +862,10 @@ function connectRelay(url) {
     ws.onopen = () => {
       entry.status = 'connected'; entry.retries = 0;
       // kind:1 + #t tag = compatible con TODOS los relays (igual que PudúChat)
-      const since = Math.floor(Date.now() / 1000) - 300;
+      // Ventana de 10 min para no perder peers que estaban activos antes
+      const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec;
       ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, {
-        kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 50
+        kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100
       }]));
       publishPresenceTo(ws);
       updateRelayUI();
@@ -918,10 +951,21 @@ function handlePeerPresence(p) {
       deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB,
       tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null,
       inferenceMode: p.inferenceMode || 'relay',
-      lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0
+      lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null,
+      pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
     });
-    // Conectar WebRTC (el de menor peerId inicia)
-    if (peerId < p.peerId) initiateWebRTC(p.peerId);
+    // El peer con menor peerId inicia; el otro espera y reintenta si no hay conexión
+    if (peerId < p.peerId) {
+      initiateWebRTC(p.peerId);
+    } else {
+      setTimeout(() => {
+        const peer = peers.get(p.peerId);
+        if (peer && (!peer.conn || peer.conn.connectionState === 'closed')) {
+          console.log(`[WebRTC] Iniciando conexión defensiva con ${p.peerId}`);
+          initiateWebRTC(p.peerId);
+        }
+      }, 3000 + Math.random() * 2000);
+    }
   } else {
     const peer = peers.get(p.peerId);
     Object.assign(peer, {
@@ -938,8 +982,10 @@ function handlePeerPresence(p) {
 function removePeer(pid) {
   const p = peers.get(pid);
   if (!p) return;
-  p.conn?.close();
+  clearTimeout(p.reconnectTimer);
   clearInterval(p.pingTimer);
+  try { p.dc?.close(); } catch(e) {}
+  try { p.conn?.close(); } catch(e) {}
   peers.delete(pid);
   updatePeerListUI();
 }
@@ -947,41 +993,130 @@ function removePeer(pid) {
 // ══════════════════════════════════════════════════════════════════════════
 //  WebRTC
 // ══════════════════════════════════════════════════════════════════════════
-const ICE = { iceServers: [
+// TURN servers críticos para móvil (NAT simétrico de operadoras)
+// openrelay.metered.ca es un servicio TURN gratuito para desarrollo
+const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun.cloudflare.com:3478" },
-]};
+  { urls: "stun:stun.relay.metered.ca:80" },
+  { urls: "turn:openrelay.metered.ca:80",   username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turn:openrelay.metered.ca:443",  username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turn:openrelay.metered.ca:80?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+];
+
+// Crea RTCPeerConnection con ICE batching y reconexión automática
+function createPeerConn(targetId) {
+  const conn = new RTCPeerConnection({
+    iceServers: ICE_SERVERS,
+    bundlePolicy: 'max-bundle',
+    iceCandidatePoolSize: 10,
+  });
+  // Monitorear estado para reconectar si falla (crítico en móvil)
+  conn.onconnectionstatechange = () => {
+    const state = conn.connectionState;
+    console.log(`[WebRTC] ${targetId} → ${state}`);
+    if (state === 'connected') {
+      const p = peers.get(targetId);
+      if (p) p.reconnectAttempts = 0;
+    } else if (state === 'failed' || state === 'disconnected') {
+      scheduleWebRTCReconnect(targetId);
+    }
+  };
+  // ICE candidate batching: agrupa candidatos en 200ms para reducir eventos Nostr
+  let iceBatch = [], iceTimer = null;
+  conn.onicecandidate = (e) => {
+    if (!e.candidate) return;
+    iceBatch.push(e.candidate.toJSON());
+    clearTimeout(iceTimer);
+    iceTimer = setTimeout(() => {
+      if (!iceBatch.length) return;
+      publishSignal(targetId, { type: "candidates", candidates: [...iceBatch] });
+      iceBatch = [];
+    }, CONFIG.iceBatchDelayMs);
+  };
+  return conn;
+}
+
+function scheduleWebRTCReconnect(pid) {
+  const peer = peers.get(pid);
+  if (!peer) return;
+  peer.reconnectAttempts = (peer.reconnectAttempts || 0) + 1;
+  if (peer.reconnectAttempts > CONFIG.webrtcMaxReconnects) {
+    console.log(`[WebRTC] Max reconnects para ${pid}`);
+    removePeer(pid);
+    return;
+  }
+  const delay = Math.min(Math.pow(2, peer.reconnectAttempts - 1) * 1000, 30000);
+  console.log(`[WebRTC] Reintentando ${pid} en ${delay}ms (intento ${peer.reconnectAttempts})`);
+  clearTimeout(peer.reconnectTimer);
+  peer.reconnectTimer = setTimeout(() => {
+    if (!peers.has(pid)) return;
+    const p = peers.get(pid);
+    try { p.dc?.close(); } catch(e) {}
+    try { p.conn?.close(); } catch(e) {}
+    p.conn = null; p.dc = null;
+    if (peerId < pid || peer.reconnectAttempts > 2) initiateWebRTC(pid);
+    else publishPresence();
+  }, delay);
+}
 
 function initiateWebRTC(targetId) {
-  if (peers.get(targetId)?.conn) return;
+  const existing = peers.get(targetId);
+  if (existing?.conn && ['connecting','connected'].includes(existing.conn.connectionState)) return;
   let peer = peers.get(targetId);
-  if (!peer) { peer = { deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false, shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity, conn:null, dc:null, pingTimer:null, lastPingSent:0 }; peers.set(targetId, peer); }
-  const conn = new RTCPeerConnection(ICE);
+  if (!peer) {
+    peer = {
+      deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false,
+      shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity,
+      conn:null, dc:null, pingTimer:null, lastPingSent:0, reconnectAttempts:0, reconnectTimer:null
+    };
+    peers.set(targetId, peer);
+  }
+  const conn = createPeerConn(targetId);
   peer.conn = conn;
   const dc = conn.createDataChannel("p2p", { ordered: false, maxRetransmits: 0 });
   peer.dc = dc;
   setupDC(dc, targetId);
-  conn.onicecandidate = (e) => { if (e.candidate) publishSignal(targetId, { type: "candidate", candidate: e.candidate }); };
-  conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription }));
+  conn.createOffer()
+    .then(o => conn.setLocalDescription(o))
+    .then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription }))
+    .catch(e => console.error('[WebRTC] offer error:', e));
 }
 
 async function handleWebRTCSignal(fromId, signal) {
   let peer = peers.get(fromId);
-  if (!peer) { peer = { deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false, shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity, conn:null, dc:null, pingTimer:null, lastPingSent:0 }; peers.set(fromId, peer); }
+  if (!peer) {
+    peer = {
+      deviceTier:"C", webgpu:false, memoryMB:0, tps:0, hasEngine:false,
+      shardInfo:null, inferenceMode:'relay', lastSeen:Date.now(), rtt:Infinity,
+      conn:null, dc:null, pingTimer:null, lastPingSent:0, reconnectAttempts:0, reconnectTimer:null
+    };
+    peers.set(fromId, peer);
+  }
   if (signal.type === "offer") {
-    const conn = peer.conn || new RTCPeerConnection(ICE);
+    // Rechazar si ya tenemos conexión activa Y somos el que debería haber iniciado
+    if (peer.conn && ['connecting','connected'].includes(peer.conn.connectionState) && peerId > fromId) return;
+    try { peer.conn?.close(); } catch(e) {}
+    const conn = createPeerConn(fromId);
     peer.conn = conn;
-    conn.onicecandidate = (e) => { if (e.candidate) publishSignal(fromId, { type:"candidate", candidate:e.candidate }); };
     conn.ondatachannel = (e) => { peer.dc = e.channel; setupDC(e.channel, fromId); };
-    await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-    const ans = await conn.createAnswer();
-    await conn.setLocalDescription(ans);
-    publishSignal(fromId, { type:"answer", sdp: conn.localDescription });
+    try {
+      await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      const ans = await conn.createAnswer();
+      await conn.setLocalDescription(ans);
+      publishSignal(fromId, { type:"answer", sdp: conn.localDescription });
+    } catch(e) { console.error('[WebRTC] handle offer error:', e); }
   } else if (signal.type === "answer" && peer.conn) {
-    await peer.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-  } else if (signal.type === "candidate" && peer.conn) {
-    try { await peer.conn.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch(_) {}
+    try { await peer.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); }
+    catch(e) { console.warn('[WebRTC] setRemoteDesc answer:', e.message); }
+  } else if ((signal.type === "candidate" || signal.type === "candidates") && peer.conn) {
+    // Soporte para candidatos individuales (legacy) y en lote (nuevo)
+    const candidates = signal.candidates ? signal.candidates : (signal.candidate ? [signal.candidate] : []);
+    for (const c of candidates) {
+      try { await peer.conn.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {}
+    }
   }
 }
 
@@ -1000,7 +1135,13 @@ function setupDC(dc, remoteId) {
     }
     updatePeerListUI();
   };
-  dc.onclose = () => { removePeer(remoteId); };
+  dc.onclose = () => {
+    const peer = peers.get(remoteId);
+    if (peer && peer.conn?.connectionState !== 'failed') {
+      scheduleWebRTCReconnect(remoteId);
+    }
+  };
+  dc.onerror = () => scheduleWebRTCReconnect(remoteId);
   dc.onmessage = (e) => { handleBinMsg(remoteId, e.data); };
 }
 
@@ -1305,6 +1446,9 @@ async function boot() {
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
 
+  // Publicar presencia con info completa del engine ya cargado
+  publishPresence();
+
   const bootLines = [
     'P2P-LLM v3 initialized',
     '',
@@ -1313,7 +1457,8 @@ async function boot() {
       : myShardInfo
         ? `🧩 Shard mode: capas 0–${myShardInfo.layerEnd}/${myShardInfo.totalLayers}`
         : '📡 Sin engine local → esperando peers con engine',
-    `Device: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes (~' + availableVRAM + 'MB)' : 'no'}`,
+    `Device: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}`,
+    `VRAM estimada: ~${availableVRAM}MB`,
     `RAM: ${memoryMB}MB`,
     `Peer ID: ${peerId}`,
     `Pubkey: ${pubKeyHex.slice(0,16)}…`,
