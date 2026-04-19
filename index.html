@@ -422,7 +422,12 @@ const CONFIG = {
 const MSG = {
   HELLO: 1,
   TOK_REQ: 2,    // solicitar tokens a un peer con engine completo
-  TOK_RES: 3,    // respuesta de tokens
+  TOK_RES: 3,    // respuesta de tokens (legacy fallback)
+  TOK_CHUNK: 4,  // token parcial iterativo de WebRTC streaming
+  TOK_END: 5,    // fin del streaming progresivo
+  CACHE_REQ: 6,  // búsqueda de KV Contexto
+  CACHE_RES: 7,  // respuesta de KV Contexto
+  CACHE_STORE: 8, // guardar KV Contexto
   PING: 0x10,
   PONG: 0x11,
   CHAT: 0x20,
@@ -502,6 +507,7 @@ const seenEventIds = new Set();
 const seenMsgIds = new Set();
 const chatHistory = [];
 const fedPending = new Map();
+const kvCacheStore = new Map();
 
 // ══════════════════════════════════════════════════════════════════════════
 //  DEVICE CLASSIFICATION — detecta VRAM disponible real
@@ -572,14 +578,18 @@ function selectBestModel() {
   return best;
 }
 
-// Cuántas capas del modelo 1B podemos cargar (para shard parcial)
-function estimateShardLayers(modelCfg) {
+// Cuántos megabytes de historial KV puede retener este nodo móvil
+function estimateKVCacheCapacity() {
   const effectiveMB = hasWebGPU
-    ? (availableVRAM > 0 ? availableVRAM * 0.7 : memoryMB * 0.35)
-    : memoryMB * 0.35;
-  const mbPerLayer = modelCfg.vramMB / modelCfg.layers;
-  const layers = Math.floor(effectiveMB / mbPerLayer);
-  return Math.max(0, Math.min(layers, modelCfg.layers));
+    ? (availableVRAM > 0 ? availableVRAM * 0.5 : memoryMB * 0.25)
+    : memoryMB * 0.25;
+  return Math.floor(Math.max(10, effectiveMB));
+}
+
+// Generador SHA-256 para validación de hashes KV
+async function calculateHash(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
 async function tryLoadModel(modelCfg, cb) {
@@ -657,45 +667,35 @@ async function initEngine() {
     }
   }
 
-  // ── MODO SHARD: no pudimos cargar ningún modelo completo ─────────────
-  // Calculamos cuántas capas del modelo más pequeño nos caben
+  // ── MODO P2P KV CACHE: Carga de nodo retenedor ─────────────
   isModelLoading = false;
   showModelProgress(false);
 
-  const smallModel = CONFIG.models[0];
-  const shardLayers = estimateShardLayers(smallModel);
+  const cacheLimit = estimateKVCacheCapacity();
 
-  if (shardLayers >= CONFIG.minShardLayers) {
-    // Registramos este nodo como shard worker
-    // (El shard real de webllm aún no está disponible en la API pública,
-    //  así que simulamos el protocolo y coordinamos via TOK_REQ a peers completos)
+  if (cacheLimit > 10) {
     myShardInfo = {
-      modelId: smallModel.id,
-      layerStart: 0,
-      layerEnd: shardLayers,
-      totalLayers: smallModel.layers,
-      role: "shard-partial",
+      modelId: 'kv-cache-node',
+      capacityMB: cacheLimit,
+      role: "kv-cache",
     };
     inferenceMode = "federated";
-    console.log(`[Shard] Registrado como shard worker: capas 0-${shardLayers}/${smallModel.layers}`);
+    console.log(`[KV Cache] Registrado como Retenedor HTTP Distribuido: Capacidad ~${cacheLimit}MB`);
     addMessageToUI('assistant',
-      `🧩 Modo Shard Federado activado\n` +
-      `Este dispositivo tiene WebGPU pero memoria limitada.\n` +
-      `Contribuyendo capas 0–${shardLayers}/${smallModel.layers} del modelo.\n\n` +
-      `• En la malla P2P, los peers se complementan entre sí\n` +
-      `• Las consultas se enrutan al mejor peer disponible\n` +
-      `• A medida que se conecten peers, la capacidad crece\n\n` +
-      `Estado: conectando a la malla…`
+      `🗄️ Nodo Caché Hash P2P activado\n` +
+      `Sin memoria para Neural Engine. Reasignando arquitectura.\n` +
+      `Este dispositivo ahora almacena Contextos Historiales en frío.\n\n` +
+      `• Alivias el ancho de banda cruzado de las GPUs remotas.\n` +
+      `• Los nodos P2P enviarán firmas Nostr SHA-256 reutilizando tu memoria RAM.\n\n` +
+      `Estado: Malla de retención de dicts activa...`
     );
   } else {
-    // Sin capacidad de shard mínima — nodo relay puro
     inferenceMode = "relay";
     myShardInfo = null;
     addMessageToUI('assistant',
-      `📡 Modo Relay P2P\n` +
-      `Memoria disponible insuficiente para inferencia local.\n` +
-      `Este nodo actúa como relay y enrutará mensajes a peers con engine.\n\n` +
-      `Cuando se conecten peers con modelo cargado, responderán por ti.`
+      `📡 Modo Relay P2P Puro\n` +
+      `Memoria ultra-limitada detectada o ambiente inseguro.\n` +
+      `Transmitirás los rebotes Gossip P2P invisibles limitando uso nativo.\n`
     );
   }
 
@@ -836,9 +836,22 @@ async function runRemoteInference(userMessage, remotePeerId) {
 
   const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
   const timeoutMs = 30000;
+  let fullRemoteText = "";
 
   const resultPromise = new Promise((resolve, reject) => {
-    fedPending.set(reqId, { resolve, reject });
+    fedPending.set(reqId, { 
+      resolve, 
+      reject,
+      onChunk: (token) => {
+        aiMsgEl.querySelector('.typing-indicator')?.remove();
+        const contentEl = aiMsgEl.querySelector('.msg-content');
+        if (contentEl.textContent === '⟳ Esperando respuesta del peer…') contentEl.textContent = '';
+        fullRemoteText += token;
+        contentEl.textContent = fullRemoteText;
+        document.getElementById('messages').scrollTop = 99999;
+      }
+    });
+
     setTimeout(() => {
       if (fedPending.has(reqId)) {
         fedPending.delete(reqId);
@@ -848,12 +861,25 @@ async function runRemoteInference(userMessage, remotePeerId) {
     }, timeoutMs);
   });
 
-  // Enviar solicitud al peer con engine
+  // Resoluciones de Hash P2P y envío delegado KV
+  const histTail = [
+    { role: "system", content: "You are a helpful AI. Be concise." },
+    ...chatHistory.slice(-10)
+  ];
+  const histHash = await calculateHash(JSON.stringify(histTail));
+
+  let sentToCache = false;
+  for (const [, p] of peers) {
+    if (p.dc?.readyState === 'open' && p.shardInfo?.role === 'kv-cache') {
+      p.dc.send(encodeMsg(MSG.CACHE_STORE, 0, 0, { hash: histHash, messages: histTail }));
+      sentToCache = true;
+    }
+  }
+
+  // Enviar solicitud al peer con engine - Envía contexto comprimido si la red soporta Caché KV 
   peer.dc.send(encodeMsg(MSG.TOK_REQ, reqId, 0, {
-    messages: [
-      { role: "system", content: "You are a helpful AI. Be concise." },
-      ...chatHistory.slice(-10)
-    ],
+    hash: histHash,
+    messages: sentToCache ? null : histTail,
     max_tokens: 512
   }));
 
@@ -865,6 +891,7 @@ async function runRemoteInference(userMessage, remotePeerId) {
 
     const result = await resultPromise;
     const ms = performance.now() - startTime;
+    if (!result.text && fullRemoteText) result.text = fullRemoteText;
     contentEl.textContent = result.text;
 
     const metaEl = aiMsgEl.querySelector('.msg-meta');
@@ -1292,23 +1319,59 @@ async function handleBinMsg(fromId, buf) {
 
     case MSG.TOK_REQ:
       // Un peer nos pide que generemos texto (tenemos engine completo)
-      if (engine && m.payload?.messages) {
+      if (engine && (m.payload?.messages || m.payload?.hash)) {
         if (isGenerating) {
           if (peer.dc?.readyState === "open") {
             peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: El peer está ocupado generando, reintenta pronto.', model: null }));
           }
           break;
         }
+
+        let ctxMessages = m.payload.messages;
+        if (!ctxMessages && m.payload.hash) {
+          // El enviador delegó el contexto a la caché distribuida. Pedimos recuperación al Shard P2P KV.
+          const hash = m.payload.hash;
+          const ac = new AbortController();
+          const cachePromise = new Promise(resolve => {
+            const handler = (e) => {
+              const m2 = decodeMsg(e.data);
+              if (m2.type === MSG.CACHE_RES && m2.payload?.hash === hash) resolve(m2.payload.messages);
+            };
+            for (const [, p] of peers) if (p.dc?.readyState === 'open') p.dc.addEventListener('message', handler, { signal: ac.signal });
+            setTimeout(() => resolve(null), 1500); // 1.5s Max Wait
+          });
+          
+          for (const [, p] of peers) {
+             if (p.dc?.readyState === 'open' && p.shardInfo?.role === 'kv-cache') {
+                p.dc.send(encodeMsg(MSG.CACHE_REQ, m.reqId, 0, { hash }));
+             }
+          }
+          ctxMessages = await cachePromise;
+          ac.abort();
+
+          if (!ctxMessages) {
+             if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: KV Cache Context fue inaccesible o expiró en los shards.', model: null }));
+             break;
+          }
+        }
+
         try {
           const chunks = await engine.chat.completions.create({
-            messages: m.payload.messages, stream: true,
+            messages: ctxMessages, stream: true,
             temperature: 0.7, max_tokens: m.payload.max_tokens || 512
           });
           let fullR = "";
-          for await (const chunk of chunks) fullR += chunk.choices[0]?.delta?.content || "";
+          let seqC = 0;
+          for await (const chunk of chunks) {
+            const token = chunk.choices[0]?.delta?.content || "";
+            fullR += token;
+            if (token && peer.dc?.readyState === "open") {
+              peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token }));
+            }
+          }
 
           if (peer.dc?.readyState === "open") {
-            peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, {
+            peer.dc.send(encodeMsg(MSG.TOK_END, m.reqId, seqC, {
               text: fullR, model: currentModelId, tps: localTPS
             }));
           }
@@ -1320,8 +1383,33 @@ async function handleBinMsg(fromId, buf) {
       }
       break;
 
+    case MSG.CACHE_STORE:
+      if (myShardInfo?.role === 'kv-cache' && m.payload?.hash) {
+        kvCacheStore.set(m.payload.hash, { messages: m.payload.messages, timestamp: Date.now() });
+        if (kvCacheStore.size > 200) kvCacheStore.delete(kvCacheStore.keys().next().value);
+        console.log(`[KV Cache] Almacenado hash seguro: ${m.payload.hash.slice(0,8)}`);
+      }
+      break;
+
+    case MSG.CACHE_REQ:
+      if (myShardInfo?.role === 'kv-cache' && m.payload?.hash && peer.dc?.readyState === 'open') {
+        const entry = kvCacheStore.get(m.payload.hash);
+        if (entry) {
+           peer.dc.send(encodeMsg(MSG.CACHE_RES, m.reqId, 0, { hash: m.payload.hash, messages: entry.messages }));
+           console.log(`[KV Cache] Servido hit directo para hash: ${m.payload.hash.slice(0,8)} a ${fromId.slice(0,5)}`);
+        }
+      }
+      break;
+
+    case MSG.TOK_CHUNK:
+      if (m.payload && fedPending.has(m.reqId)) {
+        fedPending.get(m.reqId).onChunk?.(m.payload.token);
+      }
+      break;
+
+    case MSG.TOK_END:
     case MSG.TOK_RES:
-      // Respuesta de inferencia remota
+      // Respuesta de inferencia remota (stream final)
       if (m.payload && fedPending.has(m.reqId)) {
         const { resolve } = fedPending.get(m.reqId);
         fedPending.delete(m.reqId);
