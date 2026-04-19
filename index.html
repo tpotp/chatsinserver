@@ -298,14 +298,10 @@ const CONFIG = {
   // Se conectan en paralelo; si uno falla reconecta con backoff.
   // Los mensajes se publican en TODOS los activos simultáneamente.
   nostrRelays: [
-    // ── Tier 1: muy confiables, usados en producción
     "wss://relay.damus.io",
     "wss://nos.lol",
     "wss://offchain.pub",
-    "wss://relay.nostr.band/all",
     "wss://nostr.mom",
-    "wss://relay.snort.social",
-    // ── Tier 2: buenos uptime
     "wss://nostr.wine",
     "wss://relay.primal.net",
     "wss://nostr.bitcoiner.social",
@@ -314,13 +310,7 @@ const CONFIG = {
     "wss://nostr.oxtr.dev",
     "wss://purplepag.es",
     "wss://relay.nostr.wirednet.jp",
-    "wss://nostr.fmt.wiz.biz",
-    // ── Tier 3: extras
-    "wss://relay.nostr.bg",
-    "wss://nostr.zbd.gg",
-    "wss://relay.nostr.com.au",
-    "wss://nostr.wine",
-    "wss://relay.nostr.jabber.ch"
+    "wss://relay.nostr.com.au"
   ],
 
   // Tiempo máximo para considerar un relay muerto antes de reconectar (ms)
@@ -425,25 +415,51 @@ async function initEngine(modelId) {
   currentModelId = modelId || CONFIG.defaultModel;
   showModelProgress(true, currentModelId);
   updateInitStatus(`Loading model: ${currentModelId}`);
+
+  const cb = { initProgressCallback: (p) => {
+    const pct = Math.round((p.progress || 0) * 100);
+    updateModelProgress(pct, p.text || '');
+    updateInitProgress(pct);
+  }};
+
+  // Intento 1: WebWorker (mejor performance, necesita WebGPU)
   try {
     const worker = createWorker();
-    engine = await webllm.CreateWebWorkerMLCEngine(worker, currentModelId, {
-      initProgressCallback: (progress) => {
-        const pct = Math.round((progress.progress || 0) * 100);
-        updateModelProgress(pct, progress.text || '');
-        updateInitProgress(pct);
-      }
-    });
+    engine = await webllm.CreateWebWorkerMLCEngine(worker, currentModelId, cb);
     isModelLoading = false;
     showModelProgress(false);
+    console.log('[Engine] Loaded via WebWorker+WebGPU');
+    return;
   } catch (err) {
-    console.error('[Engine] Load failed:', err);
+    console.warn('[Engine] WebWorker failed, trying MLCEngine fallback:', err.message);
+  }
+
+  // Intento 2: MLCEngine directo en main thread (funciona sin WebGPU en algunos browsers)
+  try {
+    engine = await webllm.CreateMLCEngine(currentModelId, cb);
     isModelLoading = false;
     showModelProgress(false);
-    if (currentModelId !== CONFIG.tiers[0].model) {
-      currentTierIdx = 0;
-      await initEngine(CONFIG.tiers[0].model);
-    }
+    console.log('[Engine] Loaded via MLCEngine (main thread)');
+    return;
+  } catch (err) {
+    console.error('[Engine] MLCEngine also failed:', err.message);
+    isModelLoading = false;
+    showModelProgress(false);
+  }
+
+  // Si todo falla y no estamos en el modelo mas liviano, bajar a small
+  if (currentModelId !== CONFIG.tiers[0].model) {
+    console.log('[Engine] Falling back to smallest model');
+    currentTierIdx = 0;
+    await initEngine(CONFIG.tiers[0].model);
+  } else {
+    // El browser definitivamente no soporta WebGPU/WASM-LLM
+    // Dejar engine=null y notificar al usuario
+    addMessageToUI("assistant",
+      "⚠️ Tu browser no soporta WebGPU ni WASM-LLM.
+
+Prueba Chrome/Edge en escritorio. El chat P2P de relays Nostr sigue activo."
+    );
   }
 }
 
@@ -472,7 +488,12 @@ async function switchModel(modelId) {
 //  CHAT / INFERENCE
 // ═══════════════════════════════════════════════════
 async function generateResponse(userMessage) {
-  if (!engine || isGenerating) return;
+  if (isGenerating) return;
+  if (!engine) {
+    addMessageToUI("user", userMessage);
+    addMessageToUI("assistant", "⚠️ Motor LLM no disponible. Tu browser no soporta WebGPU.\n\nPrueba Chrome 113+ o Edge en escritorio con GPU habilitada.");
+    return;
+  }
   isGenerating = true;
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
@@ -968,8 +989,10 @@ async function boot() {
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
 
+  const gpuStatus = hasWebGPU ? 'yes ✅' : 'no ❌ (usando CPU/WASM)';
+  const engineStatus = engine ? `✅ ${currentModelId}` : '⚠️ No disponible (browser sin WebGPU)';
   addMessageToUI("assistant",
-    `🌐 **P2P-LLM initialized**\n\nModel: ${currentModelId}\nDevice: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes ✅' : 'no ❌'}\nPeer ID: ${peerId}\n\nNostr relays: ${connectedRelays}/${CONFIG.nostrRelays.length} connected\nConnecting to peers…`
+    `🌐 **P2P-LLM initialized**\n\nModel: ${engineStatus}\nDevice: Tier ${deviceTier} · WebGPU: ${gpuStatus}\nPeer ID: ${peerId}\n\nNostr relays: ${connectedRelays}/${CONFIG.nostrRelays.length} connected\nConectando a peers…`
   );
 
   setInterval(() => publishPresence(),   CONFIG.presenceIntervalMs);
