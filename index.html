@@ -455,11 +455,7 @@ async function initEngine(modelId) {
   } else {
     // El browser definitivamente no soporta WebGPU/WASM-LLM
     // Dejar engine=null y notificar al usuario
-    addMessageToUI("assistant",
-      "⚠️ Tu browser no soporta WebGPU ni WASM-LLM.
-
-Prueba Chrome/Edge en escritorio. El chat P2P de relays Nostr sigue activo."
-    );
+    addMessageToUI('assistant', 'Tu browser no soporta WebGPU.\nPrueba Chrome/Edge.\nEl relay P2P sigue activo.');
   }
 }
 
@@ -491,7 +487,7 @@ async function generateResponse(userMessage) {
   if (isGenerating) return;
   if (!engine) {
     addMessageToUI("user", userMessage);
-    addMessageToUI("assistant", "⚠️ Motor LLM no disponible. Tu browser no soporta WebGPU.\n\nPrueba Chrome 113+ o Edge en escritorio con GPU habilitada.");
+    addMessageToUI('assistant', 'Motor LLM no disponible.\nTu browser no soporta WebGPU.\nPrueba Chrome 113+ o Edge en escritorio con GPU habilitada.');
     return;
   }
   isGenerating = true;
@@ -527,7 +523,7 @@ async function generateResponse(userMessage) {
     const contentEl = aiMsgEl.querySelector('.msg-content');
     const typingEl = aiMsgEl.querySelector('.typing-indicator');
     if (typingEl) typingEl.remove();
-    contentEl.textContent = `⚠️ Error: ${err.message}`;
+    contentEl.textContent = 'Error: ' + err.message;
   }
   isGenerating = false;
   updateSpeedChip();
@@ -852,13 +848,19 @@ function addMessageToUI(role, content, streaming = false) {
   msg.className = 'message';
   const isUser = role === "user";
   const tier = CONFIG.tiers[currentTierIdx];
-  msg.innerHTML = `
-    <div class="msg-avatar ${isUser ? 'user-av' : 'ai-av'}">${isUser ? '👤' : '🤖'}</div>
-    <div class="msg-body">
-      <div class="msg-header">${isUser ? 'You' : `AI · ${tier.name}`}</div>
-      <div class="msg-content">${streaming ? '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>' : (content || '')}</div>
-      <div class="msg-meta">${!isUser && !streaming ? `${tier.name} · ${tier.mode}` : ''}</div>
-    </div>`;
+  const avatarCls = isUser ? 'user-av' : 'ai-av';
+  const avatarIcon = isUser ? 'U' : 'AI';
+  const headerTxt = isUser ? 'You' : ('AI - ' + tier.name);
+  const typingHtml = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+  const contentHtml = streaming ? typingHtml : (content || '');
+  const metaTxt = (!isUser && !streaming) ? (tier.name + ' - ' + tier.mode) : '';
+  msg.innerHTML =
+    '<div class="msg-avatar ' + avatarCls + '">' + avatarIcon + '</div>' +
+    '<div class="msg-body">' +
+      '<div class="msg-header">' + headerTxt + '</div>' +
+      '<div class="msg-content">' + contentHtml + '</div>' +
+      '<div class="msg-meta">' + metaTxt + '</div>' +
+    '</div>';
   el.appendChild(msg);
   el.scrollTop = el.scrollHeight;
   return msg;
@@ -969,7 +971,14 @@ function cleanupPeers() {
 //  BOOT
 // ═══════════════════════════════════════════════════
 async function boot() {
-  console.log(`[P2P-LLM] Boot peerId=${peerId}`);
+  // ── DEBUG ─────────────────────────────────────
+  console.log('[DEBUG] boot() start');
+  console.log('[DEBUG] location:', location.href);
+  console.log('[DEBUG] crossOriginIsolated:', crossOriginIsolated);
+  console.log('[DEBUG] navigator.gpu:', 'gpu' in navigator ? 'present' : 'ABSENT');
+  console.log('[DEBUG] userAgent:', navigator.userAgent.slice(0, 80));
+  // ─────────────────────────────────────────────
+  console.log('[P2P-LLM] Boot peerId=' + peerId);
   updateInitStatus("Detecting device…");
   await classifyDevice();
   updateScoreUI(0, null);
@@ -989,11 +998,19 @@ async function boot() {
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
 
-  const gpuStatus = hasWebGPU ? 'yes ✅' : 'no ❌ (usando CPU/WASM)';
-  const engineStatus = engine ? `✅ ${currentModelId}` : '⚠️ No disponible (browser sin WebGPU)';
-  addMessageToUI("assistant",
-    `🌐 **P2P-LLM initialized**\n\nModel: ${engineStatus}\nDevice: Tier ${deviceTier} · WebGPU: ${gpuStatus}\nPeer ID: ${peerId}\n\nNostr relays: ${connectedRelays}/${CONFIG.nostrRelays.length} connected\nConectando a peers…`
-  );
+  const gpuStatus = hasWebGPU ? 'WebGPU: yes' : 'WebGPU: no (CPU mode)';
+  const engineStatus = engine ? ('Model: ' + currentModelId) : 'Model: no disponible (sin WebGPU)';
+  const bootMsg = [
+    'P2P-LLM initialized',
+    '',
+    engineStatus,
+    'Device: Tier ' + deviceTier + ' - ' + gpuStatus,
+    'Peer ID: ' + peerId,
+    '',
+    'Nostr relays: ' + connectedRelays + '/' + CONFIG.nostrRelays.length + ' connected',
+    'Conectando a peers...'
+  ].join('\n');
+  addMessageToUI('assistant', bootMsg);
 
   setInterval(() => publishPresence(),   CONFIG.presenceIntervalMs);
   setInterval(() => cleanupPeers(),      CONFIG.presenceTTLMs);
