@@ -310,6 +310,14 @@ function createWorker() {
   return new Worker(URL.createObjectURL(blob), { type: "module" });
 }
 
+// ── nostr-tools: firmas criptográficas reales (igual que PudúChat) ──
+const _nostrPreload = import("https://esm.sh/nostr-tools@2/pure").catch(()=>null);
+let nostrMod = null;
+async function getNostrMod() {
+  if (!nostrMod) nostrMod = await (_nostrPreload || import("https://esm.sh/nostr-tools@2/pure"));
+  return nostrMod;
+}
+
 const webllm = await import("https://esm.run/@mlc-ai/web-llm");
 
 // ── CONFIG ────────────────────────────────────────────────────────────────
@@ -369,7 +377,7 @@ const CONFIG = {
 
   relayReconnectMs: 8000,
   relayMaxRetries: 999,
-  appNamespace: "p2p-llm-shard-v3",
+  appNamespace: "p2p-llm-v3",
   presenceIntervalMs: 15000,
   presenceTTLMs: 45000,
   pingIntervalMs: 5000,
@@ -407,24 +415,49 @@ function decodeMsg(buf) {
 }
 
 // ── GLOBALS ───────────────────────────────────────────────────────────────
-const peerId = crypto.randomUUID().slice(0, 12);
-let engine = null;           // motor local (si cargó modelo completo)
+// ── Identidad criptográfica (igual que PudúChat) ──
+let privKeyBytes = null;
+let pubKeyHex = "";
+let peerId = "";  // se establece en boot() tras generar keypair
+
+async function initIdentity() {
+  const nostr = await getNostrMod();
+  const STORAGE_KEY = 'p2p-llm-identity-v3';
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const { priv, pub } = JSON.parse(saved);
+      privKeyBytes = new Uint8Array(priv);
+      pubKeyHex = pub;
+      peerId = pubKeyHex.slice(0, 12);
+      console.log('[Identity] Loaded from storage, peerId=' + peerId);
+      return;
+    }
+  } catch(e) {}
+  privKeyBytes = nostr.generateSecretKey();
+  pubKeyHex = nostr.getPublicKey(privKeyBytes);
+  peerId = pubKeyHex.slice(0, 12);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ priv: Array.from(privKeyBytes), pub: pubKeyHex }));
+  } catch(e) {}
+  console.log('[Identity] New keypair, peerId=' + peerId);
+}
+
+let engine = null;
 let currentModelId = null;
 let isModelLoading = false;
 let isGenerating = false;
 
-// Capacidades del dispositivo
 let deviceTier = "C";
 let hasWebGPU = false;
 let memoryMB = 0;
-let availableVRAM = 0;       // estimado en MB
+let availableVRAM = 0;
 let localTPS = 0;
 
-// Shard state
-let myShardInfo = null;      // { modelId, layerStart, layerEnd, totalLayers }
-let inferenceMode = "relay"; // "local" | "assisted" | "federated" | "relay"
+let myShardInfo = null;
+let inferenceMode = "relay";
 
-const peers = new Map();     // peerId → { deviceTier, webgpu, memoryMB, tps, shardInfo, ... }
+const peers = new Map();
 let networkScore = 0;
 let lastTierChange = 0;
 let currentModelLabel = "small";
@@ -432,9 +465,7 @@ let currentModelLabel = "small";
 const relayMap = new Map();
 const seenEventIds = new Set();
 const chatHistory = [];
-
-// Pending federated inference requests
-const fedPending = new Map(); // reqId → { resolve, reject, timeout }
+const fedPending = new Map();
 
 // ══════════════════════════════════════════════════════════════════════════
 //  DEVICE CLASSIFICATION — detecta VRAM disponible real
@@ -757,16 +788,32 @@ async function runRemoteInference(userMessage, remotePeerId) {
 // ══════════════════════════════════════════════════════════════════════════
 //  NOSTR RELAY MANAGER
 // ══════════════════════════════════════════════════════════════════════════
-function makeEvent(content) {
-  return {
-    id: crypto.randomUUID().replace(/-/g, '').slice(0, 64),
-    pubkey: peerId.padEnd(64, '0'),
+// Firma un evento Nostr real (igual que PudúChat) y lo publica
+async function signAndPublish(content) {
+  const nostr = await getNostrMod();
+  const template = {
+    kind: 1,
     created_at: Math.floor(Date.now() / 1000),
-    kind: 30078,
-    tags: [["d", CONFIG.appNamespace], ["p2p-llm", "v3"]],
-    content: JSON.stringify(content),
-    sig: "0".repeat(128)
+    tags: [["t", CONFIG.appNamespace]],
+    content: JSON.stringify(content)
   };
+  let event;
+  try {
+    event = nostr.finalizeEvent(template, privKeyBytes);
+  } catch(e) {
+    console.error('[Nostr] finalizeEvent failed:', e);
+    return null;
+  }
+  seenEventIds.add(event.id);
+  const raw = JSON.stringify(["EVENT", event]);
+  let sent = 0;
+  for (const [, entry] of relayMap) {
+    if (entry.ws && entry.ws.readyState === 1) {
+      try { entry.ws.send(raw); sent++; } catch(e) {}
+    }
+  }
+  console.log(`[Nostr] published type=${content.type} to ${sent} relays`);
+  return sent > 0 ? event.id : null;
 }
 
 function connectToRelays() {
@@ -782,11 +829,14 @@ function connectRelay(url) {
     entry.ws = ws;
     ws.onopen = () => {
       entry.status = 'connected'; entry.retries = 0;
-      ws.send(JSON.stringify(["REQ", `sub-${peerId}`, {
-        kinds: [30078], "#d": [CONFIG.appNamespace], limit: 50
+      // kind:1 + #t tag = compatible con TODOS los relays (igual que PudúChat)
+      const since = Math.floor(Date.now() / 1000) - 300;
+      ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, {
+        kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 50
       }]));
       publishPresenceTo(ws);
       updateRelayUI();
+      console.log('[Relay] ✓', url);
     };
     ws.onmessage = (e) => { try { handleRelayMsg(JSON.parse(e.data)); } catch(_) {} };
     ws.onclose = ws.onerror = () => {
@@ -813,22 +863,26 @@ function activeRelays() {
 }
 
 function publishPresenceTo(ws) {
-  const content = {
+  // Publicar presencia via signAndPublish (firma real)
+  signAndPublish({
     type: "presence", peerId, deviceTier, webgpu: hasWebGPU,
     memoryMB, tps: localTPS, currentModel: currentModelId,
     hasEngine: !!engine, shardInfo: myShardInfo,
     inferenceMode, timestamp: Date.now()
-  };
-  ws.send(JSON.stringify(["EVENT", makeEvent(content)]));
+  });
 }
 
 function publishPresence() {
-  for (const ws of activeRelays()) publishPresenceTo(ws);
+  signAndPublish({
+    type: "presence", peerId, deviceTier, webgpu: hasWebGPU,
+    memoryMB, tps: localTPS, currentModel: currentModelId,
+    hasEngine: !!engine, shardInfo: myShardInfo,
+    inferenceMode, timestamp: Date.now()
+  });
 }
 
 function publishSignal(targetId, signal) {
-  const content = { type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() };
-  for (const ws of activeRelays()) ws.send(JSON.stringify(["EVENT", makeEvent(content)]));
+  signAndPublish({ type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() });
 }
 
 function handleRelayMsg(msg) {
@@ -837,11 +891,18 @@ function handleRelayMsg(msg) {
   if (!event?.id || seenEventIds.has(event.id)) return;
   seenEventIds.add(event.id);
   if (seenEventIds.size > 2000) {
-    const it = seenEventIds.values(); for (let i = 0; i < 500; i++) seenEventIds.delete(it.next().value);
+    const arr = [...seenEventIds]; seenEventIds.clear();
+    arr.slice(arr.length - 1000).forEach(id => seenEventIds.add(id));
   }
+  // Ignorar eventos propios (por pubkey, no por peerId que aún no está seteado)
+  if (event.pubkey === pubKeyHex) return;
   try {
     const c = JSON.parse(event.content);
-    if (c.peerId !== peerId) handleNostrContent(c);
+    // Compatibilidad: el campo peerId puede estar en c.peerId
+    if (c && c.peerId && c.peerId !== peerId) {
+      console.log(`[Nostr] rcv type=${c.type} from=${c.peerId}`);
+      handleNostrContent(c);
+    }
   } catch(e) {}
 }
 
@@ -852,12 +913,14 @@ function handleNostrContent(c) {
 
 function handlePeerPresence(p) {
   if (!peers.has(p.peerId)) {
+    console.log(`[P2P] New peer discovered: ${p.peerId} tier=${p.deviceTier} engine=${p.hasEngine}`);
     peers.set(p.peerId, {
       deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB,
       tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null,
       inferenceMode: p.inferenceMode || 'relay',
       lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0
     });
+    // Conectar WebRTC (el de menor peerId inicia)
     if (peerId < p.peerId) initiateWebRTC(p.peerId);
   } else {
     const peer = peers.get(p.peerId);
@@ -1218,6 +1281,9 @@ function cleanupPeers() {
 //  BOOT
 // ══════════════════════════════════════════════════════════════════════════
 async function boot() {
+  // 1. Generar keypair antes de todo (necesario para firmar eventos Nostr)
+  updateInitStatus("Generating identity…");
+  await initIdentity();
   console.log('[P2P-LLM v3] boot peerId=' + peerId);
   updateInitStatus("Detecting device capabilities…");
   await classifyDevice();
@@ -1243,13 +1309,14 @@ async function boot() {
     'P2P-LLM v3 initialized',
     '',
     engine
-      ? `✅ Engine: ${currentModelId}`
+      ? `✅ Engine local: ${currentModelId}`
       : myShardInfo
         ? `🧩 Shard mode: capas 0–${myShardInfo.layerEnd}/${myShardInfo.totalLayers}`
-        : '📡 Relay mode (sin engine local)',
-    `Device: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes' : 'no'}`,
-    hasWebGPU && availableVRAM > 0 ? `VRAM estimada: ~${availableVRAM}MB` : `RAM: ${memoryMB}MB`,
+        : '📡 Sin engine local → esperando peers con engine',
+    `Device: Tier ${deviceTier} · WebGPU: ${hasWebGPU ? 'yes (~' + availableVRAM + 'MB)' : 'no'}`,
+    `RAM: ${memoryMB}MB`,
     `Peer ID: ${peerId}`,
+    `Pubkey: ${pubKeyHex.slice(0,16)}…`,
     '',
     `Nostr relays: ${connectedRelays}/${CONFIG.nostrRelays.length} conectados`,
     'Buscando peers en la malla…',
