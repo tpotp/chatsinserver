@@ -410,6 +410,7 @@ const MSG = {
   TOK_RES: 3,    // respuesta de tokens
   PING: 0x10,
   PONG: 0x11,
+  CHAT: 0x20,
   // Federated inference
   FED_START: 0x30,   // "voy a generar, necesito tus capas N-M"
   FED_HIDDEN: 0x31,  // hidden states (tensor parcial serializado)
@@ -689,10 +690,21 @@ async function initEngine() {
 //  INFERENCIA — Local | Asistida | Federada | Relay
 // ══════════════════════════════════════════════════════════════════════════
 
+function broadcastChat(role, content, senderId, modelId) {
+  const payload = { role, content, peerId: senderId, model: modelId };
+  const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
+  for (const [, p] of peers) {
+    if (p.dc?.readyState === 'open') {
+      try { p.dc.send(raw); } catch(e) {}
+    }
+  }
+}
+
 async function generateResponse(userMessage) {
   if (isGenerating) return;
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
+  broadcastChat("user", userMessage, peerId, null);
 
   // 1. LOCAL: tenemos engine completo
   if (engine) {
@@ -740,6 +752,7 @@ async function runLocalInference(userMessage) {
     const metaEl = aiMsgEl.querySelector('.msg-meta');
     if (metaEl) metaEl.textContent = `${currentModelLabel} · local · ${localTPS} tok/s · ${Math.round(ms)}ms`;
     chatHistory.push({ role: "assistant", content: fullResponse });
+    broadcastChat("assistant", fullResponse, peerId, currentModelLabel);
   } catch (err) {
     const contentEl = aiMsgEl.querySelector('.msg-content');
     aiMsgEl.querySelector('.typing-indicator')?.remove();
@@ -810,6 +823,7 @@ async function runRemoteInference(userMessage, remotePeerId) {
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
 
     chatHistory.push({ role: "assistant", content: result.text });
+    broadcastChat("assistant", result.text, remotePeerId, result.model);
   } catch(err) {
     const contentEl = aiMsgEl.querySelector('.msg-content');
     contentEl.textContent = `Error de inferencia federada: ${err.message}\nIntenta de nuevo cuando haya más peers conectados.`;
@@ -1151,6 +1165,23 @@ async function handleBinMsg(fromId, buf) {
   if (!peer) return;
 
   switch(m.type) {
+    case MSG.CHAT:
+      if (m.payload) {
+        const { role, content, peerId: senderId, model } = m.payload;
+        chatHistory.push({ role, content });
+        const aiMsgEl = addMessageToUI(role, content);
+        const sid = (senderId || fromId).slice(0, 6);
+        if (role === 'user') {
+          aiMsgEl.querySelector('.msg-header').textContent = `User (${sid})`;
+        } else {
+          aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'fed-av');
+          aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${sid})`;
+          const metaEl = aiMsgEl.querySelector('.msg-meta');
+          if (metaEl) metaEl.textContent = `${model || 'remote'} · peer:${sid}`;
+        }
+      }
+      break;
+
     case MSG.HELLO:
       if (m.payload) {
         peer.deviceTier = m.payload.deviceTier || peer.deviceTier;
@@ -1174,19 +1205,24 @@ async function handleBinMsg(fromId, buf) {
 
     case MSG.TOK_REQ:
       // Un peer nos pide que generemos texto (tenemos engine completo)
-      if (engine && !isGenerating && m.payload?.messages) {
+      if (engine && m.payload?.messages) {
+        if (isGenerating) {
+          if (peer.dc?.readyState === "open") {
+            peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: El peer está ocupado generando, reintenta pronto.', model: null }));
+          }
+          break;
+        }
         try {
-          const res = await engine.chat.completions.create({
-            messages: m.payload.messages, stream: false,
+          const chunks = await engine.chat.completions.create({
+            messages: m.payload.messages, stream: true,
             temperature: 0.7, max_tokens: m.payload.max_tokens || 512
           });
-          const text = res.choices[0]?.message?.content || '';
-          const tps = res.usage?.completion_tokens
-            ? Math.round(res.usage.completion_tokens / ((Date.now() - m.payload.ts) / 1000))
-            : localTPS;
+          let fullR = "";
+          for await (const chunk of chunks) fullR += chunk.choices[0]?.delta?.content || "";
+
           if (peer.dc?.readyState === "open") {
             peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, {
-              text, model: currentModelId, tps
+              text: fullR, model: currentModelId, tps: localTPS
             }));
           }
         } catch(e) {
