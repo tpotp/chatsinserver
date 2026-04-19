@@ -1090,7 +1090,7 @@ function initiateWebRTC(targetId) {
   }
   const conn = createPeerConn(targetId);
   peer.conn = conn;
-  const dc = conn.createDataChannel("p2p", { ordered: false, maxRetransmits: 0 });
+  const dc = conn.createDataChannel("p2p", { ordered: true });
   peer.dc = dc;
   setupDC(dc, targetId);
   conn.createOffer()
