@@ -484,6 +484,7 @@ let currentModelLabel = "small";
 
 const relayMap = new Map();
 const seenEventIds = new Set();
+const seenMsgIds = new Set();
 const chatHistory = [];
 const fedPending = new Map();
 
@@ -690,11 +691,23 @@ async function initEngine() {
 //  INFERENCIA — Local | Asistida | Federada | Relay
 // ══════════════════════════════════════════════════════════════════════════
 
-function broadcastChat(role, content, senderId, modelId) {
-  const payload = { role, content, peerId: senderId, model: modelId };
-  const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
+function getActiveConnections() {
+  let count = 0;
   for (const [, p] of peers) {
-    if (p.dc?.readyState === 'open') {
+    if (p.conn !== null || p.dc?.readyState === 'open') count++;
+  }
+  return count;
+}
+
+function generateMsgId() { return Math.random().toString(36).substr(2, 9); }
+
+function broadcastChat(role, content, senderId, modelId, msgId = null, hops = 0, excludePeer = null) {
+  const id = msgId || generateMsgId();
+  seenMsgIds.add(id);
+  const payload = { id, role, content, peerId: senderId, model: modelId, hops };
+  const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
+  for (const [pid, p] of peers) {
+    if (pid !== excludePeer && p.dc?.readyState === 'open') {
       try { p.dc.send(raw); } catch(e) {}
     }
   }
@@ -763,15 +776,22 @@ async function runLocalInference(userMessage) {
 }
 
 function findBestPeerWithEngine() {
-  // Ordenar peers: primero los que tienen engine cargado y menor RTT
   let best = null, bestScore = Infinity;
   for (const [pid, peer] of peers) {
-    if (peer.dc?.readyState !== 'open') continue;
-    if (!peer.hasEngine) continue;
+    if (peer.dc?.readyState !== 'open' || !peer.hasEngine) continue;
+    if (peer.reputationScore !== undefined && peer.reputationScore < 0) continue;
     const score = peer.rtt < Infinity ? peer.rtt : 9999;
     if (score < bestScore) { best = pid; bestScore = score; }
   }
-  return best; // returns peerId or null
+  if (best) return best;
+  // Fallback: search offline GPU peers
+  for (const [pid, peer] of peers) {
+    if (peer.hasEngine && !peer.conn) {
+      if (peer.reputationScore !== undefined && peer.reputationScore < 0) continue;
+      return pid;
+    }
+  }
+  return null;
 }
 
 async function runRemoteInference(userMessage, remotePeerId) {
@@ -779,7 +799,25 @@ async function runRemoteInference(userMessage, remotePeerId) {
   const peer = peers.get(remotePeerId);
   const aiMsgEl = addMessageToUI("assistant", null, true);
   aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'fed-av');
-  aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${remotePeerId})`;
+  
+  // Establecer tunel efímero WebRTC si no hay conexión activa
+  if (!peer.dc || peer.dc.readyState !== 'open') {
+    aiMsgEl.querySelector('.msg-header').textContent = `AI - connect GPU tunnel a ${remotePeerId.slice(0,4)}...`;
+    initiateWebRTC(remotePeerId);
+    let connected = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      if (peer.dc?.readyState === 'open') { connected = true; break; }
+    }
+    if (!connected) {
+      isGenerating = false;
+      aiMsgEl.querySelector('.msg-content').textContent = `Error: Tiempo agotado cavando túnel hacia el puerto de GPU remoto.`;
+      peer.reputationScore = (peer.reputationScore || 0) - 1;
+      return;
+    }
+  }
+
+  aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${remotePeerId.slice(0,6)})`;
 
   const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
   const timeoutMs = 30000;
@@ -789,7 +827,8 @@ async function runRemoteInference(userMessage, remotePeerId) {
     setTimeout(() => {
       if (fedPending.has(reqId)) {
         fedPending.delete(reqId);
-        reject(new Error('Timeout esperando respuesta del peer'));
+        peer.reputationScore = (peer.reputationScore || 0) - 1;
+        reject(new Error('Timeout de red, ha sido penalizado en la tabla.'));
       }
     }, timeoutMs);
   });
@@ -824,6 +863,7 @@ async function runRemoteInference(userMessage, remotePeerId) {
 
     chatHistory.push({ role: "assistant", content: result.text });
     broadcastChat("assistant", result.text, remotePeerId, result.model);
+    peer.reputationScore = (peer.reputationScore || 0) + 1;
   } catch(err) {
     const contentEl = aiMsgEl.querySelector('.msg-content');
     contentEl.textContent = `Error de inferencia federada: ${err.message}\nIntenta de nuevo cuando haya más peers conectados.`;
@@ -970,11 +1010,11 @@ function handlePeerPresence(p) {
     });
     // El peer con menor peerId inicia; el otro espera y reintenta si no hay conexión
     if (peerId < p.peerId) {
-      initiateWebRTC(p.peerId);
+      if (getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId);
     } else {
       setTimeout(() => {
         const peer = peers.get(p.peerId);
-        if (peer && (!peer.conn || peer.conn.connectionState === 'closed')) {
+        if (peer && (!peer.conn || peer.conn.connectionState === 'closed') && getActiveConnections() < CONFIG.maxPeers) {
           console.log(`[WebRTC] Iniciando conexión defensiva con ${p.peerId}`);
           initiateWebRTC(p.peerId);
         }
@@ -1110,6 +1150,11 @@ async function handleWebRTCSignal(fromId, signal) {
     peers.set(fromId, peer);
   }
   if (signal.type === "offer") {
+    // Rechazar gossip offers si estamos llenos Y el peer/nosotros no tenemos aceleración por GPU
+    if (getActiveConnections() >= CONFIG.maxPeers && !peer.conn && !peer.hasEngine && !engine) {
+      console.log(`[P2P] Nodo lleno, rechazando offer gossip de ${fromId}`);
+      return; 
+    }
     // Rechazar si ya tenemos conexión activa Y somos el que debería haber iniciado
     if (peer.conn && ['connecting','connected'].includes(peer.conn.connectionState) && peerId > fromId) return;
     try { peer.conn?.close(); } catch(e) {}
@@ -1166,8 +1211,15 @@ async function handleBinMsg(fromId, buf) {
 
   switch(m.type) {
     case MSG.CHAT:
-      if (m.payload) {
-        const { role, content, peerId: senderId, model } = m.payload;
+      if (m.payload && m.payload.id) {
+        if (seenMsgIds.has(m.payload.id)) break;
+        seenMsgIds.add(m.payload.id);
+
+        const { id, role, content, peerId: senderId, model, hops = 0 } = m.payload;
+        if (hops < CONFIG.maxHops) {
+          broadcastChat(role, content, senderId, model, id, hops + 1, fromId);
+        }
+
         chatHistory.push({ role, content });
         const aiMsgEl = addMessageToUI(role, content);
         const sid = (senderId || fromId).slice(0, 6);
