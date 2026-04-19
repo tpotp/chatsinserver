@@ -931,9 +931,9 @@ function handleRelayMsg(msg) {
   if (event.pubkey === pubKeyHex) return;
   try {
     const c = JSON.parse(event.content);
-    // Compatibilidad: el campo peerId puede estar en c.peerId
-    if (c && c.peerId && c.peerId !== peerId) {
-      console.log(`[Nostr] rcv type=${c.type} from=${c.peerId}`);
+    const senderId = c.peerId || c.from;
+    if (c && senderId && senderId !== peerId) {
+      console.log(`[Nostr] rcv type=${c.type} from=${senderId}`);
       handleNostrContent(c);
     }
   } catch(e) {}
