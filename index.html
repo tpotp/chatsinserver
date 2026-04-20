@@ -792,6 +792,21 @@ async function getNostrMod() {
 
 const webllm = await import("https://esm.run/@mlc-ai/web-llm");
 
+// ── DISTRIBUTED INFERENCE MODULES ────────────────────────────────────────
+// Phase 1: WebGPU compute kernel with WGSL shaders
+const { GPUInferenceEngine, GPUTensorPool, createGPUEngine, MODEL_CONFIGS } = await import('./gpu_kernel.js').catch(e => { console.warn('[DIS] gpu_kernel.js not loaded:', e.message); return {}; });
+// Phase 2: Ramanujan expander graph topology
+const { RamanujanGraphBuilder, CheegerMetric, TopologyEnforcer } = await import('./graph_topology.js').catch(e => { console.warn('[DIS] graph_topology.js not loaded:', e.message); return {}; });
+// Phase 3: Max-flow tensor routing + Reed-Solomon erasure coding
+const { BandwidthProber, TensorRouter, PushRelabelSolver } = await import('./flow_router.js').catch(e => { console.warn('[DIS] flow_router.js not loaded:', e.message); return {}; });
+const { ReedSolomon, ShardDistributor } = await import('./reed_solomon.js').catch(e => { console.warn('[DIS] reed_solomon.js not loaded:', e.message); return {}; });
+// Phase 4: Lyapunov optimization
+const { SwarmOptimizer } = await import('./lyapunov_optimizer.js').catch(e => { console.warn('[DIS] lyapunov_optimizer.js not loaded:', e.message); return {}; });
+// Phase 5: Weight loader
+const { PeerWeightDistributor } = await import('./weight_loader.js').catch(e => { console.warn('[DIS] weight_loader.js not loaded:', e.message); return {}; });
+
+console.log('[DIS] Distributed inference modules loaded');
+
 // ── CONFIG ───────────────────────────────────────────────────────────────
 const ROLE_LABELS = {
   master_reasoner: '👑 Reasoner',
@@ -1015,6 +1030,10 @@ const MSG = {
   CONSENSUS_REQ: 0x60, CONSENSUS_RES: 0x61,
   VOTE: 0x70, REP_UPDATE: 0x71,
   PETALS_TENSOR: 0x80, PETALS_ASSIGN: 0x81, PETALS_READY: 0x82,
+  // Distributed Inference Protocol (Phase 3-5)
+  RS_SHARD_STORE: 0x90, RS_SHARD_REQ: 0x91, RS_SHARD_RES: 0x92, RS_RECOVER: 0x93,
+  FLOW_TENSOR_CHUNK: 0xA0, FLOW_PROBE: 0xA1, FLOW_PROBE_RES: 0xA2,
+  TOPO_UPDATE: 0xB0, TELEMETRY: 0xB1,
 };
 
 function encodeMsg(type, reqId, seq, payload) {
@@ -1098,6 +1117,14 @@ let petalsMyLayers = [];     // which layers this node owns
 let petalsTokenizer = null;
 const petalsReadyPeers = new Map(); // peerId -> { layers: [...] }
 
+// ── DISTRIBUTED INFERENCE STATE ─────────────────────────────────────────
+let gpuEngine = null;           // GPUInferenceEngine instance
+let topologyEnforcer = null;    // TopologyEnforcer instance
+let swarmOptimizer = null;      // SwarmOptimizer (Lyapunov + Markov + Telemetry)
+let bandwidthProber = null;     // BandwidthProber instance
+let tensorRouter = null;        // TensorRouter instance
+let weightDistributor = null;   // PeerWeightDistributor instance
+
 async function petalsActivate() {
   if (petalsActive) return;
   const btn = document.getElementById('petals-activate-btn');
@@ -1134,6 +1161,9 @@ async function petalsActivate() {
 
     // Load ONNX sessions
     ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+      if (ort.env.webgpu) ort.env.webgpu.powerPreference = 'low-power';
+    }
     for (const comp of myComponents) {
       const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
       btn.textContent = `⏳ ${file}...`;
@@ -1167,6 +1197,9 @@ async function petalsActivate() {
   }
 }
 
+
+// -- PETALS RUNTIME (Full-context recomputation, optimal for 135M) --
+
 async function petalsRunLayer(component, inputData, seqLen) {
   const session = petalsONNXSessions[component];
   if (!session) return null;
@@ -1180,12 +1213,13 @@ async function petalsRunLayer(component, inputData, seqLen) {
     const logits = results.logits.data;
     let maxIdx = 0, maxVal = -Infinity;
     for (let i = 0; i < logits.length; i++) { if (logits[i] > maxVal) { maxVal = logits[i]; maxIdx = i; } }
-    const tokenStr = petalsTokenizer.decode([maxIdx]);
-    return { tokenId: maxIdx, tokenStr };
+    return { tokenId: maxIdx, tokenStr: petalsTokenizer.decode([maxIdx]) };
   } else {
-    // layer_N
+    // layer_N with causal mask
     const hiddenTensor = new ort.Tensor('float32', new Float32Array(inputData), [1, seqLen, PETALS_HIDDEN_SIZE]);
-    const maskTensor = new ort.Tensor('float32', new Float32Array(seqLen * seqLen).fill(1.0), [1, 1, seqLen, seqLen]);
+    const mask = new Float32Array(seqLen * seqLen);
+    for (let i = 0; i < seqLen; i++) for (let j = 0; j <= i; j++) mask[i * seqLen + j] = 1.0;
+    const maskTensor = new ort.Tensor('float32', mask, [1, 1, seqLen, seqLen]);
     const posTensor = new ort.Tensor('int64', BigInt64Array.from(Array.from({length: seqLen}, (_, i) => BigInt(i))), [1, seqLen]);
     const results = await session.run({ input_hidden: hiddenTensor, attention_mask: maskTensor, position_ids: posTensor });
     return { data: Array.from(results.output_hidden.data), seqLen };
@@ -1194,7 +1228,7 @@ async function petalsRunLayer(component, inputData, seqLen) {
 
 function petalsGetNextComponent(current) {
   if (current === 'embeds') return 'layer_0';
-  if (current === 'head') return null; // done
+  if (current === 'head') return null;
   const m = current.match(/layer_(\d+)/);
   if (m) {
     const next = parseInt(m[1]) + 1;
@@ -1214,56 +1248,99 @@ function petalsFindPeerForComponent(comp) {
   return null;
 }
 
-async function petalsInference(text) {
-  if (!petalsActive || !petalsTokenizer) return null;
-  const { input_ids } = await petalsTokenizer(text);
-  const idArray = Array.from(input_ids.data);
-  const seqLen = idArray.length;
-
+// Full forward pass through all layers for a token sequence
+async function petalsForwardPass(tokenIds) {
+  const seqLen = tokenIds.length;
   let currentComp = 'embeds';
-  let currentData = idArray;
+  let currentData = tokenIds;
   let currentSeqLen = seqLen;
 
   while (currentComp) {
     if (petalsONNXSessions[currentComp]) {
-      // We have it locally
       const result = await petalsRunLayer(currentComp, currentData, currentSeqLen);
-      if (currentComp === 'head') return result; // final token
+      if (currentComp === 'head') return result;
       currentData = result.data;
       currentSeqLen = result.seqLen;
       currentComp = petalsGetNextComponent(currentComp);
     } else {
-      // Need to send to a peer
-      const peerId_target = petalsFindPeerForComponent(currentComp);
-      if (!peerId_target) return { tokenStr: '[No peer for ' + currentComp + ']' };
-      const peer = peers.get(peerId_target);
-      // Send tensor + wait for response
+      const target = petalsFindPeerForComponent(currentComp);
+      if (!target) return null;
+      const peer = peers.get(target);
       const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
       return new Promise((resolve) => {
+        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 15000);
         fedPending.set(reqId, {
-          resolve,
-          onChunk: () => {},
+          resolve: (res) => { clearTimeout(timeout); resolve(res); },
+          onChunk: () => {}
         });
-        // Chunk the data to avoid exceeding DataChannel limits
-        const payload = JSON.stringify({ component: currentComp, data: currentData, seqLen: currentSeqLen });
         peer.dc.send(encodeMsg(MSG.PETALS_TENSOR, reqId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
-        setTimeout(() => { if (fedPending.has(reqId)) { fedPending.delete(reqId); resolve({ tokenStr: '[Timeout]' }); } }, 30000);
       });
     }
   }
   return null;
 }
 
+async function runPetalsInference(userMessage) {
+  isGenerating = true;
+  metrics.totalRequests++;
+  const aiMsgEl = addMessageToUI("assistant", null, true);
+  const startTime = performance.now();
+  let fullResponse = "", tokenCount = 0;
+
+  const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
+  const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
+  if (!petalsTokenizer) { isGenerating = false; return; }
+  const encoded = await petalsTokenizer(promptText);
+  let allTokenIds = Array.from(encoded.input_ids.data);
+
+  aiMsgEl.querySelector('.typing-indicator')?.remove();
+  const contentEl = aiMsgEl.querySelector('.msg-content');
+  const pill = document.createElement('div');
+  pill.className = 'fed-pill';
+  pill.textContent = '\uD83C\uDF38 Web-Petals Swarm \u00B7 ' + petalsMyLayers.length + ' local layers';
+  aiMsgEl.querySelector('.msg-body').appendChild(pill);
+
+  try {
+    while (tokenCount < 200) {
+      const result = await petalsForwardPass(allTokenIds);
+      if (!result || result.tokenId === undefined) { fullResponse += " [P2P timeout]"; break; }
+
+      const { tokenId, tokenStr } = result;
+      // Check for end-of-text tokens
+      if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) break;
+
+      fullResponse += tokenStr;
+      contentEl.textContent = fullResponse;
+      document.getElementById('messages').scrollTop = 99999;
+      tokenCount++;
+
+      // Append new token and recompute full context next iteration
+      allTokenIds.push(tokenId);
+
+      // Safety: cap context at 256 tokens to keep mobile responsive
+      if (allTokenIds.length > 256) break;
+    }
+  } catch(e) { contentEl.textContent += '\n[P2P Error: ' + e.message + ']'; }
+
+  const ms = performance.now() - startTime;
+  localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
+  const metaEl = aiMsgEl.querySelector('.msg-meta');
+  if (metaEl) metaEl.textContent = 'Swarm-135M \u00B7 ' + petalsMyLayers.length + ' local layers \u00B7 ' + localTPS + ' tok/s \u00B7 ' + Math.round(ms) + 'ms';
+
+  chatHistory.push({ role: "assistant", content: fullResponse });
+  broadcastChat("assistant", fullResponse, peerId, "Swarm-135M");
+  isGenerating = false;
+}
+
 // Handle incoming Petals tensor from peer
 async function handlePetalsTensor(fromId, m) {
   const { component, data, seqLen } = m.payload;
-  if (!petalsONNXSessions[component]) return; // I don't have this layer
+  if (!petalsONNXSessions[component]) return;
 
   const result = await petalsRunLayer(component, data, seqLen);
   const nextComp = petalsGetNextComponent(component);
 
   if (component === 'head' || !nextComp) {
-    // Send final result back
     const peer = peers.get(fromId);
     if (peer?.dc?.readyState === 'open') {
       peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
@@ -1271,23 +1348,18 @@ async function handlePetalsTensor(fromId, m) {
     return;
   }
 
-  // Check if we have the next component too
+  // Chain through local layers
   if (petalsONNXSessions[nextComp]) {
-    // Chain locally
-    const nextResult = await petalsRunLayer(nextComp, result.data, result.seqLen);
-    // Keep chaining while we have layers
     let comp = nextComp;
-    let chainData = nextResult;
+    let chainData = result;
     while (true) {
       const nc = petalsGetNextComponent(comp);
       if (!nc || !petalsONNXSessions[nc]) {
-        // Need to forward or return
         if (comp === 'head' || !nc) {
           const peer = peers.get(fromId);
           if (peer?.dc?.readyState === 'open') peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
           return;
         }
-        // Forward to peer that has nc
         const target = petalsFindPeerForComponent(nc);
         if (target) {
           const tp = peers.get(target);
@@ -1299,7 +1371,6 @@ async function handlePetalsTensor(fromId, m) {
       comp = nc;
     }
   } else {
-    // Forward to the peer that has nextComp
     const target = petalsFindPeerForComponent(nextComp);
     if (target) {
       const tp = peers.get(target);
@@ -1307,6 +1378,8 @@ async function handlePetalsTensor(fromId, m) {
     }
   }
 }
+
+
 
 // ── METRICS SYSTEM ──────────────────────────────────────────────────────
 const metrics = {
@@ -1603,6 +1676,20 @@ async function generateResponse(userMessage) {
     return await runBenchmarkComparison();
   }
 
+  // Handle /dsim command (Distributed Swarm Simulation)
+  if (userMessage.trim().toLowerCase() === '/dsim') {
+    isGenerating = true;
+    document.getElementById('sim-log')?.classList.add('active');
+    try {
+      const { runSimulation } = await import('./swarm_simulator.js');
+      await runSimulation((msg, cls) => simLog(msg, cls));
+    } catch(e) {
+      simLog(`Error loading simulator: ${e.message}`, 'sim-fail');
+    }
+    isGenerating = false;
+    return;
+  }
+
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
   broadcastChat("user", userMessage, peerId, null);
@@ -1610,13 +1697,34 @@ async function generateResponse(userMessage) {
   const intent = await classifyIntentWithLLM(userMessage);
   const classifyNote = intent.method === 'llm' ? ` [LLM ${intent.ms}ms]` : ' [keyword]';
 
+  // If Web-Petals is active, intercept it!
+  if (petalsActive && petalsReadyPeers.size > 0) {
+    showRouteBanner(`🌸 Intercepción Sharding: Derivando a Enjambre Petals (O(1))`);
+    return await runPetalsInference(userMessage);
+  }
+
   const expertCount = countExpertPeers() + (engine ? 1 : 0);
   if (expertCount >= 2 && (intent.category === 'code' || intent.category === 'logic' || intent.category === 'complex')) {
     showRouteBanner(`⚡ Consenso${classifyNote}: Consultando ${Math.min(expertCount, 4)} expertos…`);
     return await runConsensusInference(userMessage, intent);
   }
 
-  const route = routeRequest(intent.targetRole);
+  let route;
+  if (swarmOptimizer) {
+    const winner = swarmOptimizer.route(intent, !!engine);
+    if (winner) {
+      if (winner.peerId === null) {
+        route = { type: 'local', peerId: null, role: myRole, tier: deviceTier };
+      } else {
+        const p = peers.get(winner.peerId);
+        route = { type: 'remote', peerId: winner.peerId, role: winner.role || p?.moeRole, tier: winner.tier || p?.deviceTier };
+      }
+    } else {
+      route = routeRequest(intent.targetRole);
+    }
+  } else {
+    route = routeRequest(intent.targetRole);
+  }
 
   if (!route) {
     showRouteBanner(`☁️ Inferencia Remota → Relay Backup (Tier Cloud)`);
@@ -3198,6 +3306,56 @@ async function boot() {
 
   if (engine) { updateInitStatus('Running benchmark…'); await runBenchmark(); }
 
+  // ── DISTRIBUTED INFERENCE BOOT ──────────────────────────────────────
+  try {
+    // Phase 1: Initialize WebGPU compute engine (if available)
+    if (createGPUEngine && hasWebGPU) {
+      updateInitStatus('Initializing WebGPU compute kernel…');
+      const modelCfg = MODEL_CONFIGS?.['SmolLM2-135M'] || MODEL_CONFIGS?.['Llama-3-8B'];
+      if (modelCfg) {
+        gpuEngine = await createGPUEngine(modelCfg);
+        if (gpuEngine) console.log('[DIS] WebGPU compute engine ready');
+      }
+    }
+
+    // Phase 2: Start topology enforcer (Ramanujan expander graph)
+    if (TopologyEnforcer) {
+      topologyEnforcer = new TopologyEnforcer(
+        { peers, peerId, initiateWebRTC, removePeer: (pid) => { const p = peers.get(pid); if (p?.dc) p.dc.close(); peers.delete(pid); } },
+        { degree: 6, intervalMs: 15000, minPeers: 4, onMetrics: (m) => {
+          console.log(`[Topo] λ₂=${m.lambda2} h≥${m.cheegerLower} expander=${m.isExpander} missing=${m.missingConnections}`);
+        }}
+      );
+      topologyEnforcer.start();
+      console.log('[DIS] Topology enforcer started (k=6 Ramanujan graph)');
+    }
+
+    // Phase 3: Start bandwidth prober and tensor router
+    if (BandwidthProber) {
+      bandwidthProber = new BandwidthProber();
+      bandwidthProber.start(peers);
+      console.log('[DIS] Bandwidth prober started');
+    }
+    if (TensorRouter && bandwidthProber) {
+      tensorRouter = new TensorRouter(bandwidthProber);
+      console.log('[DIS] Tensor router ready (Push-Relabel max-flow)');
+    }
+
+    // Phase 4: Start Lyapunov swarm optimizer
+    if (SwarmOptimizer) {
+      swarmOptimizer = new SwarmOptimizer({ V: 0.5, maxQueueDepth: 8 });
+      await swarmOptimizer.start(peers, peerId);
+      // Sync local benchmark to service rate
+      if (localBenchmark > 0) swarmOptimizer.controller.updateServiceRate(peerId, localBenchmark);
+      console.log('[DIS] Lyapunov swarm optimizer started');
+    }
+
+    console.log('[DIS] ✅ Distributed inference subsystem fully initialized');
+  } catch (disErr) {
+    console.warn('[DIS] Partial initialization (non-fatal):', disErr.message);
+  }
+  // ── END DISTRIBUTED BOOT ───────────────────────────────────────────
+
   await new Promise(r => setTimeout(r, 2000));
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
@@ -3207,8 +3365,14 @@ async function boot() {
 
   const roleLabel = ROLE_LABELS[myRole] || myRole;
   const classMethod = getCurrentModelSize() <= 500 && engine ? 'LLM (360M)' : 'keyword';
+  const disStatus = [
+    gpuEngine      ? '🔥 WebGPU Compute' : null,
+    topologyEnforcer ? '🔗 Ramanujan Graph' : null,
+    tensorRouter   ? '🌊 Max-Flow Router' : null,
+    swarmOptimizer ? '⚖️ Lyapunov Optimizer' : null,
+  ].filter(Boolean);
   const bootLines = [
-    `HIVE MIND v7 — Room: #${roomName}`,
+    `HIVE MIND v8 — Room: #${roomName}`,
     '',
     engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → relay/cache mode',
     engine ? `📊 Benchmark: ${localBenchmark} tok/s (Proof of Compute)` : '',
@@ -3218,10 +3382,12 @@ async function boot() {
     `WebGPU: ${hasWebGPU ? 'yes' : 'no'} · VRAM~${availableVRAM}MB · RAM: ${memoryMB}MB`,
     `Peer ID: ${peerId}`,
     '',
+    disStatus.length > 0 ? `🧠 Distributed: ${disStatus.join(' · ')}` : '⚠️ Distributed: modules not loaded',
+    '',
     `Nostr relays: ${connectedRelays} conectados`,
     `Sala "${roomName}" activa — comparte el invite link 📲`,
     '',
-    `💡 Tip: Type /benchmark to compare Solo vs Hive performance`,
+    `💡 Tip: /benchmark (Solo vs Hive) · /dsim (100-node distributed test)`,
   ].filter(Boolean);
   addMessageToUI('assistant', bootLines.join('\n'));
 
@@ -3232,6 +3398,13 @@ async function boot() {
   setInterval(autoScale, CONFIG.scoreRecalcMs);
   setInterval(updateRelayUI, 2000);
   setInterval(() => reputation.addUptime(), 60000); // +1 rep per minute uptime
+  // Periodic Lyapunov diagnostics
+  if (swarmOptimizer) {
+    setInterval(() => {
+      swarmOptimizer.controller.updateQueue(peerId, fedPending.size);
+      if (localTPS > 0) swarmOptimizer.controller.updateServiceRate(peerId, localTPS);
+    }, 5000);
+  }
 
   // Check for simulation mode
   if (isSimulateMode) {
