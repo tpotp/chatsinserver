@@ -87,6 +87,23 @@ body::before {
   display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
 }
 @media (max-width: 768px) { #sidebar { display: none; } }
+#petals-fab {
+  display: none; position: fixed; bottom: 80px; right: 16px; z-index: 50;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary), #00cec9);
+  border: none; color: white; font-size: 22px; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(108,92,246,0.4);
+  transition: all var(--transition-med);
+  animation: petals-pulse 2s ease-in-out infinite;
+}
+#petals-fab.active { background: linear-gradient(135deg, #00b894, #00cec9); animation: none; }
+#petals-fab .fab-badge {
+  position: absolute; top: -2px; right: -2px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--tier-d); border: 2px solid var(--bg-primary);
+}
+#petals-fab.active .fab-badge { background: var(--peer-online); }
+@keyframes petals-pulse { 0%,100% { box-shadow: 0 4px 20px rgba(108,92,246,0.4); } 50% { box-shadow: 0 4px 30px rgba(108,92,246,0.7); } }
+@media (max-width: 1024px) { #petals-fab { display: flex !important; align-items: center; justify-content: center; z-index: 9999; } }
 #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
 .sidebar-section { padding: 14px; border-bottom: 1px solid var(--border-subtle); }
@@ -682,6 +699,9 @@ body::before {
     </div>
   </div>
 </div>
+
+<!-- Petals Mobile FAB -->
+<button id="petals-fab" title="Web-Petals Sharding">🌸<span class="fab-badge"></span></button>
 
 <!-- Room Creation Modal -->
 <div class="modal-overlay" id="room-modal">
@@ -3142,6 +3162,7 @@ async function boot() {
   setupNicknameUI();
   setupModals();
   document.getElementById('petals-activate-btn').addEventListener('click', () => petalsActivate());
+  document.getElementById('petals-fab').addEventListener('click', () => petalsActivate());
   connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI(); updateRoomMembersUI();
 
   await initEngine();
