@@ -1097,6 +1097,7 @@ let deviceTier = "D", hasWebGPU = false, memoryMB = 0, availableVRAM = 0, localT
 let myRole = "relay", inferenceMode = "relay", currentModelLabel = "none";
 let myShardInfo = null;
 
+const masqueradedPeers = new Map();
 const peers = new Map();
 let networkScore = 0;
 const relayMap = new Map();
@@ -2499,11 +2500,11 @@ function renderQRCode(text, canvas, size = 200) {
 // ══════════════════════════════════════════════════════════════════════════
 //  NOSTR RELAY MANAGER
 // ══════════════════════════════════════════════════════════════════════════
-async function signAndPublish(content) {
+async function signAndPublish(content, asPrivKeyBytes = null) {
   const nostr = await getNostrMod();
   const template = { kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", CONFIG.appNamespace]], content: JSON.stringify(content) };
   let event;
-  try { event = nostr.finalizeEvent(template, privKeyBytes); } catch(e) { return null; }
+  try { event = nostr.finalizeEvent(template, asPrivKeyBytes || privKeyBytes); } catch(e) { return null; }
   seenEventIds.add(event.id);
   const raw = JSON.stringify(["EVENT", event]);
   let sent = 0;
@@ -2546,8 +2547,20 @@ function publishPresence() {
     hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now(),
     nickname: myNickname, repScore: reputation.myScore,
   });
+  for (const [vId, vPeer] of masqueradedPeers) {
+    signAndPublish({
+      type: "presence", peerId: vId, deviceTier: vPeer.deviceTier, webgpu: vPeer.webgpu, memoryMB: vPeer.memoryMB, tps: vPeer.tps,
+      currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: vPeer.moeRole,
+      hasEngine: vPeer.hasEngine, shardInfo: vPeer.shardInfo, inferenceMode: vPeer.inferenceMode, timestamp: Date.now(),
+      nickname: vPeer.nickname, repScore: vPeer.repScore
+    }, vPeer.privKey);
+  }
 }
-function publishSignal(targetId, signal) { signAndPublish({ type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() }); }
+function publishSignal(targetId, signal, fromVirtualId = null) { 
+  const fromPrivKey = fromVirtualId ? masqueradedPeers.get(fromVirtualId)?.privKey : privKeyBytes;
+  const fromId = fromVirtualId || peerId;
+  signAndPublish({ type: "signal", from: fromId, to: targetId, signal, timestamp: Date.now() }, fromPrivKey); 
+}
 
 function handleRelayMsg(msg) {
   if (!Array.isArray(msg) || msg[0] !== "EVENT") return;
@@ -2555,32 +2568,39 @@ function handleRelayMsg(msg) {
   seenEventIds.add(event.id);
   if (seenEventIds.size > 2000) { const arr = [...seenEventIds]; seenEventIds.clear(); arr.slice(-1000).forEach(id => seenEventIds.add(id)); }
   if (event.pubkey === pubKeyHex) return;
+  for (const [, vp] of masqueradedPeers) if (event.pubkey === vp.pubKey) return;
   try { const c = JSON.parse(event.content); const senderId = c.peerId || c.from; if (c && senderId && senderId !== peerId) handleNostrContent(c); } catch(e) {}
 }
 function handleNostrContent(c) {
   if (c.type === "presence") handlePeerPresence(c);
-  else if (c.type === "signal" && c.to === peerId) {
-    if (c.signal.type === "moe_fallback_req") handleNostrFallbackReq(c.from, c.signal);
+  else if (c.type === "signal" && (c.to === peerId || masqueradedPeers.has(c.to))) {
+    const virtualId = masqueradedPeers.has(c.to) ? c.to : null;
+    if (c.signal.type === "moe_fallback_req") handleNostrFallbackReq(c.from, c.signal, virtualId);
     else if (c.signal.type === "moe_fallback_res") handleNostrFallbackRes(c.from, c.signal);
-    else handleWebRTCSignal(c.from, c.signal);
+    else handleWebRTCSignal(c.from, c.signal, virtualId);
   }
 }
 
-async function handleNostrFallbackReq(fromId, signal) {
+async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
   if (!engine) return;
   const reqId = signal.reqId;
+  const publishTo = virtualId || peerId;
   if (isGenerating) {
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Ocupado, reintenta (NostrFallback)." }});
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Ocupado, reintenta (NostrFallback)." }}, virtualId);
     return;
   }
   isGenerating = true;
   try {
     const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
-    const text = res.choices[0]?.message?.content || "";
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: currentModelId, tps: localTPS }});
+    let text = res.choices[0]?.message?.content || "";
+    if (virtualId) {
+      const vnick = masqueradedPeers.get(virtualId).nickname;
+      text += `\n\n> ✅ *Inferencia acelerada vía Colmena Chile: procesado por el nodo virtual ${vnick}*`;
+    }
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: currentModelId, tps: localTPS }}, virtualId);
     reputation.addInference();
   } catch (e) {
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }});
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }}, virtualId);
   }
   isGenerating = false;
 }
@@ -2631,15 +2651,20 @@ const ICE_SERVERS = [
   { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
 ];
 
-function createPeerConn(targetId) {
+function createPeerConn(targetId, myVirtualId = null) {
   const conn = new RTCPeerConnection({ iceServers: ICE_SERVERS, bundlePolicy: 'max-bundle', iceCandidatePoolSize: 10 });
   conn.onconnectionstatechange = () => {
     const state = conn.connectionState;
+    if (myVirtualId) {
+       const vp = masqueradedPeers.get(myVirtualId);
+       if (vp && state === 'failed' || state === 'disconnected') { vp.connections?.delete(targetId); }
+       return;
+    }
     if (state === 'connected') { const p = peers.get(targetId); if (p) p.reconnectAttempts = 0; }
     else if (state === 'failed' || state === 'disconnected') scheduleWebRTCReconnect(targetId);
   };
   let iceBatch = [], iceTimer = null;
-  conn.onicecandidate = (e) => { if (!e.candidate) return; iceBatch.push(e.candidate.toJSON()); clearTimeout(iceTimer); iceTimer = setTimeout(() => { if (!iceBatch.length) return; publishSignal(targetId, { type: "candidates", candidates: [...iceBatch] }); iceBatch = []; }, CONFIG.iceBatchDelayMs); };
+  conn.onicecandidate = (e) => { if (!e.candidate) return; iceBatch.push(e.candidate.toJSON()); clearTimeout(iceTimer); iceTimer = setTimeout(() => { if (!iceBatch.length) return; publishSignal(targetId, { type: "candidates", candidates: [...iceBatch] }, myVirtualId); iceBatch = []; }, CONFIG.iceBatchDelayMs); };
   return conn;
 }
 function scheduleWebRTCReconnect(pid) {
@@ -2659,7 +2684,30 @@ function initiateWebRTC(targetId) {
   const dc = conn.createDataChannel("p2p", { ordered: true }); peer.dc = dc; setupDC(dc, targetId);
   conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription })).catch(e => console.error('[WebRTC] offer error:', e));
 }
-async function handleWebRTCSignal(fromId, signal) {
+async function handleWebRTCSignal(fromId, signal, myVirtualId = null) {
+  if (myVirtualId) {
+    const vp = masqueradedPeers.get(myVirtualId);
+    let rConn = vp.connections.get(fromId);
+    if (!rConn) { rConn = { conn: null, dc: null }; vp.connections.set(fromId, rConn); }
+    if (signal.type === "offer") {
+      try{rConn.conn?.close();}catch(e){}
+      const conn = createPeerConn(fromId, myVirtualId); rConn.conn = conn;
+      conn.ondatachannel = (e) => { rConn.dc = e.channel; setupDC(e.channel, fromId, myVirtualId); };
+      try { 
+        await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); 
+        const ans = await conn.createAnswer(); 
+        await conn.setLocalDescription(ans); 
+        publishSignal(fromId, { type:"answer", sdp: conn.localDescription }, myVirtualId); 
+      } catch(e) {}
+    } else if (signal.type === "answer" && rConn.conn) {
+      try { await rConn.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); } catch(e) {}
+    } else if ((signal.type === "candidate" || signal.type === "candidates") && rConn.conn) {
+      const candidates = signal.candidates || (signal.candidate ? [signal.candidate] : []);
+      for (const c of candidates) { try { await rConn.conn.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {} }
+    }
+    return;
+  }
+
   let peer = peers.get(fromId);
   if (!peer) { peer = { deviceTier:"D",webgpu:false,memoryMB:0,tps:0,hasEngine:false,shardInfo:null,moeRole:'relay',inferenceMode:'relay',lastSeen:Date.now(),rtt:Infinity,conn:null,dc:null,pingTimer:null,lastPingSent:0,reconnectAttempts:0,reconnectTimer:null,nickname:null,repScore:0 }; peers.set(fromId,peer); }
   if (signal.type === "offer") {
@@ -2676,21 +2724,55 @@ async function handleWebRTCSignal(fromId, signal) {
     for (const c of candidates) { try { await peer.conn.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {} }
   }
 }
-function setupDC(dc, remoteId) {
+function setupDC(dc, remoteId, myVirtualId = null) {
   dc.binaryType = "arraybuffer";
   dc.onopen = () => {
-    dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore }));
-    const peer = peers.get(remoteId);
-    if (peer) { peer.pingTimer = setInterval(() => { if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); } }, CONFIG.pingIntervalMs); }
-    updatePeerListUI(); updateRoomMembersUI();
+    if (myVirtualId) {
+      const vp = masqueradedPeers.get(myVirtualId);
+      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId: myVirtualId, deviceTier: vp.deviceTier, webgpu: vp.webgpu, tps: vp.tps, hasEngine: vp.hasEngine, shardInfo: vp.shardInfo, inferenceMode: vp.inferenceMode, modelSize: getCurrentModelSize(), moeRole: vp.moeRole, benchmark: vp.benchmark, nickname: vp.nickname, repScore: vp.repScore }));
+    } else {
+      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore }));
+      const peer = peers.get(remoteId);
+      if (peer) { peer.pingTimer = setInterval(() => { if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); } }, CONFIG.pingIntervalMs); }
+      updatePeerListUI(); updateRoomMembersUI();
+    }
   };
-  dc.onclose = () => { const peer = peers.get(remoteId); if (peer?.conn?.connectionState !== 'failed') scheduleWebRTCReconnect(remoteId); };
-  dc.onerror = () => scheduleWebRTCReconnect(remoteId);
-  dc.onmessage = (e) => { handleBinMsg(remoteId, e.data); };
+  if (!myVirtualId) {
+    dc.onclose = () => { const peer = peers.get(remoteId); if (peer?.conn?.connectionState !== 'failed') scheduleWebRTCReconnect(remoteId); };
+    dc.onerror = () => scheduleWebRTCReconnect(remoteId);
+  }
+  dc.onmessage = (e) => { handleBinMsg(remoteId, e.data, myVirtualId); };
 }
 
-async function handleBinMsg(fromId, buf) {
-  const m = decodeMsg(buf); const peer = peers.get(fromId); if (!peer) return;
+async function handleBinMsg(fromId, buf, myVirtualId = null) {
+  const m = decodeMsg(buf); 
+
+  // Virtual Peer Inference Interception
+  if (myVirtualId) {
+    if (m.type === MSG.MOE_REQ || m.type === MSG.TOK_REQ || m.type === MSG.CONSENSUS_REQ) {
+       const vp = masqueradedPeers.get(myVirtualId);
+       const rConn = vp.connections.get(fromId);
+       if (engine && (m.payload?.messages || m.payload?.hash)) {
+          if (isGenerating) { if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(m.type===MSG.CONSENSUS_REQ?MSG.CONSENSUS_RES:MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta (sim).', model: null })); return; }
+          isGenerating = true;
+          try {
+             const resType = m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_END;
+             const limit = m.payload.max_tokens || 512;
+             const chunks = await engine.chat.completions.create({ messages: m.payload.messages, stream: true, temperature: 0.7, max_tokens: limit });
+             let fullR = "", seqC = 0;
+             for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && rConn?.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ) rConn.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
+             fullR += `\n\n> ✅ *Inferencia acelerada vía Colmena Chile: procesado por el nodo ${vp.nickname} (WebRTC)*`;
+             if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: vp.tps }));
+          } catch(e) { if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(m.type===MSG.CONSENSUS_REQ?MSG.CONSENSUS_RES:MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
+          isGenerating = false;
+       }
+    } else if (m.type === MSG.HELLO) {
+       console.log(`[Virtual ${myVirtualId}] received HELLO from ${fromId}`);
+    }
+    return;
+  }
+
+  const peer = peers.get(fromId); if (!peer) return;
   switch(m.type) {
     case MSG.CHAT:
       if (m.payload?.id) {
@@ -3406,9 +3488,49 @@ async function boot() {
     }, 5000);
   }
 
-  // Check for simulation mode
-  if (isSimulateMode) {
-    setTimeout(() => runSwarmSimulation(), 1000);
+  async function startColmenaChile(n) {
+    if (!engine) {
+       simLog('⚠️ No hay IA local cargada para simular el enjambre. Iniciará en Relay Mode.', 'sim-fail');
+    }
+    const nostr = await getNostrMod();
+    simLog(`═══ COLMENA CHILE: Iniciando ${n} Nodos Reales ═══`, 'sim-title');
+    simLog(`Generando identidades y llaves Nostr en memoria...`, 'sim-info');
+    
+    const ciudades = ['Arica', 'Iquique', 'Antofagasta', 'Coquimbo', 'Valpo', 'Santiago', 'Rancagua', 'Talca', 'Conce', 'Temuco', 'Valdivia', 'PtoMontt', 'Coyhaique', 'PuntaArenas'];
+    const redes = ['5G', 'Fibra', '4G', 'WiFi', 'Starlink'];
+    const roles = ['coder', 'scientist', 'master_reasoner', 'creative', 'general'];
+    
+    for (let i = 0; i < n; i++) {
+       const priv = nostr.generateSecretKey();
+       const pub = nostr.getPublicKey(priv);
+       const pid = pub.slice(0, 12);
+       const c = ciudades[Math.floor(Math.random() * ciudades.length)];
+       const r = redes[Math.floor(Math.random() * redes.length)];
+       const tier = Math.random() > 0.8 ? 'S' : 'A';
+       const role = roles[Math.floor(Math.random() * roles.length)];
+       const tps = Math.floor(Math.random() * 40) + 10;
+       
+       masqueradedPeers.set(pid, {
+           privKey: priv, pubKey: pub,
+           deviceTier: tier, webgpu: true, memoryMB: tier==='S'?32000:8000, 
+           tps: tps, benchmark: tps, hasEngine: !!engine, shardInfo: null, 
+           inferenceMode: 'local', moeRole: role, 
+           nickname: `${c}-${r}`, repScore: Math.floor(Math.random()*100)+50,
+           connections: new Map() // remoteId -> {conn, dc}
+       });
+       simLog(`  + Creado nodo: ${c}-${r} (${pid}) - Tier ${tier} - ${tps} tok/s - ${role}`, 'sim-info');
+    }
+    simLog(`✅ ${n} nodos registrados en la red P2P y publicando Presence.`, 'sim-pass');
+    simLog(`➡️ Abre tu teléfono y conéctate para ver el enjambre chileno distribuido.`, 'sim-pass');
+    publishPresence();
+  }
+
+  // Check for simulation mode via URL parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const simParam = urlParams.get('simulate');
+  if (simParam) {
+    document.getElementById('sim-log').classList.add('active');
+    setTimeout(() => startColmenaChile(parseInt(simParam) || 30), 2000);
   }
 }
 
