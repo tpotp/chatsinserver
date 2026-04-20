@@ -1047,7 +1047,7 @@ function encodeMsg(type, reqId, seq, payload) {
     new Uint8Array(buf, 8).set(compBytes);
     const offset = 8 + compBytes.length;
     dv.setUint16(offset, payload.seqLen);
-    for(let i=0; i<hiddenData.length; i++) dv.setFloat32(offset + 2 + i*4, hiddenData[i], true);
+    for(let i=0; i<hiddenData.length; i++) dv.setFloat32(offset + 2 + i*4, Number(hiddenData[i]), true);
     return buf;
   }
   const pb = payload ? new TextEncoder().encode(JSON.stringify(payload)) : new Uint8Array(0);
