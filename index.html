@@ -227,6 +227,59 @@ body::before {
 #sim-log .sim-info { color: var(--accent-secondary); }
 #sim-log .sim-title { color: var(--tier-s); font-weight: 700; font-size: 13px; }
 
+.room-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 12px; background: rgba(108,92,231,0.06);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px; color: var(--text-secondary); flex-shrink: 0;
+}
+.room-name { font-weight: 600; color: var(--accent-secondary); font-family: var(--font-mono); }
+.invite-btn {
+  padding: 3px 10px; border-radius: 12px; border: 1px solid var(--accent-primary);
+  background: rgba(108,92,231,0.1); color: var(--accent-secondary);
+  font-size: 10px; font-weight: 600; cursor: pointer;
+  transition: all var(--transition-fast); margin-left: auto;
+}
+.invite-btn:hover { background: var(--accent-primary); color: white; }
+
+.consensus-card {
+  max-width: 720px; width: 100%; margin: 8px auto;
+  border: 1px solid rgba(108,92,231,0.2); border-radius: var(--radius-md);
+  background: rgba(108,92,231,0.04); overflow: hidden;
+  animation: messageIn 0.3s ease-out;
+}
+.consensus-header {
+  padding: 10px 14px; font-size: 12px; font-weight: 600;
+  color: var(--accent-secondary); background: rgba(108,92,231,0.08);
+  border-bottom: 1px solid rgba(108,92,231,0.15);
+}
+.consensus-candidate {
+  padding: 10px 14px; border-bottom: 1px solid var(--border-subtle);
+  transition: all var(--transition-med);
+}
+.consensus-candidate:last-child { border-bottom: none; }
+.consensus-candidate.chosen { background: rgba(0,184,148,0.1); border-left: 3px solid var(--peer-online); }
+.consensus-candidate.dimmed { opacity: 0.5; }
+.candidate-header {
+  font-size: 10px; font-weight: 600; color: var(--text-muted);
+  margin-bottom: 4px; font-family: var(--font-mono);
+}
+.candidate-content {
+  font-size: 13px; line-height: 1.6; color: var(--text-primary);
+  white-space: pre-wrap; word-wrap: break-word;
+  max-height: 120px; overflow-y: auto;
+}
+.candidate-content.expanded { max-height: none; }
+.vote-btn {
+  margin-top: 6px; padding: 4px 14px; border-radius: 8px;
+  border: 1px solid rgba(0,184,148,0.3); background: rgba(0,184,148,0.1);
+  color: var(--peer-online); font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition-fast);
+}
+.vote-btn:hover { background: var(--peer-online); color: white; }
+.vote-btn.voted { background: var(--peer-online); color: white; pointer-events: none; }
+.consensus-waiting { padding: 14px; text-align: center; color: var(--text-muted); font-size: 12px; }
+
 @media (max-width: 768px) {
   #status-bar { padding: 6px 8px; gap: 5px; }
   .status-chip { font-size: 10px; padding: 3px 7px; }
@@ -234,6 +287,7 @@ body::before {
   #input-area { padding: 8px 10px; }
   .msg-avatar { width: 26px; height: 26px; font-size: 11px; }
   .msg-content { font-size: 13px; }
+  .room-bar { padding: 4px 8px; font-size: 10px; }
 }
 </style>
 </head>
@@ -252,6 +306,14 @@ body::before {
   <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-peers-text">HIVE: 0</span></div>
   <div class="status-chip"><span class="dot" style="background:var(--peer-dead)"></span><span id="chip-speed-text">0 tok/s</span></div>
   <div class="status-chip"><span class="dot" id="chip-relays-dot" style="background:var(--peer-slow)"></span><span id="chip-relays-text">RELAYS: 0/0</span></div>
+</div>
+
+<div class="room-bar" id="room-bar">
+  <span>🏠</span>
+  <span>Room:</span>
+  <span class="room-name" id="room-name-display">public</span>
+  <span style="font-size:10px;color:var(--peer-online);display:none;" id="invite-feedback">✓ Copied!</span>
+  <button class="invite-btn" id="invite-btn">📋 Invite to Room</button>
 </div>
 
 <div id="app">
@@ -288,6 +350,7 @@ body::before {
         <div class="stat-row"><span class="stat-label">Local / Remote</span><span class="stat-value" id="met-local-remote">0 / 0</span></div>
         <div class="stat-row"><span class="stat-label">Avg Latency</span><span class="stat-value" id="met-latency">—</span></div>
         <div class="stat-row"><span class="stat-label">Tokens Generated</span><span class="stat-value" id="met-tokens">0</span></div>
+        <div class="stat-row"><span class="stat-label">Consensus Runs</span><span class="stat-value" id="met-consensus">0</span></div>
         <div class="stat-row"><span class="stat-label">Classification</span><span class="stat-value" id="met-classify">keyword</span></div>
       </div>
     </div>
@@ -316,7 +379,7 @@ body::before {
     <div id="messages"></div>
     <div id="input-area">
       <div id="input-row">
-        <textarea id="chat-input" rows="1" placeholder="Ask the Hive Mind… (MoE mesh active)" autofocus></textarea>
+        <textarea id="chat-input" rows="1" placeholder="Ask the Hive Mind…" autofocus></textarea>
         <button id="send-btn" title="Send">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -400,11 +463,32 @@ const CONFIG = {
   ],
   maxActiveRelays: 6,
   relayReconnectMs: 8000, relayMaxRetries: 999,
-  appNamespace: "p2p-llm-v4-hive",
+  appNamespace: "p2p-hive-public",
   presenceIntervalMs: 15000, presenceTTLMs: 45000,
   pingIntervalMs: 5000, scoreRecalcMs: 2500,
   iceBatchDelayMs: 200, webrtcMaxReconnects: 5, presenceWindowSec: 600,
 };
+
+// ── ROOM SYSTEM ──────────────────────────────────────────────────────────
+let roomName = 'public';
+function initRoom() {
+  const url = new URL(location.href);
+  roomName = (url.searchParams.get('room') || 'public').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30) || 'public';
+  CONFIG.appNamespace = `p2p-hive-${roomName}`;
+  document.getElementById('room-name-display').textContent = roomName;
+  document.getElementById('chat-input').placeholder = `Ask the Hive Mind in #${roomName}…`;
+  console.log(`[Room] Joined room: ${roomName} (namespace: ${CONFIG.appNamespace})`);
+}
+function copyInviteLink() {
+  const url = new URL(location.href);
+  url.searchParams.set('room', roomName);
+  url.searchParams.delete('simulate');
+  navigator.clipboard.writeText(url.toString()).then(() => {
+    const fb = document.getElementById('invite-feedback');
+    fb.style.display = 'inline';
+    setTimeout(() => fb.style.display = 'none', 2500);
+  });
+}
 
 // ── MSG PROTOCOL ─────────────────────────────────────────────────────────
 const MSG = {
@@ -413,6 +497,7 @@ const MSG = {
   CACHE_REQ: 6, CACHE_RES: 7, CACHE_STORE: 8,
   PING: 0x10, PONG: 0x11, CHAT: 0x20,
   MOE_REQ: 0x50, MOE_RES: 0x51,
+  CONSENSUS_REQ: 0x60, CONSENSUS_RES: 0x61,
 };
 
 function encodeMsg(type, reqId, seq, payload) {
@@ -459,6 +544,7 @@ const seenEventIds = new Set(), seenMsgIds = new Set();
 const chatHistory = [], fedPending = new Map(), kvCacheStore = new Map();
 let isMobile = false, isSimMode = false;
 let localBenchmark = 0; // tokens/sec from proof-of-compute
+const consensusPending = new Map();
 
 // ── METRICS SYSTEM ──────────────────────────────────────────────────────
 const metrics = {
@@ -466,6 +552,7 @@ const metrics = {
   localInferences: 0,
   remoteInferences: 0,
   escalations: 0,
+  consensusRuns: 0,
   llmClassifications: 0,
   keywordClassifications: 0,
   latencies: [],
@@ -488,6 +575,7 @@ const metrics = {
     el('met-local-remote').textContent = `${this.localInferences} / ${this.remoteInferences}`;
     el('met-latency').textContent = this.avgLatency() ? this.avgLatency() + 'ms' : '—';
     el('met-tokens').textContent = this.tokensGenerated;
+    el('met-consensus').textContent = this.consensusRuns;
     const llmPct = this.llmClassifications + this.keywordClassifications > 0
       ? Math.round(this.llmClassifications / (this.llmClassifications + this.keywordClassifications) * 100) : 0;
     el('met-classify').textContent = llmPct > 0 ? `LLM ${llmPct}%` : 'keyword';
@@ -714,16 +802,22 @@ function routeRequest(targetRole) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  INFERENCE — MoE + Local + Remote
+//  INFERENCE — Routing + Consensus + Local + Remote
 // ══════════════════════════════════════════════════════════════════════════
 function getActiveConnections() { let c = 0; for (const [,p] of peers) { if (p.conn !== null || p.dc?.readyState === 'open') c++; } return c; }
 function generateMsgId() { return Math.random().toString(36).substr(2, 9); }
 
 function broadcastChat(role, content, senderId, modelId, msgId = null, hops = 0, excludePeer = null) {
   const id = msgId || generateMsgId(); seenMsgIds.add(id);
-  const payload = { id, role, content, peerId: senderId, model: modelId, hops };
+  const payload = { id, role, content, peerId: senderId, model: modelId, hops, room: roomName };
   const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
   for (const [pid, p] of peers) { if (pid !== excludePeer && p.dc?.readyState === 'open') { try { p.dc.send(raw); } catch(e) {} } }
+}
+
+function countExpertPeers() {
+  let count = 0;
+  for (const [, p] of peers) { if (p.dc?.readyState === 'open' && p.hasEngine) count++; }
+  return count;
 }
 
 async function generateResponse(userMessage) {
@@ -732,30 +826,34 @@ async function generateResponse(userMessage) {
   addMessageToUI("user", userMessage);
   broadcastChat("user", userMessage, peerId, null);
 
-  // Use LLM classification when available (Tier C), fall back to keyword
   const intent = await classifyIntentWithLLM(userMessage);
   const classifyNote = intent.method === 'llm' ? ` [LLM ${intent.ms}ms]` : ' [keyword]';
-  
+
+  // CONSENSUS MODE: If 2+ expert peers available AND task is code/logic
+  const expertCount = countExpertPeers() + (engine ? 1 : 0);
+  if (expertCount >= 2 && (intent.category === 'code' || intent.category === 'logic' || intent.category === 'complex')) {
+    showRouteBanner(`⚡ Consenso${classifyNote}: Consultando ${Math.min(expertCount, 4)} expertos…`);
+    return await runConsensusInference(userMessage, intent);
+  }
+
   const route = routeRequest(intent.targetRole);
 
   if (!route) {
     const needed = intent.targetRole === 'master_reasoner' ? 'S' : intent.targetRole === 'coder' ? 'A' : 'B';
     const tierName = needed === 'S' ? 'Super Nodo 👑' : needed === 'A' ? 'Desktop GPU 🖥️' : 'Laptop 💻';
-    addMessageToUI('assistant', `⌛ Falta ${tierName} para tarea de [${intent.label}].\n\nComparte el link para invitar a alguien con el hardware adecuado.`);
+    addMessageToUI('assistant', `⌛ Falta ${tierName} para tarea de [${intent.label}].\n\nComparte el invite link para agregar expertos a la sala.`);
     return;
   }
 
-  // Show routing banner with classification method
   const routeLabel = ROLE_LABELS[route.role] || route.role;
   const routeTarget = route.type === 'local' ? 'Local' : `Peer ${route.peerId.slice(0,6)}`;
   showRouteBanner(`${intent.label}${classifyNote} → ${routeLabel} · ${routeTarget} (Tier ${route.tier})`);
 
-  // CASCADED ESCALATION: If local model is weak for this task, try remote first
   if (route.type === 'local' && shouldEscalate(intent, route)) {
     const escalatedRoute = findEscalationTarget(intent);
     if (escalatedRoute) {
       metrics.escalations++;
-      showRouteBanner(`⬆️ Escalando: Tier ${route.tier} insuficiente → Tier ${escalatedRoute.tier} (${escalatedRoute.peerId?.slice(0,6)})`);
+      showRouteBanner(`⬆️ Escalando: Tier ${route.tier} → Tier ${escalatedRoute.tier} (${escalatedRoute.peerId?.slice(0,6)})`);
       return await runRemoteInference(userMessage, escalatedRoute.peerId, intent, escalatedRoute);
     }
   }
@@ -765,9 +863,7 @@ async function generateResponse(userMessage) {
 }
 
 function shouldEscalate(intent, route) {
-  // Escalate if local is Tier B but task needs code/logic
   if (route.tier === 'B' && (intent.category === 'code' || intent.category === 'logic')) return true;
-  // Escalate if local is Tier C (should never generate anyway)
   if (route.tier === 'C' || route.tier === 'D') return true;
   return false;
 }
@@ -781,6 +877,146 @@ function findEscalationTarget(intent) {
     }
   }
   return null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  CONSENSUS INFERENCE — Multi-model voting
+// ══════════════════════════════════════════════════════════════════════════
+async function runConsensusInference(userMessage, intent) {
+  isGenerating = true;
+  metrics.consensusRuns++;
+  const startTime = performance.now();
+  const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+
+  // Collect expert peers
+  const expertPeers = [];
+  for (const [pid, p] of peers) {
+    if (p.dc?.readyState === 'open' && p.hasEngine) expertPeers.push({ pid, tier: p.deviceTier, role: p.moeRole, p });
+  }
+
+  const totalExperts = Math.min(expertPeers.length + (engine ? 1 : 0), 4);
+  const consensusEl = createConsensusCard(reqId, totalExperts);
+
+  // Remote requests (up to 3)
+  const remoteSlice = expertPeers.slice(0, 3);
+  const remotePromises = remoteSlice.map((ep, idx) => {
+    const pReqId = reqId + idx + 1;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => { consensusPending.delete(pReqId); resolve(null); }, 15000);
+      consensusPending.set(pReqId, {
+        resolve: (result) => { clearTimeout(timeout); consensusPending.delete(pReqId); resolve({ ...result, peerId: ep.pid, tier: ep.tier, role: ep.role }); },
+        onChunk: () => {},
+      });
+      const messages = [
+        { role: "system", content: `You are an expert AI (role: ${ep.role}). Be concise and helpful.` },
+        ...chatHistory.slice(-10)
+      ];
+      try { ep.p.dc.send(encodeMsg(MSG.CONSENSUS_REQ, pReqId, 0, { messages, max_tokens: 512, intent: intent.category })); }
+      catch(e) { clearTimeout(timeout); resolve(null); }
+    });
+  });
+
+  // Local generation
+  let localPromise = null;
+  if (engine) {
+    localPromise = (async () => {
+      try {
+        const messages = [{ role: "system", content: `You are an expert AI (role: ${myRole}). Be concise.` }, ...chatHistory.slice(-10)];
+        const chunks = await engine.chat.completions.create({ messages, stream: true, temperature: 0.7, max_tokens: 512 });
+        let text = '';
+        for await (const chunk of chunks) { text += chunk.choices[0]?.delta?.content || ''; }
+        return { text, model: currentModelId, peerId, tier: deviceTier, role: myRole, isLocal: true };
+      } catch(e) { return null; }
+    })();
+  }
+
+  const allPromises = [...remotePromises];
+  if (localPromise) allPromises.push(localPromise);
+  const results = (await Promise.all(allPromises)).filter(r => r && r.text && r.text.length > 5);
+  const totalMs = Math.round(performance.now() - startTime);
+
+  if (results.length === 0) {
+    consensusEl.remove();
+    addMessageToUI('assistant', '❌ Ningún experto respondió a tiempo. Intenta de nuevo.');
+    isGenerating = false; return;
+  }
+
+  if (results.length === 1) {
+    consensusEl.remove();
+    const r = results[0];
+    const aiMsgEl = addMessageToUI('assistant', r.text);
+    const metaEl = aiMsgEl.querySelector('.msg-meta');
+    if (metaEl) metaEl.textContent = `${r.model || 'unknown'} · ${r.role} · ${r.isLocal ? 'local' : 'peer:' + r.peerId?.slice(0,6)} · ${totalMs}ms`;
+    chatHistory.push({ role: 'assistant', content: r.text });
+    metrics.record(r.isLocal ? 'local' : 'remote', totalMs, r.text.length, { role: r.role, tier: r.tier });
+    isGenerating = false; return;
+  }
+
+  // Multiple responses — show voting UI
+  updateConsensusCard(consensusEl, results, totalMs, reqId);
+  metrics.record('consensus', totalMs, results.reduce((s,r) => s + r.text.length, 0), { experts: results.length });
+  isGenerating = false;
+}
+
+function createConsensusCard(reqId, count) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'consensus-card';
+  div.id = `consensus-${reqId}`;
+  div.innerHTML = `<div class="consensus-header">⚡ Consenso Distribuido: Consultando ${count} expertos…</div><div class="consensus-waiting"><div class="typing-indicator" style="justify-content:center;"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function updateConsensusCard(el, results, totalMs, reqId) {
+  let html = `<div class="consensus-header">⚡ Consenso: ${results.length} expertos · ${totalMs}ms — Elige la mejor respuesta</div>`;
+  results.forEach((r, i) => {
+    const source = r.isLocal ? `Local (${currentModelLabel})` : `Peer ${r.peerId?.slice(0,6)}`;
+    html += `<div class="consensus-candidate" id="cand-${reqId}-${i}">
+      <div class="candidate-header">Tier ${r.tier} · ${ROLE_LABELS[r.role] || r.role} · ${source} · ${r.model || 'unknown'}</div>
+      <div class="candidate-content">${escapeHtml(r.text)}</div>
+      <button class="vote-btn" data-reqid="${reqId}" data-idx="${i}">✓ Usar esta respuesta</button>
+    </div>`;
+  });
+  el.innerHTML = html;
+  el._results = results;
+  // Attach vote handlers
+  el.querySelectorAll('.vote-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rId = parseInt(btn.dataset.reqid);
+      const idx = parseInt(btn.dataset.idx);
+      selectConsensusResponse(rId, idx);
+    });
+  });
+  document.getElementById('messages').scrollTop = 99999;
+}
+
+function selectConsensusResponse(reqId, idx) {
+  const el = document.getElementById(`consensus-${reqId}`);
+  if (!el || !el._results) return;
+  const chosen = el._results[idx];
+  el.querySelectorAll('.consensus-candidate').forEach((c, i) => {
+    if (i === idx) {
+      c.classList.add('chosen');
+      c.querySelector('.vote-btn').textContent = '✓ Respuesta elegida';
+      c.querySelector('.vote-btn').classList.add('voted');
+      c.querySelector('.candidate-content').classList.add('expanded');
+    } else {
+      c.classList.add('dimmed');
+      c.querySelector('.vote-btn').style.display = 'none';
+    }
+  });
+  const header = el.querySelector('.consensus-header');
+  header.textContent = `⚡ Consenso: Respuesta de Tier ${chosen.tier} · ${ROLE_LABELS[chosen.role] || chosen.role} elegida`;
+  chatHistory.push({ role: 'assistant', content: chosen.text });
+  broadcastChat('assistant', chosen.text, chosen.peerId || peerId, chosen.model);
 }
 
 function showRouteBanner(text) {
@@ -1078,10 +1314,11 @@ async function handleBinMsg(fromId, buf) {
     case MSG.PING: if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.PONG, m.reqId, m.seq, null)); break;
     case MSG.PONG: peer.rtt = Math.round(performance.now() - peer.lastPingSent); updatePeerListUI(); break;
 
+    case MSG.CONSENSUS_REQ:
     case MSG.MOE_REQ:
     case MSG.TOK_REQ:
       if (engine && (m.payload?.messages || m.payload?.hash)) {
-        if (isGenerating) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null })); break; }
+        if (isGenerating) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null })); break; }
         isGenerating = true;
         let ctxMessages = m.payload.messages;
         if (!ctxMessages && m.payload.hash) {
@@ -1091,12 +1328,13 @@ async function handleBinMsg(fromId, buf) {
           ctxMessages = await cacheP; ac.abort();
           if (!ctxMessages) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'KV Cache miss.', model: null })); isGenerating = false; break; }
         }
+        const resType = m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_END;
         try {
           const chunks = await engine.chat.completions.create({ messages: ctxMessages, stream: true, temperature: 0.7, max_tokens: m.payload.max_tokens || 512 });
           let fullR = "", seqC = 0;
-          for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
-          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_END, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
-        } catch(e) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
+          for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ) peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
+        } catch(e) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(resType, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
         isGenerating = false;
       }
       break;
@@ -1112,6 +1350,9 @@ async function handleBinMsg(fromId, buf) {
       break;
     case MSG.TOK_END: case MSG.TOK_RES: case MSG.MOE_RES:
       if (m.payload && fedPending.has(m.reqId)) { const { resolve } = fedPending.get(m.reqId); fedPending.delete(m.reqId); peer.tps = m.payload.tps || peer.tps; resolve(m.payload); }
+      break;
+    case MSG.CONSENSUS_RES:
+      if (m.payload && consensusPending.has(m.reqId)) { consensusPending.get(m.reqId).resolve(m.payload); }
       break;
   }
 }
@@ -1228,6 +1469,7 @@ function setupInput() {
   btn.addEventListener('click', send);
   input.addEventListener('keydown', (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
   input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,140)+'px'; });
+  document.getElementById('invite-btn').addEventListener('click', copyInviteLink);
 }
 function cleanupPeers() { const now=Date.now(); for(const[pid,p]of peers)if(now-p.lastSeen>CONFIG.presenceTTLMs)removePeer(pid); }
 
@@ -1248,7 +1490,7 @@ async function runSwarmSimulation() {
   const log = document.getElementById('sim-log');
   log.classList.add('active');
   const t0 = performance.now();
-  simLog('═══ HIVE MIND v5 SWARM SIMULATOR ═══', 'sim-title');
+  simLog(`═══ HIVE MIND v6 SWARM SIMULATOR [#${roomName}] ═══`, 'sim-title');
   simLog('Inyectando 20 peers virtuales con Proof of Compute...', 'sim-info');
 
   const virtualPeers = [
@@ -1346,12 +1588,26 @@ async function runSwarmSimulation() {
   }
   if (!cdUsed) { simLog(`  ✅ PASS: 0/${testMsgs.length} prompts routed to C/D.`, 'sim-pass'); passed++; }
 
+  // TEST 7: Consensus detection
+  simLog('\n─── TEST 7: Consensus should activate (3+ experts + code) ───', 'sim-title');
+  const expertCount = countExpertPeers() + (engine ? 1 : 0);
+  const intentC = classifyIntent("Write a Rust web server with auth");
+  if (expertCount >= 2 && (intentC.category === 'code' || intentC.category === 'logic')) {
+    simLog(`  ✅ PASS: Consensus would activate (${expertCount} experts, category: ${intentC.category})`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Consensus not triggered (experts: ${expertCount}, category: ${intentC.category})`, 'sim-fail'); failed++; }
+
+  // TEST 8: Room isolation
+  simLog('\n─── TEST 8: Room namespace isolation ───', 'sim-title');
+  if (CONFIG.appNamespace.includes(roomName) && CONFIG.appNamespace !== 'p2p-hive-') {
+    simLog(`  ✅ PASS: Namespace "${CONFIG.appNamespace}" contains room "${roomName}"`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Namespace "${CONFIG.appNamespace}" missing room`, 'sim-fail'); failed++; }
+
   const totalMs = Math.round(performance.now() - t0);
   simLog('\n═══════════════════════════════════════════', 'sim-title');
   if (failed === 0) {
-    simLog(`🟢 HIVE MIND v5 VALIDATED: ${passed}/${passed+failed} tests passed.`, 'sim-pass');
-    simLog(`   20 nodos · 5-Tier Allocation · PoC · Cascaded Escalation`, 'sim-pass');
-    simLog(`   LLM Classification · Metrics · Móviles protegidos.`, 'sim-pass');
+    simLog(`🟢 HIVE MIND v6 VALIDATED: ${passed}/${passed+failed} tests passed.`, 'sim-pass');
+    simLog(`   Room: #${roomName} · 20 nodos · Consensus · PoC · Escalation`, 'sim-pass');
+    simLog(`   LLM Classification · Metrics · Invite Links · Móviles protegidos.`, 'sim-pass');
     simLog(`   Completed in ${totalMs}ms. ¡Sistema listo!`, 'sim-pass');
   } else {
     simLog(`🔴 ${failed} TEST(S) FAILED. ${passed}/${passed+failed} passed.`, 'sim-fail');
@@ -1365,7 +1621,8 @@ async function runSwarmSimulation() {
 async function boot() {
   updateInitStatus("Generating identity…");
   await initIdentity();
-  console.log('[Hive Mind v4] boot peerId=' + peerId);
+  initRoom();
+  console.log(`[Hive Mind v6] boot peerId=${peerId} room=${roomName}`);
   updateInitStatus("Detecting device capabilities…");
   await classifyDevice();
   setupInput();
@@ -1385,7 +1642,7 @@ async function boot() {
   const roleLabel = ROLE_LABELS[myRole] || myRole;
   const classMethod = getCurrentModelSize() <= 500 && engine ? 'LLM (360M)' : 'keyword';
   const bootLines = [
-    'HIVE MIND v5 — Distributed Edge Routing initialized',
+    `HIVE MIND v6 — Room: #${roomName}`,
     '',
     engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → relay/cache mode',
     engine ? `📊 Benchmark: ${localBenchmark} tok/s (Proof of Compute)` : '',
@@ -1395,7 +1652,7 @@ async function boot() {
     `Peer ID: ${peerId}`,
     '',
     `Nostr relays: ${connectedRelays} conectados`,
-    'Buscando peers en la malla…',
+    `Sala “${roomName}” activa — comparte el invite link para agregar expertos.`,
   ].filter(Boolean);
   addMessageToUI('assistant', bootLines.join('\n'));
 
