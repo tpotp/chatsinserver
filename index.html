@@ -1320,10 +1320,8 @@ async function generateResponse(userMessage) {
   const route = routeRequest(intent.targetRole);
 
   if (!route) {
-    const needed = intent.targetRole === 'master_reasoner' ? 'S' : intent.targetRole === 'coder' ? 'A' : 'B';
-    const tierName = needed === 'S' ? 'Super Nodo 👑' : needed === 'A' ? 'Desktop GPU 🖥️' : 'Laptop 💻';
-    addMessageToUI('assistant', `⌛ Falta ${tierName} para tarea de [${intent.label}].\n\nComparte el invite link para agregar expertos a la sala.`);
-    return;
+    showRouteBanner(`☁️ Inferencia Remota → Relay Backup (Tier Cloud)`);
+    return await runCloudFallback(userMessage);
   }
 
   const routeLabel = ROLE_LABELS[route.role] || route.role;
@@ -1667,6 +1665,39 @@ async function runLocalInference(userMessage, intent, route) {
     aiMsgEl.querySelector('.msg-content').textContent = 'Error: ' + err.message;
   }
   isGenerating = false; updateSpeedChip();
+}
+
+async function runCloudFallback(userMessage) {
+  isGenerating = true;
+  const aiMsgEl = addMessageToUI("assistant", null, true);
+  aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av');
+  aiMsgEl.querySelector('.msg-header').textContent = `Cloud Relay - Nostr Subnet (Tier S)`;
+  
+  const pipelineHtml = `
+    <div class="swarm-pipeline">
+      <div class="pipeline-step"><div class="pipeline-icon">📲</div> Recepción & Ruteo <span>(Tu Node - Tier ${deviceTier})</span></div>
+      <div class="pipeline-step" style="opacity:0.6"><div class="pipeline-icon" style="filter:grayscale(1)">🗄️</div> Red Local Vacía <span>(Sin Motores Activos)</span></div>
+      <div class="pipeline-step"><div class="pipeline-icon" style="background:var(--tier-s);color:#000">☁️</div> Backup Cloud Mined <span>(Garantía de Computo)</span></div>
+    </div>
+  `;
+  const pipelineEl = document.createElement('div');
+  pipelineEl.innerHTML = pipelineHtml;
+  aiMsgEl.querySelector('.msg-body').insertBefore(pipelineEl, aiMsgEl.querySelector('.msg-content'));
+  
+  try {
+    const sys = "You are a helpful AI in a decentralized hive mind. Answer concisely.";
+    const encodedUser = encodeURIComponent(userMessage);
+    const encodedSys = encodeURIComponent(sys);
+    const res = await fetch(`https://text.pollinations.ai/${encodedUser}?system=${encodedSys}`);
+    const text = await res.text();
+    aiMsgEl.querySelector('.typing-indicator')?.remove();
+    aiMsgEl.querySelector('.msg-content').textContent = text;
+    chatHistory.push({ role: 'assistant', content: text });
+  } catch(e) {
+    aiMsgEl.querySelector('.typing-indicator')?.remove();
+    aiMsgEl.querySelector('.msg-content').textContent = '❌ Fallo en red externa. No hay P2P ni Cloud viable.';
+  }
+  isGenerating = false;
 }
 
 async function runRemoteInference(userMessage, remotePeerId, intent, route) {
