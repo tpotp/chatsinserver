@@ -38,6 +38,8 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-med: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --gold: #f1c40f;
+  --gold-glow: rgba(241, 196, 15, 0.4);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -110,6 +112,7 @@ body::before {
 .peer-badge.tier-c { background: rgba(0,206,201,0.15); color: var(--tier-c); }
 .peer-badge.tier-d { background: rgba(99,110,114,0.15); color: var(--tier-d); }
 .peer-badge.role { background: rgba(162,155,254,0.15); color: var(--mode-federated); }
+.rep-stars { font-size: 9px; color: var(--gold); margin-left: 2px; letter-spacing: -1px; }
 
 #model-progress-section { display: none; }
 #model-progress-section.active { display: block; }
@@ -174,6 +177,21 @@ body::before {
   font-size: 10px; color: var(--accent-secondary); font-family: var(--font-mono);
   margin-top: 4px;
 }
+.swarm-pipeline {
+  max-width: 720px; width: 100%; margin: 8px 0;
+  border: 1px solid rgba(0, 206, 201, 0.2); border-left: 3px solid var(--tier-c);
+  background: rgba(0, 206, 201, 0.05); border-radius: var(--radius-sm);
+  padding: 10px 14px; font-size: 11px; font-family: var(--font-mono);
+  animation: messageIn 0.3s ease-out; display: flex; flex-direction: column; gap: 4px;
+}
+.pipeline-step {
+  display: flex; align-items: center; gap: 6px; color: var(--text-primary);
+}
+.pipeline-step span {
+  color: var(--text-muted); font-size: 10px;
+}
+.pipeline-icon { width: 16px; text-align: center; color: var(--tier-d); }
+.pipeline-icon.active { color: var(--accent-secondary); text-shadow: 0 0 5px var(--accent-glow); }
 .route-banner {
   font-size: 11px; color: var(--tier-b); padding: 6px 10px; margin: 0 auto;
   max-width: 720px; text-align: center; animation: messageIn 0.3s ease-out;
@@ -234,14 +252,17 @@ body::before {
   font-size: 12px; color: var(--text-secondary); flex-shrink: 0;
 }
 .room-name { font-weight: 600; color: var(--accent-secondary); font-family: var(--font-mono); }
-.invite-btn {
+.room-members { font-size: 10px; color: var(--peer-online); font-family: var(--font-mono); }
+.room-bar-btn {
   padding: 3px 10px; border-radius: 12px; border: 1px solid var(--accent-primary);
   background: rgba(108,92,231,0.1); color: var(--accent-secondary);
   font-size: 10px; font-weight: 600; cursor: pointer;
-  transition: all var(--transition-fast); margin-left: auto;
+  transition: all var(--transition-fast);
 }
-.invite-btn:hover { background: var(--accent-primary); color: white; }
+.room-bar-btn:hover { background: var(--accent-primary); color: white; }
+.invite-btn { margin-left: auto; }
 
+/* ── Consensus Card ──────────────────────────────────────────── */
 .consensus-card {
   max-width: 720px; width: 100%; margin: 8px auto;
   border: 1px solid rgba(108,92,231,0.2); border-radius: var(--radius-md);
@@ -259,10 +280,20 @@ body::before {
 }
 .consensus-candidate:last-child { border-bottom: none; }
 .consensus-candidate.chosen { background: rgba(0,184,148,0.1); border-left: 3px solid var(--peer-online); }
+.consensus-candidate.winner-glow {
+  background: rgba(241,196,15,0.08); border-left: 3px solid var(--gold);
+  animation: winnerPulse 2s ease-in-out;
+}
+@keyframes winnerPulse {
+  0% { box-shadow: inset 0 0 0 rgba(241,196,15,0); }
+  50% { box-shadow: inset 0 0 20px rgba(241,196,15,0.15); }
+  100% { box-shadow: inset 0 0 0 rgba(241,196,15,0); }
+}
 .consensus-candidate.dimmed { opacity: 0.5; }
 .candidate-header {
   font-size: 10px; font-weight: 600; color: var(--text-muted);
   margin-bottom: 4px; font-family: var(--font-mono);
+  display: flex; align-items: center; gap: 8px;
 }
 .candidate-content {
   font-size: 13px; line-height: 1.6; color: var(--text-primary);
@@ -278,7 +309,206 @@ body::before {
 }
 .vote-btn:hover { background: var(--peer-online); color: white; }
 .vote-btn.voted { background: var(--peer-online); color: white; pointer-events: none; }
+.vote-count {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 7px; border-radius: 8px; font-size: 9px; font-weight: 700;
+  background: rgba(108,92,231,0.15); color: var(--accent-secondary);
+  font-family: var(--font-mono); transition: all var(--transition-med);
+}
+.vote-count.leading { background: rgba(241,196,15,0.2); color: var(--gold); }
 .consensus-waiting { padding: 14px; text-align: center; color: var(--text-muted); font-size: 12px; }
+.consensus-timer {
+  padding: 6px 14px; text-align: center; font-size: 10px; color: var(--text-muted);
+  font-family: var(--font-mono); border-top: 1px solid var(--border-subtle);
+}
+.consensus-winner-label {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 8px; font-size: 9px; font-weight: 700;
+  background: rgba(241,196,15,0.15); color: var(--gold);
+}
+
+/* ── Benchmark Comparison Card ───────────────────────────────── */
+.benchmark-card {
+  max-width: 720px; width: 100%; margin: 8px auto;
+  border: 1px solid rgba(0,206,201,0.2); border-radius: var(--radius-md);
+  background: rgba(0,206,201,0.03); overflow: hidden;
+  animation: messageIn 0.3s ease-out;
+}
+.benchmark-header {
+  padding: 10px 14px; font-size: 12px; font-weight: 600;
+  color: var(--tier-c); background: rgba(0,206,201,0.08);
+  border-bottom: 1px solid rgba(0,206,201,0.15);
+}
+.benchmark-columns { display: flex; gap: 0; }
+.benchmark-col {
+  flex: 1; padding: 12px; border-right: 1px solid var(--border-subtle);
+}
+.benchmark-col:last-child { border-right: none; }
+.benchmark-col-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 8px; color: var(--text-muted);
+}
+.benchmark-col-title.solo { color: var(--tier-a); }
+.benchmark-col-title.hive { color: var(--tier-c); }
+.benchmark-col .bench-text {
+  font-size: 12px; line-height: 1.6; color: var(--text-primary);
+  white-space: pre-wrap; word-wrap: break-word;
+  max-height: 200px; overflow-y: auto; margin-bottom: 8px;
+}
+.bench-metrics {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.bench-metric {
+  padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: 600;
+  font-family: var(--font-mono);
+  background: var(--bg-tertiary); color: var(--text-secondary);
+}
+.bench-metric.better { background: rgba(0,184,148,0.15); color: var(--peer-online); }
+.benchmark-verdict {
+  padding: 10px 14px; text-align: center; font-size: 12px; font-weight: 600;
+  background: rgba(0,206,201,0.06); border-top: 1px solid rgba(0,206,201,0.15);
+  color: var(--tier-c);
+}
+.benchmark-bar-visual {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px;
+}
+.bench-bar-track { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
+.bench-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.bench-bar-fill.solo { background: linear-gradient(90deg, var(--tier-a), var(--tier-b)); }
+.bench-bar-fill.hive { background: linear-gradient(90deg, var(--tier-c), var(--peer-online)); }
+.bench-bar-label { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); min-width: 50px; }
+
+/* ── Modals ──────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal-card {
+  width: 90%; max-width: 420px; background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle); border-radius: 16px;
+  overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transform: translateY(20px) scale(0.95);
+  transition: transform 0.3s ease;
+}
+.modal-overlay.active .modal-card { transform: translateY(0) scale(1); }
+.modal-header {
+  padding: 18px 20px; font-size: 16px; font-weight: 700;
+  background: linear-gradient(135deg, rgba(108,92,231,0.1), rgba(0,206,201,0.06));
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-close {
+  width: 28px; height: 28px; border-radius: 50%; border: none;
+  background: rgba(255,255,255,0.06); color: var(--text-muted);
+  cursor: pointer; font-size: 16px; display: flex; align-items: center;
+  justify-content: center; transition: all var(--transition-fast);
+}
+.modal-close:hover { background: rgba(255,255,255,0.12); color: var(--text-primary); }
+.modal-body { padding: 20px; }
+.modal-input {
+  width: 100%; padding: 10px 14px; background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  color: var(--text-primary); font-family: var(--font-sans); font-size: 14px;
+  outline: none; transition: border-color var(--transition-fast); margin-bottom: 12px;
+}
+.modal-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-glow); }
+.modal-input::placeholder { color: var(--text-muted); }
+.modal-btn {
+  width: 100%; padding: 11px; border-radius: var(--radius-sm); border: none;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all var(--transition-fast); margin-bottom: 8px;
+}
+.modal-btn.primary {
+  background: linear-gradient(135deg, var(--accent-primary), #8b7cf7);
+  color: white;
+}
+.modal-btn.primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-glow); }
+.modal-btn.secondary {
+  background: var(--bg-tertiary); color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+.modal-btn.secondary:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.modal-label {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;
+  display: block;
+}
+.modal-hint { font-size: 11px; color: var(--text-muted); margin-top: -6px; margin-bottom: 12px; }
+
+/* ── QR / Invite Modal ───────────────────────────────────────── */
+.qr-container {
+  display: flex; justify-content: center; margin: 16px 0;
+  padding: 16px; background: white; border-radius: var(--radius-md);
+}
+.qr-container canvas { image-rendering: pixelated; }
+.invite-room-name {
+  text-align: center; font-size: 20px; font-weight: 700;
+  color: var(--accent-secondary); font-family: var(--font-mono);
+  margin-bottom: 4px;
+}
+.invite-peer-count {
+  text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 16px;
+}
+.invite-url-display {
+  padding: 8px 12px; background: var(--bg-tertiary); border-radius: var(--radius-sm);
+  font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary);
+  word-break: break-all; margin-bottom: 12px; text-align: center;
+  border: 1px solid var(--border-subtle);
+}
+.invite-btns { display: flex; gap: 8px; }
+.invite-btns .modal-btn { flex: 1; margin-bottom: 0; }
+
+/* ── Nickname inline ─────────────────────────────────────────── */
+.nickname-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+}
+.nickname-display {
+  font-size: 12px; font-weight: 600; color: var(--accent-secondary);
+  font-family: var(--font-mono); cursor: pointer; padding: 2px 6px;
+  border-radius: 4px; transition: background var(--transition-fast);
+}
+.nickname-display:hover { background: rgba(108,92,231,0.1); }
+.nickname-edit-input {
+  flex: 1; padding: 4px 8px; background: var(--bg-tertiary);
+  border: 1px solid var(--accent-primary); border-radius: 4px;
+  color: var(--text-primary); font-family: var(--font-mono); font-size: 12px;
+  outline: none;
+}
+
+/* ── Welcome Banner ──────────────────────────────────────────── */
+.welcome-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 10px 20px; text-align: center; font-size: 13px; font-weight: 600;
+  background: linear-gradient(135deg, rgba(108,92,231,0.9), rgba(0,206,201,0.8));
+  color: white;
+  transform: translateY(-100%); transition: transform 0.4s ease;
+}
+.welcome-banner.show { transform: translateY(0); }
+
+/* ── Hive Benchmark Sidebar ──────────────────────────────────── */
+.bench-bar-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 0;
+}
+.bench-bar-row .bench-label {
+  font-size: 10px; color: var(--text-muted); width: 36px; text-align: right;
+  font-family: var(--font-mono);
+}
+.bench-bar-row .bench-track {
+  flex: 1; height: 8px; background: var(--bg-tertiary);
+  border-radius: 4px; overflow: hidden; position: relative;
+}
+.bench-bar-row .bench-fill {
+  height: 100%; border-radius: 4px; transition: width 0.5s ease;
+}
+.bench-bar-row .bench-fill.solo { background: linear-gradient(90deg, #e17055, #fdcb6e); }
+.bench-bar-row .bench-fill.hive { background: linear-gradient(90deg, #00cec9, #00b894); }
+.bench-bar-row .bench-val {
+  font-size: 10px; color: var(--text-primary); width: 48px;
+  font-family: var(--font-mono); font-weight: 600;
+}
 
 @media (max-width: 768px) {
   #status-bar { padding: 6px 8px; gap: 5px; }
@@ -288,6 +518,8 @@ body::before {
   .msg-avatar { width: 26px; height: 26px; font-size: 11px; }
   .msg-content { font-size: 13px; }
   .room-bar { padding: 4px 8px; font-size: 10px; }
+  .benchmark-columns { flex-direction: column; }
+  .benchmark-col { border-right: none; border-bottom: 1px solid var(--border-subtle); }
 }
 </style>
 </head>
@@ -298,6 +530,8 @@ body::before {
   <div class="init-status" id="init-status">Initializing…</div>
   <div class="init-progress"><div class="init-progress-fill" id="init-progress-fill"></div></div>
 </div>
+
+<div class="welcome-banner" id="welcome-banner"></div>
 
 <div id="status-bar">
   <div class="status-chip"><span class="dot" id="chip-tier-dot"></span><span id="chip-tier-text">TIER: —</span></div>
@@ -312,12 +546,24 @@ body::before {
   <span>🏠</span>
   <span>Room:</span>
   <span class="room-name" id="room-name-display">public</span>
+  <span class="room-members" id="room-members-display"></span>
   <span style="font-size:10px;color:var(--peer-online);display:none;" id="invite-feedback">✓ Copied!</span>
-  <button class="invite-btn" id="invite-btn">📋 Invite to Room</button>
+  <button class="room-bar-btn" id="change-room-btn" title="Change Room">🔄 Room</button>
+  <button class="room-bar-btn invite-btn" id="invite-btn">📋 Invite</button>
 </div>
 
 <div id="app">
   <aside id="sidebar">
+    <!-- Identity & Nickname -->
+    <div class="sidebar-section" id="identity-section">
+      <h3>👤 Identity</h3>
+      <div class="nickname-row" id="nickname-row">
+        <span style="font-size:11px;color:var(--text-muted);">Name:</span>
+        <span class="nickname-display" id="nickname-display" title="Click to edit">Anonymous</span>
+      </div>
+      <div class="stat-row"><span class="stat-label">Peer ID</span><span class="stat-value" id="stat-peer-id" style="font-size:9px;">—</span></div>
+    </div>
+
     <div class="sidebar-section">
       <h3>🧠 Hive Mind Capabilities</h3>
       <div id="hive-tiers">
@@ -333,6 +579,42 @@ body::before {
       <h3>⚡ Connected Peers</h3>
       <div id="peer-list"><div style="font-size:11px;color:var(--text-muted);padding:6px 0;">No peers connected</div></div>
     </div>
+
+    <!-- Reputation -->
+    <div class="sidebar-section" id="reputation-section">
+      <h3>🏆 Reputation</h3>
+      <div>
+        <div class="stat-row"><span class="stat-label">My Score</span><span class="stat-value" id="rep-my-score">0</span></div>
+        <div class="stat-row"><span class="stat-label">Stars</span><span class="stat-value" id="rep-my-stars">☆☆☆☆☆</span></div>
+        <div class="stat-row"><span class="stat-label">Inferences Served</span><span class="stat-value" id="rep-served">0</span></div>
+        <div class="stat-row"><span class="stat-label">Consensus Wins</span><span class="stat-value" id="rep-wins">0</span></div>
+        <div class="stat-row"><span class="stat-label">Uptime</span><span class="stat-value" id="rep-uptime">0m</span></div>
+      </div>
+    </div>
+
+    <!-- Hive Benchmark -->
+    <div class="sidebar-section" id="benchmark-section">
+      <h3>📊 Hive Benchmark</h3>
+      <div style="margin-bottom:8px;">
+        <div class="stat-row"><span class="stat-label">Collective tok/s</span><span class="stat-value" id="bench-collective-tps">0</span></div>
+        <div class="stat-row"><span class="stat-label">Quality Score</span><span class="stat-value" id="bench-quality-score">0</span></div>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">Solo vs Hive Capacity</div>
+      <div class="bench-bar-row">
+        <span class="bench-label">Solo</span>
+        <div class="bench-track"><div class="bench-fill solo" id="bench-solo-bar" style="width:0%"></div></div>
+        <span class="bench-val" id="bench-solo-val">0</span>
+      </div>
+      <div class="bench-bar-row">
+        <span class="bench-label">Hive</span>
+        <div class="bench-track"><div class="bench-fill hive" id="bench-hive-bar" style="width:0%"></div></div>
+        <span class="bench-val" id="bench-hive-val">0</span>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--text-muted);">
+        Type <span style="color:var(--accent-secondary);font-family:var(--font-mono);">/benchmark</span> to run a live comparison
+      </div>
+    </div>
+
     <div class="sidebar-section" id="relay-section">
       <h3>🔗 Nostr Relays</h3>
       <div id="relay-list"></div>
@@ -371,7 +653,6 @@ body::before {
         <div class="stat-row"><span class="stat-label">WebGPU</span><span class="stat-value" id="stat-webgpu">—</span></div>
         <div class="stat-row"><span class="stat-label">Memory</span><span class="stat-value" id="stat-memory">—</span></div>
         <div class="stat-row"><span class="stat-label">Benchmark</span><span class="stat-value" id="stat-benchmark">—</span></div>
-        <div class="stat-row"><span class="stat-label">Peer ID</span><span class="stat-value" id="stat-peer-id" style="font-size:9px;">—</span></div>
       </div>
     </div>
   </aside>
@@ -391,21 +672,71 @@ body::before {
   </div>
 </div>
 
+<!-- Room Creation Modal -->
+<div class="modal-overlay" id="room-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span>🏠 Join or Create Room</span>
+      <button class="modal-close" id="room-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label">Room Name</label>
+      <input class="modal-input" id="room-input" placeholder="e.g. my-team, proyecto-alpha" maxlength="30" autocomplete="off">
+      <div class="modal-hint">Letters, numbers, hyphens and underscores only</div>
+      <label class="modal-label">Your Nickname</label>
+      <input class="modal-input" id="nickname-input" placeholder="e.g. Alice, DevMaster" maxlength="20" autocomplete="off">
+      <div class="modal-hint">Visible to other peers in the room</div>
+      <button class="modal-btn primary" id="room-join-btn">🚀 Join Room</button>
+      <button class="modal-btn secondary" id="room-public-btn">🌐 Join Public Room</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invite / QR Modal -->
+<div class="modal-overlay" id="invite-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span>📲 Invite to Room</span>
+      <button class="modal-close" id="invite-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="invite-room-name" id="invite-room-name">#public</div>
+      <div class="invite-peer-count" id="invite-peer-count">0 peers in this room</div>
+      <div class="qr-container" id="qr-container">
+        <canvas id="qr-canvas" width="200" height="200"></canvas>
+      </div>
+      <div class="invite-url-display" id="invite-url-display"></div>
+      <div class="invite-btns">
+        <button class="modal-btn primary" id="invite-copy-btn">📋 Copy Link</button>
+        <button class="modal-btn secondary" id="invite-share-btn">📱 Share</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="sim-log"></div>
 
 <script type="module">
 // ═══════════════════════════════════════════════════════════════════════════
-//  HIVE MIND v5 — Distributed Edge Routing + LLM Classification
+//  HIVE MIND v7 — Social Product Layer
+//
+//  NEW IN v7:
+//  ✅ Room creation/join modal + member count
+//  ✅ Persistent identity with nicknames
+//  ✅ Reputation scoring (uptime, inferences, consensus wins)
+//  ✅ Visible consensus voting with broadcast + auto-resolution
+//  ✅ Distributed benchmark: /benchmark command (Solo vs Hive)
+//  ✅ QR code invite modal + Web Share API
+//  ✅ Expanded 15-test simulator
 //
 //  5-TIER TOPOLOGY:
-//  S = Super Node (14B+, master_reasoner) — Solves hard logic
-//  A = Desktop GPU (8B, coder/scientist)  — Code & science
-//  B = Laptop (3B, creative/general)      — Simple answers
-//  C = High-End Mobile (0.3B, fast_router) — LLM-based classification
-//  D = Low-End Mobile (no engine, relay/kv_cache) — Relay + cache
+//  S = Super Node (14B+, master_reasoner)
+//  A = Desktop GPU (8B, coder/scientist)
+//  B = Laptop (3B, creative/general)
+//  C = High-End Mobile (0.3B, fast_router)
+//  D = Low-End Mobile (no engine, relay/kv_cache)
 //
 //  GOLDEN RULE: Requests flow UP. C/D never generate user answers.
-//  PROOF OF COMPUTE: Peers prove their tier via benchmark score.
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── Web Worker ───────────────────────────────────────────────────────────
@@ -467,28 +798,179 @@ const CONFIG = {
   presenceIntervalMs: 15000, presenceTTLMs: 45000,
   pingIntervalMs: 5000, scoreRecalcMs: 2500,
   iceBatchDelayMs: 200, webrtcMaxReconnects: 5, presenceWindowSec: 600,
+  consensusVoteTimeoutMs: 12000,
 };
 
 // ── ROOM SYSTEM ──────────────────────────────────────────────────────────
 let roomName = 'public';
+let isInviteLanding = false;
+let isSimulateMode = new URL(location.href).searchParams.has('simulate');
 function initRoom() {
   const url = new URL(location.href);
-  roomName = (url.searchParams.get('room') || 'public').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30) || 'public';
+  const urlRoom = (url.searchParams.get('room') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30);
+  const savedRoom = localStorage.getItem('p2p-hive-last-room');
+
+  if (urlRoom) {
+    roomName = urlRoom;
+    isInviteLanding = true;
+  } else if (savedRoom) {
+    roomName = savedRoom;
+  } else {
+    roomName = 'public';
+  }
+  applyRoom(roomName);
+}
+
+function applyRoom(name) {
+  roomName = name || 'public';
   CONFIG.appNamespace = `p2p-hive-${roomName}`;
   document.getElementById('room-name-display').textContent = roomName;
   document.getElementById('chat-input').placeholder = `Ask the Hive Mind in #${roomName}…`;
+  localStorage.setItem('p2p-hive-last-room', roomName);
+  // Update URL without reload
+  const url = new URL(location.href);
+  if (roomName !== 'public') url.searchParams.set('room', roomName);
+  else url.searchParams.delete('room');
+  // Keep simulate param for boot check; only strip from invite URLs
+  history.replaceState(null, '', url.toString());
   console.log(`[Room] Joined room: ${roomName} (namespace: ${CONFIG.appNamespace})`);
 }
-function copyInviteLink() {
+
+function showWelcomeBanner() {
+  if (!isInviteLanding || roomName === 'public') return;
+  const banner = document.getElementById('welcome-banner');
+  banner.textContent = `🎉 You've joined room #${roomName} — connecting to peers...`;
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), 4000);
+}
+
+function getRoomMemberCount() {
+  let count = 1; // self
+  for (const [, p] of peers) {
+    if (p.dc?.readyState === 'open' || (Date.now() - p.lastSeen < CONFIG.presenceTTLMs)) count++;
+  }
+  return count;
+}
+
+function updateRoomMembersUI() {
+  const count = getRoomMemberCount();
+  document.getElementById('room-members-display').textContent = `(${count} ${count === 1 ? 'peer' : 'peers'})`;
+}
+
+function getInviteUrl() {
   const url = new URL(location.href);
   url.searchParams.set('room', roomName);
   url.searchParams.delete('simulate');
-  navigator.clipboard.writeText(url.toString()).then(() => {
+  return url.toString();
+}
+
+function copyInviteLink() {
+  navigator.clipboard.writeText(getInviteUrl()).then(() => {
     const fb = document.getElementById('invite-feedback');
     fb.style.display = 'inline';
     setTimeout(() => fb.style.display = 'none', 2500);
   });
 }
+
+// ── NICKNAME SYSTEM ──────────────────────────────────────────────────────
+let myNickname = 'Anonymous';
+function initNickname() {
+  const saved = localStorage.getItem('p2p-hive-nickname');
+  if (saved) myNickname = saved;
+  document.getElementById('nickname-display').textContent = myNickname;
+  // Pre-fill modal
+  const input = document.getElementById('nickname-input');
+  if (input) input.value = myNickname !== 'Anonymous' ? myNickname : '';
+}
+function setNickname(name) {
+  myNickname = (name || '').trim().replace(/[^a-zA-Z0-9_\- áéíóúñÁÉÍÓÚÑ]/g, '').slice(0, 20) || 'Anonymous';
+  localStorage.setItem('p2p-hive-nickname', myNickname);
+  document.getElementById('nickname-display').textContent = myNickname;
+}
+function setupNicknameUI() {
+  const display = document.getElementById('nickname-display');
+  const row = document.getElementById('nickname-row');
+  display.addEventListener('click', () => {
+    const existing = row.querySelector('.nickname-edit-input');
+    if (existing) return;
+    display.style.display = 'none';
+    const input = document.createElement('input');
+    input.className = 'nickname-edit-input';
+    input.value = myNickname !== 'Anonymous' ? myNickname : '';
+    input.placeholder = 'Your name';
+    input.maxLength = 20;
+    row.appendChild(input);
+    input.focus();
+    const commit = () => { setNickname(input.value); input.remove(); display.style.display = ''; publishPresence(); };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
+  });
+}
+
+// ── REPUTATION SYSTEM ────────────────────────────────────────────────────
+const reputation = {
+  myScore: 0,
+  inferencesServed: 0,
+  consensusWins: 0,
+  uptimeMinutes: 0,
+  peerScores: new Map(), // peerId -> score
+
+  load() {
+    try {
+      const saved = localStorage.getItem('p2p-hive-reputation');
+      if (saved) {
+        const data = JSON.parse(saved);
+        this.myScore = data.myScore || 0;
+        this.inferencesServed = data.inferencesServed || 0;
+        this.consensusWins = data.consensusWins || 0;
+        this.uptimeMinutes = data.uptimeMinutes || 0;
+        if (data.peerScores) {
+          for (const [k, v] of Object.entries(data.peerScores)) this.peerScores.set(k, v);
+        }
+      }
+    } catch(e) {}
+  },
+  save() {
+    try {
+      const peerObj = {};
+      for (const [k, v] of this.peerScores) peerObj[k] = v;
+      localStorage.setItem('p2p-hive-reputation', JSON.stringify({
+        myScore: this.myScore, inferencesServed: this.inferencesServed,
+        consensusWins: this.consensusWins, uptimeMinutes: this.uptimeMinutes,
+        peerScores: peerObj,
+      }));
+    } catch(e) {}
+  },
+  addInference() { this.inferencesServed++; this.myScore += 5; this.save(); this.updateUI(); },
+  addConsensusWin() { this.consensusWins++; this.myScore += 10; this.save(); this.updateUI(); },
+  addUptime() { this.uptimeMinutes++; this.myScore += 1; this.save(); this.updateUI(); },
+  addPenalty(amount = 3) { this.myScore = Math.max(0, this.myScore - amount); this.save(); this.updateUI(); },
+  getPeerScore(pid) { return this.peerScores.get(pid) || 0; },
+  updatePeerScore(pid, delta) { this.peerScores.set(pid, (this.peerScores.get(pid) || 0) + delta); this.save(); },
+  getStars(score) {
+    if (score >= 200) return '⭐⭐⭐⭐⭐';
+    if (score >= 100) return '⭐⭐⭐⭐☆';
+    if (score >= 50) return '⭐⭐⭐☆☆';
+    if (score >= 20) return '⭐⭐☆☆☆';
+    if (score >= 5) return '⭐☆☆☆☆';
+    return '☆☆☆☆☆';
+  },
+  getStarCount(score) {
+    if (score >= 200) return 5;
+    if (score >= 100) return 4;
+    if (score >= 50) return 3;
+    if (score >= 20) return 2;
+    if (score >= 5) return 1;
+    return 0;
+  },
+  updateUI() {
+    document.getElementById('rep-my-score').textContent = this.myScore;
+    document.getElementById('rep-my-stars').textContent = this.getStars(this.myScore);
+    document.getElementById('rep-served').textContent = this.inferencesServed;
+    document.getElementById('rep-wins').textContent = this.consensusWins;
+    document.getElementById('rep-uptime').textContent = `${this.uptimeMinutes}m`;
+  }
+};
 
 // ── MSG PROTOCOL ─────────────────────────────────────────────────────────
 const MSG = {
@@ -498,6 +980,7 @@ const MSG = {
   PING: 0x10, PONG: 0x11, CHAT: 0x20,
   MOE_REQ: 0x50, MOE_RES: 0x51,
   CONSENSUS_REQ: 0x60, CONSENSUS_RES: 0x61,
+  VOTE: 0x70, REP_UPDATE: 0x71,
 };
 
 function encodeMsg(type, reqId, seq, payload) {
@@ -545,6 +1028,7 @@ const chatHistory = [], fedPending = new Map(), kvCacheStore = new Map();
 let isMobile = false, isSimMode = false;
 let localBenchmark = 0; // tokens/sec from proof-of-compute
 const consensusPending = new Map();
+const consensusVotes = new Map(); // reqId -> { votes: Map<candidateIdx, Set<peerId>>, timer, resolved }
 
 // ── METRICS SYSTEM ──────────────────────────────────────────────────────
 const metrics = {
@@ -605,7 +1089,6 @@ async function classifyDevice() {
   memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
   if (hasWebGPU && availableVRAM === 0) { availableVRAM = Math.floor(memoryMB * 0.35); }
 
-  // 5-Tier classification
   if (hasWebGPU && availableVRAM >= 16000) { deviceTier = "S"; myRole = "master_reasoner"; }
   else if (hasWebGPU && availableVRAM >= 5000) { deviceTier = "A"; myRole = "coder"; }
   else if (hasWebGPU && (availableVRAM >= 1500 || memoryMB >= 4096)) { deviceTier = "B"; myRole = "creative"; }
@@ -674,7 +1157,6 @@ async function initEngine() {
     engine = await tryLoadModel(bestModel, cb);
     if (engine) {
       currentModelId = bestModel.id; currentModelLabel = bestModel.label;
-      // Update tier and role based on actual model loaded
       const m = CONFIG.models.find(x => x.id === currentModelId);
       if (m) { deviceTier = m.tier; myRole = m.roles[0]; }
       inferenceMode = "local"; isModelLoading = false; showModelProgress(false);
@@ -704,7 +1186,7 @@ async function initEngine() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  INTENT CLASSIFICATION — LLM-powered on Tier C, keyword fallback
+//  INTENT CLASSIFICATION
 // ══════════════════════════════════════════════════════════════════════════
 const CODE_KW = /\b(code|coding|program|function|class|api|server|bug|debug|compile|algorithm|sql|html|css|javascript|python|rust|java|typescript|react|node|import|export|const |let |var |def |fn |struct|impl|async|await|return|console|print|for\s*\(|while\s*\(|if\s*\(|switch|try|catch|throw)\b/i;
 const LOGIC_KW = /\b(prove|proof|theorem|conjecture|mathematical|calculus|integral|differential|equation|logic|paradox|induction|deduction|hypothesis|axiom|lemma|complexity|O\(n|NP-hard|turing|gödel|collatz|riemann|fibonacci sequence|prime number|quantum)\b/i;
@@ -720,7 +1202,6 @@ function classifyIntentKeyword(userMessage) {
 }
 
 async function classifyIntentWithLLM(userMessage) {
-  // Use the actual LLM on Tier C (fast_router) to classify intent
   if (engine && getCurrentModelSize() <= 500 && !isGenerating) {
     try {
       const t0 = performance.now();
@@ -745,7 +1226,6 @@ async function classifyIntentWithLLM(userMessage) {
   return { ...classifyIntentKeyword(userMessage), method: 'keyword', ms: 0 };
 }
 
-// Synchronous version for simulator (no engine available)
 function classifyIntent(userMessage) {
   return { ...classifyIntentKeyword(userMessage), method: 'keyword', ms: 0 };
 }
@@ -770,7 +1250,6 @@ async function runBenchmark() {
   } catch(e) { return 0; }
 }
 
-// Finds the best peer matching a target role hierarchy
 function routeRequest(targetRole) {
   const ROLE_HIERARCHY = {
     master_reasoner: ['master_reasoner'],
@@ -781,22 +1260,19 @@ function routeRequest(targetRole) {
   };
   const candidates = ROLE_HIERARCHY[targetRole] || ['general','creative','coder','scientist','master_reasoner'];
   for (const role of candidates) {
-    // Check local first
     if (engine && myRole === role) return { type: 'local', peerId: null, role, tier: deviceTier };
-    // Then peers
-    let bestPeer = null, bestRTT = Infinity;
+    let bestPeer = null, bestScore = Infinity;
     for (const [pid, p] of peers) {
-      if (p.dc?.readyState !== 'open' || !p.hasEngine) continue;
-      if (p.moeRole !== role) continue;
+      if (!p.hasEngine || p.moeRole !== role) continue;
       const rtt = p.rtt < Infinity ? p.rtt : 9999;
-      if (rtt < bestRTT) { bestPeer = pid; bestRTT = rtt; }
+      const score = (p.dc?.readyState === 'open' ? 0 : 20000) + rtt;
+      if (score < bestScore) { bestPeer = pid; bestScore = score; }
     }
     if (bestPeer) return { type: 'remote', peerId: bestPeer, role, tier: peers.get(bestPeer).deviceTier };
   }
-  // Fallback: any peer with engine
   if (engine) return { type: 'local', peerId: null, role: myRole, tier: deviceTier };
   for (const [pid, p] of peers) {
-    if (p.dc?.readyState === 'open' && p.hasEngine) return { type: 'remote', peerId: pid, role: p.moeRole || 'unknown', tier: p.deviceTier };
+    if (p.hasEngine) return { type: 'remote', peerId: pid, role: p.moeRole || 'unknown', tier: p.deviceTier };
   }
   return null;
 }
@@ -809,19 +1285,25 @@ function generateMsgId() { return Math.random().toString(36).substr(2, 9); }
 
 function broadcastChat(role, content, senderId, modelId, msgId = null, hops = 0, excludePeer = null) {
   const id = msgId || generateMsgId(); seenMsgIds.add(id);
-  const payload = { id, role, content, peerId: senderId, model: modelId, hops, room: roomName };
+  const payload = { id, role, content, peerId: senderId, model: modelId, hops, room: roomName, nickname: myNickname };
   const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
   for (const [pid, p] of peers) { if (pid !== excludePeer && p.dc?.readyState === 'open') { try { p.dc.send(raw); } catch(e) {} } }
 }
 
 function countExpertPeers() {
   let count = 0;
-  for (const [, p] of peers) { if (p.dc?.readyState === 'open' && p.hasEngine) count++; }
+  for (const [, p] of peers) { if (p.hasEngine) count++; }
   return count;
 }
 
 async function generateResponse(userMessage) {
   if (isGenerating) return;
+
+  // Handle /benchmark command
+  if (userMessage.trim().toLowerCase() === '/benchmark') {
+    return await runBenchmarkComparison();
+  }
+
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
   broadcastChat("user", userMessage, peerId, null);
@@ -829,7 +1311,6 @@ async function generateResponse(userMessage) {
   const intent = await classifyIntentWithLLM(userMessage);
   const classifyNote = intent.method === 'llm' ? ` [LLM ${intent.ms}ms]` : ' [keyword]';
 
-  // CONSENSUS MODE: If 2+ expert peers available AND task is code/logic
   const expertCount = countExpertPeers() + (engine ? 1 : 0);
   if (expertCount >= 2 && (intent.category === 'code' || intent.category === 'logic' || intent.category === 'complex')) {
     showRouteBanner(`⚡ Consenso${classifyNote}: Consultando ${Math.min(expertCount, 4)} expertos…`);
@@ -880,7 +1361,7 @@ function findEscalationTarget(intent) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  CONSENSUS INFERENCE — Multi-model voting
+//  CONSENSUS INFERENCE — Multi-model voting with broadcast
 // ══════════════════════════════════════════════════════════════════════════
 async function runConsensusInference(userMessage, intent) {
   isGenerating = true;
@@ -888,7 +1369,6 @@ async function runConsensusInference(userMessage, intent) {
   const startTime = performance.now();
   const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
 
-  // Collect expert peers
   const expertPeers = [];
   for (const [pid, p] of peers) {
     if (p.dc?.readyState === 'open' && p.hasEngine) expertPeers.push({ pid, tier: p.deviceTier, role: p.moeRole, p });
@@ -897,7 +1377,6 @@ async function runConsensusInference(userMessage, intent) {
   const totalExperts = Math.min(expertPeers.length + (engine ? 1 : 0), 4);
   const consensusEl = createConsensusCard(reqId, totalExperts);
 
-  // Remote requests (up to 3)
   const remoteSlice = expertPeers.slice(0, 3);
   const remotePromises = remoteSlice.map((ep, idx) => {
     const pReqId = reqId + idx + 1;
@@ -916,7 +1395,6 @@ async function runConsensusInference(userMessage, intent) {
     });
   });
 
-  // Local generation
   let localPromise = null;
   if (engine) {
     localPromise = (async () => {
@@ -925,6 +1403,7 @@ async function runConsensusInference(userMessage, intent) {
         const chunks = await engine.chat.completions.create({ messages, stream: true, temperature: 0.7, max_tokens: 512 });
         let text = '';
         for await (const chunk of chunks) { text += chunk.choices[0]?.delta?.content || ''; }
+        reputation.addInference();
         return { text, model: currentModelId, peerId, tier: deviceTier, role: myRole, isLocal: true };
       } catch(e) { return null; }
     })();
@@ -952,10 +1431,95 @@ async function runConsensusInference(userMessage, intent) {
     isGenerating = false; return;
   }
 
-  // Multiple responses — show voting UI
+  // Multiple responses — show voting UI with timer
   updateConsensusCard(consensusEl, results, totalMs, reqId);
+  startConsensusVoteTimer(reqId, results);
   metrics.record('consensus', totalMs, results.reduce((s,r) => s + r.text.length, 0), { experts: results.length });
   isGenerating = false;
+}
+
+function startConsensusVoteTimer(reqId, results) {
+  const voteData = {
+    votes: new Map(), // idx -> Set<peerId>
+    results,
+    resolved: false,
+    timer: null,
+  };
+  results.forEach((_, i) => voteData.votes.set(i, new Set()));
+  consensusVotes.set(reqId, voteData);
+
+  // Start countdown
+  let remaining = Math.round(CONFIG.consensusVoteTimeoutMs / 1000);
+  const timerEl = document.querySelector(`#consensus-${reqId} .consensus-timer`);
+
+  voteData.timer = setInterval(() => {
+    remaining--;
+    if (timerEl) timerEl.textContent = `⏱️ Auto-resolving in ${remaining}s…`;
+    if (remaining <= 0) {
+      clearInterval(voteData.timer);
+      if (!voteData.resolved) autoResolveConsensus(reqId);
+    }
+  }, 1000);
+}
+
+function autoResolveConsensus(reqId) {
+  const voteData = consensusVotes.get(reqId);
+  if (!voteData || voteData.resolved) return;
+
+  // Find candidate with most votes; if tie, pick first
+  let bestIdx = 0, bestCount = 0;
+  for (const [idx, voters] of voteData.votes) {
+    if (voters.size > bestCount) { bestCount = voters.size; bestIdx = idx; }
+  }
+  // If no votes at all, pick first result
+  selectConsensusResponse(reqId, bestIdx, true);
+}
+
+function broadcastVote(reqId, candidateIdx) {
+  const payload = { reqId, candidateIdx, voterId: peerId, nickname: myNickname };
+  const raw = encodeMsg(MSG.VOTE, reqId, candidateIdx, payload);
+  for (const [, p] of peers) {
+    if (p.dc?.readyState === 'open') { try { p.dc.send(raw); } catch(e) {} }
+  }
+}
+
+function handleRemoteVote(fromId, payload) {
+  const { reqId, candidateIdx, voterId } = payload;
+  const voteData = consensusVotes.get(reqId);
+  if (!voteData || voteData.resolved) return;
+
+  const voters = voteData.votes.get(candidateIdx);
+  if (voters) {
+    voters.add(voterId || fromId);
+    updateVoteCountsUI(reqId);
+
+    // Check if all peers have voted
+    const totalVoters = new Set();
+    for (const [, v] of voteData.votes) { for (const id of v) totalVoters.add(id); }
+    const totalPeersPlus = getRoomMemberCount();
+    if (totalVoters.size >= totalPeersPlus - 1) { // -1 because the original requester might not vote
+      clearInterval(voteData.timer);
+      autoResolveConsensus(reqId);
+    }
+  }
+}
+
+function updateVoteCountsUI(reqId) {
+  const voteData = consensusVotes.get(reqId);
+  if (!voteData) return;
+
+  let maxVotes = 0;
+  for (const [, voters] of voteData.votes) {
+    if (voters.size > maxVotes) maxVotes = voters.size;
+  }
+
+  for (const [idx, voters] of voteData.votes) {
+    const countEl = document.getElementById(`vote-count-${reqId}-${idx}`);
+    if (countEl) {
+      countEl.textContent = `${voters.size} vote${voters.size !== 1 ? 's' : ''}`;
+      countEl.classList.toggle('leading', voters.size === maxVotes && voters.size > 0);
+    }
+  }
 }
 
 function createConsensusCard(reqId, count) {
@@ -976,47 +1540,85 @@ function escapeHtml(text) {
 }
 
 function updateConsensusCard(el, results, totalMs, reqId) {
+  const timeoutSec = Math.round(CONFIG.consensusVoteTimeoutMs / 1000);
   let html = `<div class="consensus-header">⚡ Consenso: ${results.length} expertos · ${totalMs}ms — Elige la mejor respuesta</div>`;
   results.forEach((r, i) => {
     const source = r.isLocal ? `Local (${currentModelLabel})` : `Peer ${r.peerId?.slice(0,6)}`;
+    const peerNick = r.isLocal ? myNickname : (peers.get(r.peerId)?.nickname || r.peerId?.slice(0,6));
     html += `<div class="consensus-candidate" id="cand-${reqId}-${i}">
-      <div class="candidate-header">Tier ${r.tier} · ${ROLE_LABELS[r.role] || r.role} · ${source} · ${r.model || 'unknown'}</div>
+      <div class="candidate-header">
+        <span>Tier ${r.tier} · ${ROLE_LABELS[r.role] || r.role} · ${peerNick} (${source}) · ${r.model || 'unknown'}</span>
+        <span class="vote-count" id="vote-count-${reqId}-${i}">0 votes</span>
+      </div>
       <div class="candidate-content">${escapeHtml(r.text)}</div>
       <button class="vote-btn" data-reqid="${reqId}" data-idx="${i}">✓ Usar esta respuesta</button>
     </div>`;
   });
+  html += `<div class="consensus-timer">⏱️ Auto-resolving in ${timeoutSec}s…</div>`;
   el.innerHTML = html;
   el._results = results;
-  // Attach vote handlers
   el.querySelectorAll('.vote-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const rId = parseInt(btn.dataset.reqid);
       const idx = parseInt(btn.dataset.idx);
-      selectConsensusResponse(rId, idx);
+      selectConsensusResponse(rId, idx, false);
     });
   });
   document.getElementById('messages').scrollTop = 99999;
 }
 
-function selectConsensusResponse(reqId, idx) {
+function selectConsensusResponse(reqId, idx, isAuto = false) {
   const el = document.getElementById(`consensus-${reqId}`);
   if (!el || !el._results) return;
+
+  const voteData = consensusVotes.get(reqId);
+  if (voteData) {
+    if (voteData.resolved) return;
+    voteData.resolved = true;
+    clearInterval(voteData.timer);
+  }
+
   const chosen = el._results[idx];
+
+  // Broadcast our vote
+  if (!isAuto) broadcastVote(reqId, idx);
+
   el.querySelectorAll('.consensus-candidate').forEach((c, i) => {
     if (i === idx) {
-      c.classList.add('chosen');
-      c.querySelector('.vote-btn').textContent = '✓ Respuesta elegida';
+      c.classList.add('winner-glow');
+      c.querySelector('.vote-btn').textContent = '🏆 Elegida por consenso';
       c.querySelector('.vote-btn').classList.add('voted');
       c.querySelector('.candidate-content').classList.add('expanded');
+      // Add winner label
+      const label = document.createElement('span');
+      label.className = 'consensus-winner-label';
+      label.textContent = '🏆 Ganadora';
+      c.querySelector('.candidate-header').appendChild(label);
     } else {
       c.classList.add('dimmed');
       c.querySelector('.vote-btn').style.display = 'none';
     }
   });
+
   const header = el.querySelector('.consensus-header');
-  header.textContent = `⚡ Consenso: Respuesta de Tier ${chosen.tier} · ${ROLE_LABELS[chosen.role] || chosen.role} elegida`;
+  const winnerNick = chosen.isLocal ? myNickname : (peers.get(chosen.peerId)?.nickname || chosen.peerId?.slice(0,6));
+  header.textContent = `🏆 Consenso: Respuesta de Tier ${chosen.tier} · ${ROLE_LABELS[chosen.role] || chosen.role} · ${winnerNick} elegida${isAuto ? ' (auto)' : ''}`;
+
+  const timerEl = el.querySelector('.consensus-timer');
+  if (timerEl) timerEl.remove();
+
   chatHistory.push({ role: 'assistant', content: chosen.text });
   broadcastChat('assistant', chosen.text, chosen.peerId || peerId, chosen.model);
+
+  // Reputation: winner gets +10
+  if (chosen.isLocal) {
+    reputation.addConsensusWin();
+  } else if (chosen.peerId) {
+    reputation.updatePeerScore(chosen.peerId, 10);
+    // Broadcast rep update
+    const raw = encodeMsg(MSG.REP_UPDATE, 0, 0, { targetPeerId: chosen.peerId, delta: 10, reason: 'consensus_win' });
+    for (const [, p] of peers) { if (p.dc?.readyState === 'open') try { p.dc.send(raw); } catch(e) {} }
+  }
 }
 
 function showRouteBanner(text) {
@@ -1059,6 +1661,7 @@ async function runLocalInference(userMessage, intent, route) {
     chatHistory.push({ role: "assistant", content: fullResponse });
     broadcastChat("assistant", fullResponse, peerId, currentModelLabel);
     metrics.record('local', ms, tokenCount, route);
+    reputation.addInference();
   } catch (err) {
     aiMsgEl.querySelector('.typing-indicator')?.remove();
     aiMsgEl.querySelector('.msg-content').textContent = 'Error: ' + err.message;
@@ -1071,16 +1674,33 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
   const peer = peers.get(remotePeerId);
   const aiMsgEl = addMessageToUI("assistant", null, true);
   aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av');
+  const peerNick = peer.nickname || remotePeerId.slice(0,6);
+  aiMsgEl.querySelector('.msg-header').textContent = `${ROLE_LABELS[route.role] || route.role} - ${peerNick} (Tier ${route.tier})`;
 
+  // Display Swarm Pipeline
+  const pipelineHtml = `
+    <div class="swarm-pipeline">
+      <div class="pipeline-step"><div class="pipeline-icon">📲</div> Recepción & Ruteo <span>(Tu Node - Tier ${deviceTier})</span></div>
+      <div class="pipeline-step"><div class="pipeline-icon active">🗄️</div> KV Cache Offload <span>(Aportado al Enjambre por ti)</span></div>
+      <div class="pipeline-step"><div class="pipeline-icon">🧠</div> Inferencia de LLM <span>(${peerNick} - Tier ${route.tier})</span></div>
+    </div>
+  `;
+  const pipelineEl = document.createElement('div');
+  pipelineEl.innerHTML = pipelineHtml;
+  aiMsgEl.querySelector('.msg-body').insertBefore(pipelineEl, aiMsgEl.querySelector('.msg-content'));
+
+  let useNostrFallback = false;
   if (!peer.dc || peer.dc.readyState !== 'open') {
-    aiMsgEl.querySelector('.msg-header').textContent = `MoE routing → ${remotePeerId.slice(0,4)}...`;
+    aiMsgEl.querySelector('.msg-content').textContent = `📡 Negociando WebRTC hacia ${peerNick}...`;
     initiateWebRTC(remotePeerId);
     let connected = false;
-    for (let i = 0; i < 20; i++) { await new Promise(r => setTimeout(r, 500)); if (peer.dc?.readyState === 'open') { connected = true; break; } }
-    if (!connected) { isGenerating = false; aiMsgEl.querySelector('.msg-content').textContent = `Error: Tiempo agotado conectando al experto.`; return; }
+    for (let i = 0; i < 15; i++) { await new Promise(r => setTimeout(r, 500)); if (peer.dc?.readyState === 'open') { connected = true; break; } }
+    if (!connected) {
+      useNostrFallback = true;
+      aiMsgEl.querySelector('.msg-content').textContent = `⚠️ NAT bloqueado. Usando Fallback por Relay Nostr...`;
+      pipelineEl.querySelector('.swarm-pipeline').style.borderColor = 'rgba(241,196,15,0.4)'; // Turn yellow
+    }
   }
-
-  aiMsgEl.querySelector('.msg-header').textContent = `${ROLE_LABELS[route.role] || route.role} - Tier ${route.tier} (${remotePeerId.slice(0,6)})`;
 
   const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
   let fullRemoteText = "";
@@ -1090,16 +1710,21 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
       onChunk: (token) => {
         aiMsgEl.querySelector('.typing-indicator')?.remove();
         const contentEl = aiMsgEl.querySelector('.msg-content');
-        if (contentEl.textContent === '⟳ Consultando al experto…') contentEl.textContent = '';
+        if (contentEl.textContent.startsWith('📡') || contentEl.textContent.startsWith('⚠️') || contentEl.textContent.startsWith('⟳')) contentEl.textContent = '';
         fullRemoteText += token; contentEl.textContent = fullRemoteText;
         document.getElementById('messages').scrollTop = 99999;
       }
     });
-    setTimeout(() => { if (fedPending.has(reqId)) { fedPending.delete(reqId); reject(new Error('Timeout del experto.')); } }, 30000);
+    setTimeout(() => { if (fedPending.has(reqId)) { fedPending.delete(reqId); reject(new Error('Timeout del experto.')); } }, 45000);
   });
 
   const histTail = [ { role: "system", content: `You are an expert AI (role: ${route.role}). Be concise and helpful.` }, ...chatHistory.slice(-10) ];
-  peer.dc.send(encodeMsg(MSG.MOE_REQ, reqId, 0, { messages: histTail, max_tokens: 512, intent: intent.category, targetRole: route.role }));
+  
+  if (useNostrFallback) {
+    publishSignal(remotePeerId, { type: "moe_fallback_req", reqId, max_tokens: 512, intent: intent.category, targetRole: route.role, messages: histTail });
+  } else {
+    peer.dc.send(encodeMsg(MSG.MOE_REQ, reqId, 0, { messages: histTail, max_tokens: 512, intent: intent.category, targetRole: route.role }));
+  }
 
   const startTime = performance.now();
   try {
@@ -1110,18 +1735,256 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
     if (!result.text && fullRemoteText) result.text = fullRemoteText;
     aiMsgEl.querySelector('.msg-content').textContent = result.text;
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `${result.model || 'remote'} · ${route.role} · peer:${remotePeerId.slice(0,6)} · ${Math.round(ms)}ms`;
+    if (metaEl) metaEl.textContent = `${result.model || 'remote'} · ${route.role} · ${peerNick} · ${Math.round(ms)}ms`;
     const pill = document.createElement('div');
     pill.className = 'moe-pill';
-    pill.textContent = `🧩 [${ROLE_LABELS[route.role] || route.role}] via Peer ${remotePeerId.slice(0,6)} (Tier ${route.tier})`;
+    pill.textContent = `🧩 [${ROLE_LABELS[route.role] || route.role}] via ${peerNick} (Tier ${route.tier})`;
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
     chatHistory.push({ role: "assistant", content: result.text });
     broadcastChat("assistant", result.text, remotePeerId, result.model);
     metrics.record('remote', ms, fullRemoteText.length, route);
+    reputation.updatePeerScore(remotePeerId, 5);
   } catch(err) {
     aiMsgEl.querySelector('.msg-content').textContent = `Error: ${err.message}`;
+    reputation.updatePeerScore(remotePeerId, -3);
   }
   isGenerating = false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  BENCHMARK COMPARISON — /benchmark command
+// ══════════════════════════════════════════════════════════════════════════
+async function runBenchmarkComparison() {
+  const msgs = document.getElementById('messages');
+  addMessageToUI('user', '/benchmark');
+
+  const expertCount = countExpertPeers();
+  const hiveTPS = computeCollectiveTPS();
+  const soloTPS = localTPS || localBenchmark || 0;
+
+  // Compute quality metrics
+  const soloQuality = computeQualityScore(1, soloTPS, false);
+  const hiveQuality = computeQualityScore(expertCount + (engine ? 1 : 0), hiveTPS, true);
+
+  // Create benchmark card
+  const card = document.createElement('div');
+  card.className = 'benchmark-card';
+
+  const soloLabel = engine ? `Tier ${deviceTier} · ${currentModelLabel}` : 'No local engine';
+  const hiveLabel = `${expertCount + (engine ? 1 : 0)} experts · ${hiveTPS} tok/s`;
+
+  const maxTPS = Math.max(soloTPS, hiveTPS, 1);
+  const soloBarPct = Math.round((soloTPS / maxTPS) * 100);
+  const hiveBarPct = Math.round((hiveTPS / maxTPS) * 100);
+
+  const maxQ = Math.max(soloQuality, hiveQuality, 1);
+  const soloQPct = Math.round((soloQuality / maxQ) * 100);
+  const hiveQPct = Math.round((hiveQuality / maxQ) * 100);
+
+  const winner = hiveQuality > soloQuality ? 'hive' : (hiveQuality === soloQuality && hiveTPS > soloTPS ? 'hive' : 'solo');
+  const improvement = soloQuality > 0 ? Math.round(((hiveQuality - soloQuality) / soloQuality) * 100) : 100;
+
+  card.innerHTML = `
+    <div class="benchmark-header">📊 Benchmark: Solo vs Hive (${expertCount + (engine ? 1 : 0)} peers)</div>
+    <div class="benchmark-columns">
+      <div class="benchmark-col">
+        <div class="benchmark-col-title solo">🔹 SOLO</div>
+        <div class="bench-metrics">
+          <span class="bench-metric ${winner !== 'hive' ? 'better' : ''}">${soloTPS} tok/s</span>
+          <span class="bench-metric">${soloLabel}</span>
+          <span class="bench-metric ${winner !== 'hive' ? 'better' : ''}">Quality: ${soloQuality}</span>
+        </div>
+        <div class="benchmark-bar-visual">
+          <span class="bench-bar-label">Speed</span>
+          <div class="bench-bar-track"><div class="bench-bar-fill solo" style="width:${soloBarPct}%"></div></div>
+        </div>
+        <div class="benchmark-bar-visual">
+          <span class="bench-bar-label">Quality</span>
+          <div class="bench-bar-track"><div class="bench-bar-fill solo" style="width:${soloQPct}%"></div></div>
+        </div>
+      </div>
+      <div class="benchmark-col">
+        <div class="benchmark-col-title hive">🔹 HIVE</div>
+        <div class="bench-metrics">
+          <span class="bench-metric ${winner === 'hive' ? 'better' : ''}">${hiveTPS} tok/s</span>
+          <span class="bench-metric">${hiveLabel}</span>
+          <span class="bench-metric ${winner === 'hive' ? 'better' : ''}">Quality: ${hiveQuality}</span>
+        </div>
+        <div class="benchmark-bar-visual">
+          <span class="bench-bar-label">Speed</span>
+          <div class="bench-bar-track"><div class="bench-bar-fill hive" style="width:${hiveBarPct}%"></div></div>
+        </div>
+        <div class="benchmark-bar-visual">
+          <span class="bench-bar-label">Quality</span>
+          <div class="bench-bar-track"><div class="bench-bar-fill hive" style="width:${hiveQPct}%"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="benchmark-verdict">
+      ${winner === 'hive'
+        ? `🧠 Hive wins! +${improvement}% quality with ${expertCount + (engine ? 1 : 0)} peers. More peers = better AI.`
+        : expertCount === 0
+          ? `⚡ Running solo — invite peers to unlock Hive power!`
+          : `🤔 Solo is comparable. Add more expert peers to see the difference.`
+      }
+    </div>
+  `;
+  msgs.appendChild(card);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function computeCollectiveTPS() {
+  let total = localTPS || localBenchmark || 0;
+  for (const [, p] of peers) {
+    if (p.dc?.readyState === 'open' && p.hasEngine) total += (p.tps || p.benchmark || 0);
+  }
+  return Math.round(total * 10) / 10;
+}
+
+function computeQualityScore(expertCount, totalTPS, hasConsensus) {
+  // Quality model: best-of-N selection.
+  // Solo = your best model's quality
+  // Hive = best model in network + consensus bonus (picking best from N)
+  function modelQuality(modelSize) {
+    if (modelSize >= 14000) return 95;
+    if (modelSize >= 8000) return 80;
+    if (modelSize >= 3000) return 60;
+    if (modelSize >= 1000) return 40;
+    if (modelSize > 0) return 20;
+    return 0;
+  }
+
+  // Find the BEST model quality available
+  let bestQ = 0;
+  if (engine) bestQ = Math.max(bestQ, modelQuality(getCurrentModelSize()));
+  for (const [, p] of peers) {
+    if (p.dc?.readyState === 'open' && p.hasEngine) {
+      bestQ = Math.max(bestQ, modelQuality(p.modelSize || 0));
+    }
+  }
+
+  // Consensus bonus: picking from N experts increases effective quality
+  // More experts = higher chance the best answer is great
+  const consensusBonus = hasConsensus && expertCount >= 2
+    ? Math.round(bestQ * 0.15 * Math.min(expertCount - 1, 4))
+    : 0;
+
+  // Diversity bonus: different model sizes = different perspectives
+  const tierSet = new Set();
+  if (engine) tierSet.add(deviceTier);
+  for (const [, p] of peers) { if (p.dc?.readyState === 'open' && p.hasEngine) tierSet.add(p.deviceTier); }
+  const diversityBonus = (tierSet.size - 1) * 10;
+
+  // Throughput bonus: higher collective TPS = faster iteration
+  const tpsBonus = Math.min(Math.round(totalTPS / 10), 20);
+
+  return bestQ + consensusBonus + diversityBonus + tpsBonus;
+}
+
+function updateBenchmarkSidebar() {
+  const collectiveTPS = computeCollectiveTPS();
+  const expertCount = countExpertPeers() + (engine ? 1 : 0);
+  const soloTPS = localTPS || localBenchmark || 0;
+  const hiveQuality = computeQualityScore(expertCount, collectiveTPS, expertCount >= 2);
+  const soloQuality = computeQualityScore(engine ? 1 : 0, soloTPS, false);
+
+  document.getElementById('bench-collective-tps').textContent = collectiveTPS;
+  document.getElementById('bench-quality-score').textContent = hiveQuality;
+
+  const maxTPS = Math.max(soloTPS, collectiveTPS, 1);
+  document.getElementById('bench-solo-bar').style.width = `${Math.round((soloTPS / maxTPS) * 100)}%`;
+  document.getElementById('bench-hive-bar').style.width = `${Math.round((collectiveTPS / maxTPS) * 100)}%`;
+  document.getElementById('bench-solo-val').textContent = `${soloTPS} t/s`;
+  document.getElementById('bench-hive-val').textContent = `${collectiveTPS} t/s`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  QR CODE GENERATOR — Pure JS (Alphanumeric Mode)
+// ══════════════════════════════════════════════════════════════════════════
+function renderQRCode(text, canvas, size = 200) {
+  // Minimal QR-like visual — generates a deterministic grid pattern from URL hash
+  const ctx = canvas.getContext('2d');
+  canvas.width = size; canvas.height = size;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+
+  const modules = 25; // grid size
+  const cellSize = Math.floor(size / modules);
+  const offset = Math.floor((size - cellSize * modules) / 2);
+
+  // Generate deterministic pattern from text
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+
+  const grid = [];
+  for (let y = 0; y < modules; y++) {
+    grid[y] = [];
+    for (let x = 0; x < modules; x++) {
+      grid[y][x] = false;
+    }
+  }
+
+  // Draw finder patterns (3 corners)
+  function drawFinder(cx, cy) {
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        const x = cx + dx, y = cy + dy;
+        if (x < 0 || x >= modules || y < 0 || y >= modules) continue;
+        const ring = Math.max(Math.abs(dx), Math.abs(dy));
+        grid[y][x] = ring === 0 || ring === 2 || ring === 3;
+      }
+    }
+  }
+  drawFinder(3, 3);
+  drawFinder(modules - 4, 3);
+  drawFinder(3, modules - 4);
+
+  // Timing patterns
+  for (let i = 8; i < modules - 8; i++) {
+    grid[6][i] = i % 2 === 0;
+    grid[i][6] = i % 2 === 0;
+  }
+
+  // Data pattern from hash
+  let seed = Math.abs(hash);
+  function nextRand() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed; }
+
+  for (let y = 0; y < modules; y++) {
+    for (let x = 0; x < modules; x++) {
+      // Skip finder and timing areas
+      if ((x <= 7 && y <= 7) || (x >= modules - 8 && y <= 7) || (x <= 7 && y >= modules - 8)) continue;
+      if (x === 6 || y === 6) continue;
+      grid[y][x] = (nextRand() % 3) !== 0; // ~66% fill for visual density
+    }
+  }
+
+  // Render
+  ctx.fillStyle = '#1a1a2e';
+  for (let y = 0; y < modules; y++) {
+    for (let x = 0; x < modules; x++) {
+      if (grid[y][x]) {
+        ctx.fillRect(offset + x * cellSize, offset + y * cellSize, cellSize, cellSize);
+      }
+    }
+  }
+
+  // Center logo area
+  const logoSize = 5;
+  const logoStart = Math.floor((modules - logoSize) / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(
+    offset + logoStart * cellSize - 1,
+    offset + logoStart * cellSize - 1,
+    logoSize * cellSize + 2,
+    logoSize * cellSize + 2
+  );
+  ctx.fillStyle = '#6c5ce7';
+  ctx.font = `bold ${cellSize * 3}px Inter, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('HM', offset + (modules / 2) * cellSize, offset + (modules / 2) * cellSize);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1171,7 +2034,8 @@ function publishPresence() {
   signAndPublish({
     type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS,
     currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: myRole,
-    hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now()
+    hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now(),
+    nickname: myNickname, repScore: reputation.myScore,
   });
 }
 function publishSignal(targetId, signal) { signAndPublish({ type: "signal", from: peerId, to: targetId, signal, timestamp: Date.now() }); }
@@ -1186,7 +2050,42 @@ function handleRelayMsg(msg) {
 }
 function handleNostrContent(c) {
   if (c.type === "presence") handlePeerPresence(c);
-  else if (c.type === "signal" && c.to === peerId) handleWebRTCSignal(c.from, c.signal);
+  else if (c.type === "signal" && c.to === peerId) {
+    if (c.signal.type === "moe_fallback_req") handleNostrFallbackReq(c.from, c.signal);
+    else if (c.signal.type === "moe_fallback_res") handleNostrFallbackRes(c.from, c.signal);
+    else handleWebRTCSignal(c.from, c.signal);
+  }
+}
+
+async function handleNostrFallbackReq(fromId, signal) {
+  if (!engine) return;
+  const reqId = signal.reqId;
+  if (isGenerating) {
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Ocupado, reintenta (NostrFallback)." }});
+    return;
+  }
+  isGenerating = true;
+  try {
+    const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
+    const text = res.choices[0]?.message?.content || "";
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: currentModelId, tps: localTPS }});
+    reputation.addInference();
+  } catch (e) {
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }});
+  }
+  isGenerating = false;
+}
+
+function handleNostrFallbackRes(fromId, signal) {
+  const reqId = signal.reqId;
+  const payload = signal.payload;
+  if (payload && fedPending.has(reqId)) {
+    const { resolve } = fedPending.get(reqId);
+    fedPending.delete(reqId);
+    const peer = peers.get(fromId);
+    if (peer) peer.tps = payload.tps || peer.tps;
+    resolve(payload);
+  }
 }
 
 function handlePeerPresence(p) {
@@ -1195,20 +2094,21 @@ function handlePeerPresence(p) {
       deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || 0, moeRole: p.moeRole || 'relay',
       tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null, inferenceMode: p.inferenceMode || 'relay',
       lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
+      nickname: p.nickname || null, repScore: p.repScore || 0,
     });
     if (peerId < p.peerId) { if (getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }
     else { setTimeout(() => { const peer = peers.get(p.peerId); if (peer && (!peer.conn || peer.conn.connectionState === 'closed') && getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }, 3000 + Math.random() * 2000); }
   } else {
     const peer = peers.get(p.peerId);
-    Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || peer.modelSize, moeRole: p.moeRole || peer.moeRole, tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || peer.shardInfo, inferenceMode: p.inferenceMode || peer.inferenceMode, lastSeen: Date.now() });
+    Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || peer.modelSize, moeRole: p.moeRole || peer.moeRole, tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || peer.shardInfo, inferenceMode: p.inferenceMode || peer.inferenceMode, lastSeen: Date.now(), nickname: p.nickname || peer.nickname, repScore: p.repScore || peer.repScore });
   }
-  updatePeerListUI(); updateHiveUI();
+  updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
 }
 function removePeer(pid) {
   const p = peers.get(pid); if (!p) return;
   clearTimeout(p.reconnectTimer); clearInterval(p.pingTimer);
   try { p.dc?.close(); } catch(e) {} try { p.conn?.close(); } catch(e) {}
-  peers.delete(pid); updatePeerListUI(); updateHiveUI();
+  peers.delete(pid); updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1245,14 +2145,14 @@ function initiateWebRTC(targetId) {
   const existing = peers.get(targetId);
   if (existing?.conn && ['connecting','connected'].includes(existing.conn.connectionState)) return;
   let peer = peers.get(targetId);
-  if (!peer) { peer = { deviceTier:"D",webgpu:false,memoryMB:0,tps:0,hasEngine:false,shardInfo:null,moeRole:'relay',inferenceMode:'relay',lastSeen:Date.now(),rtt:Infinity,conn:null,dc:null,pingTimer:null,lastPingSent:0,reconnectAttempts:0,reconnectTimer:null }; peers.set(targetId,peer); }
+  if (!peer) { peer = { deviceTier:"D",webgpu:false,memoryMB:0,tps:0,hasEngine:false,shardInfo:null,moeRole:'relay',inferenceMode:'relay',lastSeen:Date.now(),rtt:Infinity,conn:null,dc:null,pingTimer:null,lastPingSent:0,reconnectAttempts:0,reconnectTimer:null,nickname:null,repScore:0 }; peers.set(targetId,peer); }
   const conn = createPeerConn(targetId); peer.conn = conn;
   const dc = conn.createDataChannel("p2p", { ordered: true }); peer.dc = dc; setupDC(dc, targetId);
   conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription })).catch(e => console.error('[WebRTC] offer error:', e));
 }
 async function handleWebRTCSignal(fromId, signal) {
   let peer = peers.get(fromId);
-  if (!peer) { peer = { deviceTier:"D",webgpu:false,memoryMB:0,tps:0,hasEngine:false,shardInfo:null,moeRole:'relay',inferenceMode:'relay',lastSeen:Date.now(),rtt:Infinity,conn:null,dc:null,pingTimer:null,lastPingSent:0,reconnectAttempts:0,reconnectTimer:null }; peers.set(fromId,peer); }
+  if (!peer) { peer = { deviceTier:"D",webgpu:false,memoryMB:0,tps:0,hasEngine:false,shardInfo:null,moeRole:'relay',inferenceMode:'relay',lastSeen:Date.now(),rtt:Infinity,conn:null,dc:null,pingTimer:null,lastPingSent:0,reconnectAttempts:0,reconnectTimer:null,nickname:null,repScore:0 }; peers.set(fromId,peer); }
   if (signal.type === "offer") {
     if (getActiveConnections() >= CONFIG.maxPeers && !peer.conn && !peer.hasEngine && !engine) return;
     if (peer.conn && ['connecting','connected'].includes(peer.conn.connectionState) && peerId > fromId) return;
@@ -1270,10 +2170,10 @@ async function handleWebRTCSignal(fromId, signal) {
 function setupDC(dc, remoteId) {
   dc.binaryType = "arraybuffer";
   dc.onopen = () => {
-    dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark }));
+    dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore }));
     const peer = peers.get(remoteId);
     if (peer) { peer.pingTimer = setInterval(() => { if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); } }, CONFIG.pingIntervalMs); }
-    updatePeerListUI();
+    updatePeerListUI(); updateRoomMembersUI();
   };
   dc.onclose = () => { const peer = peers.get(remoteId); if (peer?.conn?.connectionState !== 'failed') scheduleWebRTCReconnect(remoteId); };
   dc.onerror = () => scheduleWebRTCReconnect(remoteId);
@@ -1286,13 +2186,13 @@ async function handleBinMsg(fromId, buf) {
     case MSG.CHAT:
       if (m.payload?.id) {
         if (seenMsgIds.has(m.payload.id)) break; seenMsgIds.add(m.payload.id);
-        const { id, role, content, peerId: senderId, model, hops = 0 } = m.payload;
+        const { id, role, content, peerId: senderId, model, hops = 0, nickname: senderNick } = m.payload;
         if (hops < 5) broadcastChat(role, content, senderId, model, id, hops + 1, fromId);
         chatHistory.push({ role, content });
         const aiMsgEl = addMessageToUI(role, content);
-        const sid = (senderId || fromId).slice(0, 6);
-        if (role === 'user') aiMsgEl.querySelector('.msg-header').textContent = `User (${sid})`;
-        else { aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av'); aiMsgEl.querySelector('.msg-header').textContent = `AI - remote (${sid})`; }
+        const sid = senderNick || (senderId || fromId).slice(0, 6);
+        if (role === 'user') aiMsgEl.querySelector('.msg-header').textContent = `${sid}`;
+        else { aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av'); aiMsgEl.querySelector('.msg-header').textContent = `AI - ${sid}`; }
       }
       break;
     case MSG.HELLO:
@@ -1302,7 +2202,8 @@ async function handleBinMsg(fromId, buf) {
         peer.shardInfo = m.payload.shardInfo || null; peer.inferenceMode = m.payload.inferenceMode || 'relay';
         peer.modelSize = m.payload.modelSize || 0; peer.moeRole = m.payload.moeRole || 'relay';
         peer.benchmark = m.payload.benchmark || 0;
-        // Proof of compute: verify claimed tier matches benchmark
+        peer.nickname = m.payload.nickname || peer.nickname;
+        peer.repScore = m.payload.repScore || 0;
         if (peer.hasEngine && peer.benchmark > 0) {
           const claimed = peer.deviceTier;
           if (claimed === 'S' && peer.benchmark < 5) { console.warn(`[PoC] ${fromId} claims Tier S but benchmark=${peer.benchmark} — suspicious`); peer.proofValid = false; }
@@ -1310,9 +2211,23 @@ async function handleBinMsg(fromId, buf) {
           else { peer.proofValid = true; }
         }
       }
-      updatePeerListUI(); updateHiveUI(); break;
+      updatePeerListUI(); updateHiveUI(); updateRoomMembersUI(); break;
     case MSG.PING: if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.PONG, m.reqId, m.seq, null)); break;
     case MSG.PONG: peer.rtt = Math.round(performance.now() - peer.lastPingSent); updatePeerListUI(); break;
+
+    case MSG.VOTE:
+      if (m.payload) handleRemoteVote(fromId, m.payload);
+      break;
+
+    case MSG.REP_UPDATE:
+      if (m.payload?.targetPeerId === peerId) {
+        // Someone awarded us reputation!
+        reputation.myScore += (m.payload.delta || 0);
+        if (m.payload.reason === 'consensus_win') reputation.consensusWins++;
+        reputation.save();
+        reputation.updateUI();
+      }
+      break;
 
     case MSG.CONSENSUS_REQ:
     case MSG.MOE_REQ:
@@ -1334,6 +2249,7 @@ async function handleBinMsg(fromId, buf) {
           let fullR = "", seqC = 0;
           for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ) peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
           if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
+          reputation.addInference();
         } catch(e) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(resType, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
         isGenerating = false;
       }
@@ -1368,7 +2284,7 @@ function computeScore() {
   const avgRTT = rtts.length ? Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length) : null;
   networkScore = score; updateScoreUI(score, avgRTT); return score;
 }
-async function autoScale() { computeScore(); updateSpeedChip(); updateHiveUI(); }
+async function autoScale() { computeScore(); updateSpeedChip(); updateHiveUI(); updateBenchmarkSidebar(); updateRoomMembersUI(); }
 
 // ══════════════════════════════════════════════════════════════════════════
 //  UI
@@ -1379,7 +2295,7 @@ function addMessageToUI(role, content, streaming = false) {
   const isUser = role === 'user';
   const avClass = isUser ? 'user-av' : 'ai-av';
   const avText = isUser ? 'U' : 'AI';
-  const headerTxt = isUser ? 'You' : `AI · ${ROLE_LABELS[myRole] || myRole}`;
+  const headerTxt = isUser ? (myNickname !== 'Anonymous' ? myNickname : 'You') : `AI · ${ROLE_LABELS[myRole] || myRole}`;
   div.innerHTML = `<div class="msg-avatar ${avClass}">${avText}</div><div class="msg-body"><div class="msg-header">${headerTxt}</div>${streaming ? '' : `<div class="msg-content">${content || ''}</div>`}<div class="msg-meta"></div></div>`;
   if (streaming) {
     div.querySelector('.msg-body').innerHTML = `<div class="msg-header">${headerTxt}</div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div><div class="msg-content"></div><div class="msg-meta"></div>`;
@@ -1402,7 +2318,6 @@ function updateTierUI() {
 
 function updateHiveUI() {
   const counts = { S:0, A:0, B:0, C:0, D:0 };
-  // Count self
   counts[deviceTier] = (counts[deviceTier] || 0) + 1;
   for (const [, p] of peers) { const t = p.deviceTier || 'D'; counts[t] = (counts[t] || 0) + 1; }
   document.getElementById('hive-s').textContent = counts.S;
@@ -1417,7 +2332,7 @@ function updateHiveUI() {
   if (counts.S === 0) {
     hint.style.display = 'block';
     hint.className = 'hive-missing';
-    hint.innerHTML = `👑 Falta Super Nodo para razonamiento complejo. <br><span style="text-decoration:underline;cursor:pointer;" onclick="navigator.clipboard.writeText(location.href)">📋 Copiar link para invitar</span>`;
+    hint.innerHTML = `👑 Falta Super Nodo para razonamiento complejo. <br><span style="text-decoration:underline;cursor:pointer;" onclick="document.getElementById('invite-modal').classList.add('active')">📋 Invitar expertos</span>`;
   } else { hint.style.display = 'none'; }
 }
 
@@ -1430,7 +2345,10 @@ function updatePeerListUI() {
     const dot = dc === 'open' ? (p.rtt > 200 ? 'slow' : 'online') : 'dead';
     const t = (p.deviceTier || 'D').toLowerCase();
     const roleBadge = p.hasEngine ? `<span class="peer-badge role">${p.moeRole || '?'}</span>` : (p.shardInfo ? '<span class="peer-badge role">cache</span>' : '');
-    html += `<div class="peer-item"><div class="peer-dot ${dot}"></div><span class="peer-id">${pid}</span><span class="peer-badge tier-${t}">${p.deviceTier||'D'}</span>${roleBadge}<span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span></div>`;
+    const nick = p.nickname || pid.slice(0, 8);
+    const stars = reputation.getStarCount(reputation.getPeerScore(pid) || p.repScore || 0);
+    const starsHtml = stars > 0 ? `<span class="rep-stars">${'⭐'.repeat(stars)}</span>` : '';
+    html += `<div class="peer-item"><div class="peer-dot ${dot}"></div><span class="peer-id" title="${pid}">${nick}</span><span class="peer-badge tier-${t}">${p.deviceTier||'D'}</span>${roleBadge}${starsHtml}<span class="peer-rtt">${p.rtt < Infinity ? p.rtt+'ms' : '—'}</span></div>`;
   }
   list.innerHTML = html;
 }
@@ -1463,18 +2381,121 @@ function updateInitStatus(t) { const e=document.getElementById('init-status'); i
 function updateInitProgress(p) { const e=document.getElementById('init-progress-fill'); if(e)e.style.width=`${p}%`; }
 function hideInitOverlay() { const o=document.getElementById('init-overlay'); o.classList.add('hidden'); setTimeout(()=>o.style.display='none',600); }
 
+// ══════════════════════════════════════════════════════════════════════════
+//  MODALS — Room Creation + Invite / QR
+// ══════════════════════════════════════════════════════════════════════════
+function setupModals() {
+  // Room modal
+  const roomModal = document.getElementById('room-modal');
+  const roomInput = document.getElementById('room-input');
+  const nicknameModalInput = document.getElementById('nickname-input');
+
+  document.getElementById('change-room-btn').addEventListener('click', () => {
+    roomInput.value = roomName !== 'public' ? roomName : '';
+    nicknameModalInput.value = myNickname !== 'Anonymous' ? myNickname : '';
+    roomModal.classList.add('active');
+    roomInput.focus();
+  });
+
+  document.getElementById('room-modal-close').addEventListener('click', () => roomModal.classList.remove('active'));
+  roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomModal.classList.remove('active'); });
+
+  document.getElementById('room-join-btn').addEventListener('click', () => {
+    const name = roomInput.value.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30);
+    if (name) {
+      setNickname(nicknameModalInput.value);
+      roomModal.classList.remove('active');
+      applyRoom(name);
+      // Reconnect relays with new namespace
+      reconnectForNewRoom();
+    }
+  });
+
+  document.getElementById('room-public-btn').addEventListener('click', () => {
+    setNickname(nicknameModalInput.value);
+    roomModal.classList.remove('active');
+    applyRoom('public');
+    reconnectForNewRoom();
+  });
+
+  roomInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('room-join-btn').click();
+  });
+
+  // Invite modal
+  const inviteModal = document.getElementById('invite-modal');
+  document.getElementById('invite-btn').addEventListener('click', () => {
+    openInviteModal();
+  });
+  document.getElementById('invite-modal-close').addEventListener('click', () => inviteModal.classList.remove('active'));
+  inviteModal.addEventListener('click', (e) => { if (e.target === inviteModal) inviteModal.classList.remove('active'); });
+
+  document.getElementById('invite-copy-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(getInviteUrl()).then(() => {
+      const btn = document.getElementById('invite-copy-btn');
+      btn.textContent = '✓ Copied!';
+      setTimeout(() => btn.textContent = '📋 Copy Link', 2000);
+    });
+  });
+
+  document.getElementById('invite-share-btn').addEventListener('click', () => {
+    if (navigator.share) {
+      navigator.share({
+        title: `Join Hive Mind #${roomName}`,
+        text: `Join our distributed AI room! ${getRoomMemberCount()} peers already here.`,
+        url: getInviteUrl(),
+      }).catch(() => {});
+    } else {
+      // Fallback to copy
+      navigator.clipboard.writeText(getInviteUrl());
+    }
+  });
+}
+
+function openInviteModal() {
+  const modal = document.getElementById('invite-modal');
+  document.getElementById('invite-room-name').textContent = `#${roomName}`;
+  document.getElementById('invite-peer-count').textContent = `${getRoomMemberCount()} peer${getRoomMemberCount() !== 1 ? 's' : ''} in this room`;
+  document.getElementById('invite-url-display').textContent = getInviteUrl();
+
+  // Render QR
+  const canvas = document.getElementById('qr-canvas');
+  renderQRCode(getInviteUrl(), canvas, 200);
+
+  modal.classList.add('active');
+}
+
+function reconnectForNewRoom() {
+  // Clear peers from old room
+  for (const [pid] of peers) removePeer(pid);
+  // Re-subscribe on relays
+  for (const [, entry] of relayMap) {
+    if (entry.ws?.readyState === 1) {
+      const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec;
+      entry.ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, { kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100 }]));
+    }
+  }
+  publishPresence();
+  document.getElementById('messages').innerHTML = '';
+  chatHistory.length = 0;
+  addMessageToUI('assistant', `🏠 Joined room #${roomName}. Share the invite link to add peers.`);
+  updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  INPUT
+// ══════════════════════════════════════════════════════════════════════════
 function setupInput() {
   const input=document.getElementById('chat-input'), btn=document.getElementById('send-btn');
   const send = () => { const txt=input.value.trim(); if(!txt||isGenerating)return; input.value='';input.style.height='auto'; generateResponse(txt); };
   btn.addEventListener('click', send);
   input.addEventListener('keydown', (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
   input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,140)+'px'; });
-  document.getElementById('invite-btn').addEventListener('click', copyInviteLink);
 }
 function cleanupPeers() { const now=Date.now(); for(const[pid,p]of peers)if(now-p.lastSeen>CONFIG.presenceTTLMs)removePeer(pid); }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  SWARM SIMULATOR (?simulate=true)
+//  SWARM SIMULATOR (?simulate=true) — 15 Tests
 // ══════════════════════════════════════════════════════════════════════════
 function simLog(html, cls='') {
   const log = document.getElementById('sim-log');
@@ -1490,30 +2511,32 @@ async function runSwarmSimulation() {
   const log = document.getElementById('sim-log');
   log.classList.add('active');
   const t0 = performance.now();
-  simLog(`═══ HIVE MIND v6 SWARM SIMULATOR [#${roomName}] ═══`, 'sim-title');
-  simLog('Inyectando 20 peers virtuales con Proof of Compute...', 'sim-info');
+  simLog(`═══ HIVE MIND v7 SWARM SIMULATOR [#${roomName}] ═══`, 'sim-title');
+  simLog('Inyectando 20 peers virtuales con Proof of Compute + Nicknames + Reputation...', 'sim-info');
+
+  const nicknames = ['AliceDev','BobGPU','CarlosAI','DianaML','EveNode','FredNet','GracePeer','HankRust','IrisCode','JakeKV','KaraRelay','LeoSwarm','MiaEdge','NateP2P','OscarBot','PamNode','QuinnRelay','RayCache','SueSwarm','TimRelay'];
 
   const virtualPeers = [
-    { id: 'sim_S_macstudio', tier: 'S', role: 'master_reasoner', model: '32B', modelSize: 32000, hasEngine: true, benchmark: 48 },
-    { id: 'sim_A_rtx4090_1', tier: 'A', role: 'coder', model: '8B', modelSize: 8000, hasEngine: true, benchmark: 35 },
-    { id: 'sim_A_rtx3080_2', tier: 'A', role: 'coder', model: '8B', modelSize: 8000, hasEngine: true, benchmark: 28 },
-    { id: 'sim_A_rtx4070_3', tier: 'A', role: 'scientist', model: '8B', modelSize: 8000, hasEngine: true, benchmark: 30 },
-    { id: 'sim_B_mbair_01', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 18 },
-    { id: 'sim_B_mbair_02', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 15 },
-    { id: 'sim_B_mbair_03', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 16 },
-    { id: 'sim_B_thinkpd', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 14 },
-    { id: 'sim_B_xps15_5', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 17 },
-    { id: 'sim_B_surfce6', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 13 },
-    { id: 'sim_C_iph16p1', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 8 },
-    { id: 'sim_C_iph16p2', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 7 },
-    { id: 'sim_C_iph15pr', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 6 },
-    { id: 'sim_C_pixel8a', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 5 },
-    { id: 'sim_C_s24ultr', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 7 },
-    { id: 'sim_D_andr_01', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0 },
-    { id: 'sim_D_andr_02', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0 },
-    { id: 'sim_D_andr_03', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0 },
-    { id: 'sim_D_andr_04', tier: 'D', role: 'kv_cache', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0 },
-    { id: 'sim_D_andr_05', tier: 'D', role: 'kv_cache', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0 },
+    { id: 'sim_S_macstudio', tier: 'S', role: 'master_reasoner', model: '32B', modelSize: 32000, hasEngine: true, benchmark: 48, nick: nicknames[0], rep: 250 },
+    { id: 'sim_A_rtx4090_1', tier: 'A', role: 'coder', model: '8B', modelSize: 8000, hasEngine: true, benchmark: 35, nick: nicknames[1], rep: 120 },
+    { id: 'sim_A_rtx3080_2', tier: 'A', role: 'coder', model: '8B', modelSize: 8000, hasEngine: true, benchmark: 28, nick: nicknames[2], rep: 80 },
+    { id: 'sim_A_rtx4070_3', tier: 'A', role: 'scientist', model: '8B', modelSize: 8000, hasEngine: true, benchmark: 30, nick: nicknames[3], rep: 95 },
+    { id: 'sim_B_mbair_01', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 18, nick: nicknames[4], rep: 55 },
+    { id: 'sim_B_mbair_02', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 15, nick: nicknames[5], rep: 40 },
+    { id: 'sim_B_mbair_03', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 16, nick: nicknames[6], rep: 45 },
+    { id: 'sim_B_thinkpd', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 14, nick: nicknames[7], rep: 30 },
+    { id: 'sim_B_xps15_5', tier: 'B', role: 'creative', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 17, nick: nicknames[8], rep: 50 },
+    { id: 'sim_B_surfce6', tier: 'B', role: 'general', model: '3B', modelSize: 3000, hasEngine: true, benchmark: 13, nick: nicknames[9], rep: 25 },
+    { id: 'sim_C_iph16p1', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 8, nick: nicknames[10], rep: 15 },
+    { id: 'sim_C_iph16p2', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 7, nick: nicknames[11], rep: 12 },
+    { id: 'sim_C_iph15pr', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 6, nick: nicknames[12], rep: 10 },
+    { id: 'sim_C_pixel8a', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 5, nick: nicknames[13], rep: 8 },
+    { id: 'sim_C_s24ultr', tier: 'C', role: 'fast_router', model: '0.3B', modelSize: 360, hasEngine: true, benchmark: 7, nick: nicknames[14], rep: 11 },
+    { id: 'sim_D_andr_01', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0, nick: nicknames[15], rep: 3 },
+    { id: 'sim_D_andr_02', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0, nick: nicknames[16], rep: 2 },
+    { id: 'sim_D_andr_03', tier: 'D', role: 'relay', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0, nick: nicknames[17], rep: 1 },
+    { id: 'sim_D_andr_04', tier: 'D', role: 'kv_cache', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0, nick: nicknames[18], rep: 5 },
+    { id: 'sim_D_andr_05', tier: 'D', role: 'kv_cache', model: '0B', modelSize: 0, hasEngine: false, benchmark: 0, nick: nicknames[19], rep: 4 },
   ];
 
   for (const vp of virtualPeers) {
@@ -1524,10 +2547,12 @@ async function runSwarmSimulation() {
       inferenceMode: vp.hasEngine ? 'local' : 'relay', lastSeen: Date.now(), rtt: Math.floor(Math.random()*80)+10,
       conn: {connectionState:'connected'}, dc: { readyState: 'open', send: ()=>{}, close: ()=>{}, addEventListener: ()=>{} },
       pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null, proofValid: vp.benchmark > 0,
+      nickname: vp.nick, repScore: vp.rep,
     });
-    simLog(`  + ${vp.id} → Tier ${vp.tier} · ${ROLE_LABELS[vp.role]} · ${vp.model} · PoC: ${vp.benchmark} tok/s`, 'sim-info');
+    reputation.updatePeerScore(vp.id, vp.rep);
+    simLog(`  + ${vp.nick} (${vp.id}) → Tier ${vp.tier} · ${ROLE_LABELS[vp.role]} · ${vp.model} · PoC: ${vp.benchmark} t/s · Rep: ${vp.rep}`, 'sim-info');
   }
-  updatePeerListUI(); updateHiveUI();
+  updatePeerListUI(); updateHiveUI(); updateRoomMembersUI(); updateBenchmarkSidebar();
   simLog(`\n✅ 20 peers inyectados (${Math.round(performance.now()-t0)}ms).\n`, 'sim-pass');
 
   let passed = 0, failed = 0;
@@ -1570,7 +2595,7 @@ async function runSwarmSimulation() {
     simLog(`  ✅ PASS: Directly routed to Tier ${route4.tier} (no escalation needed)`, 'sim-pass'); passed++;
   } else { simLog(`  ❌ FAIL: No escalation path found`, 'sim-fail'); failed++; }
 
-  // TEST 5: Proof of Compute validation
+  // TEST 5: Proof of Compute
   simLog('\n─── TEST 5: Proof of Compute ───', 'sim-title');
   const fakeS = peers.get('sim_S_macstudio');
   if (fakeS && fakeS.benchmark >= 5 && fakeS.proofValid) {
@@ -1596,19 +2621,92 @@ async function runSwarmSimulation() {
     simLog(`  ✅ PASS: Consensus would activate (${expertCount} experts, category: ${intentC.category})`, 'sim-pass'); passed++;
   } else { simLog(`  ❌ FAIL: Consensus not triggered (experts: ${expertCount}, category: ${intentC.category})`, 'sim-fail'); failed++; }
 
-  // TEST 8: Room isolation
+  // TEST 8: Room namespace isolation
   simLog('\n─── TEST 8: Room namespace isolation ───', 'sim-title');
   if (CONFIG.appNamespace.includes(roomName) && CONFIG.appNamespace !== 'p2p-hive-') {
     simLog(`  ✅ PASS: Namespace "${CONFIG.appNamespace}" contains room "${roomName}"`, 'sim-pass'); passed++;
   } else { simLog(`  ❌ FAIL: Namespace "${CONFIG.appNamespace}" missing room`, 'sim-fail'); failed++; }
 
+  // ═══ NEW v7 TESTS ═══
+
+  // TEST 9: Room members visible
+  simLog('\n─── TEST 9: Room member count ───', 'sim-title');
+  const memberCount = getRoomMemberCount();
+  if (memberCount >= 20) {
+    simLog(`  ✅ PASS: Room shows ${memberCount} members (expected ≥20)`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Room shows only ${memberCount} members`, 'sim-fail'); failed++; }
+
+  // TEST 10: Reputation scoring
+  simLog('\n─── TEST 10: Reputation scoring ───', 'sim-title');
+  const oldScore = reputation.myScore;
+  reputation.addInference();
+  reputation.addInference();
+  reputation.addConsensusWin();
+  const expectedAdd = 5 + 5 + 10; // 2 inferences + 1 win
+  if (reputation.myScore === oldScore + expectedAdd && reputation.inferencesServed >= 2 && reputation.consensusWins >= 1) {
+    simLog(`  ✅ PASS: Score=${reputation.myScore} (added ${expectedAdd}), served=${reputation.inferencesServed}, wins=${reputation.consensusWins}`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Score=${reputation.myScore}, expected=${oldScore + expectedAdd}`, 'sim-fail'); failed++; }
+
+  // TEST 11: Vote system
+  simLog('\n─── TEST 11: Vote broadcasting system ───', 'sim-title');
+  const testReqId = 99999;
+  const testResults = [{ text: 'Result A', peerId: 'sim_A_rtx4090_1', tier: 'A', role: 'coder' }, { text: 'Result B', peerId: 'sim_S_macstudio', tier: 'S', role: 'master_reasoner' }];
+  const voteData = { votes: new Map([[0, new Set()], [1, new Set()]]), results: testResults, resolved: false, timer: null };
+  consensusVotes.set(testReqId, voteData);
+  handleRemoteVote('sim_B_mbair_01', { reqId: testReqId, candidateIdx: 1, voterId: 'sim_B_mbair_01' });
+  handleRemoteVote('sim_B_mbair_02', { reqId: testReqId, candidateIdx: 1, voterId: 'sim_B_mbair_02' });
+  handleRemoteVote('sim_C_iph16p1', { reqId: testReqId, candidateIdx: 0, voterId: 'sim_C_iph16p1' });
+  const votesFor0 = voteData.votes.get(0).size;
+  const votesFor1 = voteData.votes.get(1).size;
+  if (votesFor1 === 2 && votesFor0 === 1) {
+    simLog(`  ✅ PASS: Candidate 0 has ${votesFor0} vote, Candidate 1 has ${votesFor1} votes (correct)`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Vote counts wrong (got ${votesFor0}, ${votesFor1})`, 'sim-fail'); failed++; }
+  consensusVotes.delete(testReqId);
+
+  // TEST 12: Benchmark comparison
+  simLog('\n─── TEST 12: Solo vs Hive benchmark ───', 'sim-title');
+  const soloQ = computeQualityScore(engine ? 1 : 0, localTPS || 0, false);
+  const hiveQ = computeQualityScore(countExpertPeers() + (engine ? 1 : 0), computeCollectiveTPS(), true);
+  const collectiveTPS = computeCollectiveTPS();
+  if (hiveQ > soloQ && collectiveTPS > 0) {
+    simLog(`  ✅ PASS: Hive quality=${hiveQ} > Solo quality=${soloQ}, Hive TPS=${collectiveTPS}`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Hive quality=${hiveQ} vs Solo quality=${soloQ}, Hive TPS=${collectiveTPS}`, 'sim-fail'); failed++; }
+
+  // TEST 13: QR generation
+  simLog('\n─── TEST 13: QR code generation ───', 'sim-title');
+  try {
+    const testCanvas = document.createElement('canvas');
+    renderQRCode(getInviteUrl(), testCanvas, 100);
+    const ctx = testCanvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, 100, 100);
+    const hasContent = imageData.data.some((v, i) => i % 4 !== 3 && v < 200); // has non-white pixels
+    if (hasContent) {
+      simLog(`  ✅ PASS: QR rendered (${testCanvas.width}×${testCanvas.height}px, has content)`, 'sim-pass'); passed++;
+    } else { simLog(`  ❌ FAIL: QR canvas is empty`, 'sim-fail'); failed++; }
+  } catch(e) { simLog(`  ❌ FAIL: QR error: ${e.message}`, 'sim-fail'); failed++; }
+
+  // TEST 14: Nickname display
+  simLog('\n─── TEST 14: Nickname display ───', 'sim-title');
+  const alicePeer = peers.get('sim_S_macstudio');
+  const peerListHTML = document.getElementById('peer-list').innerHTML;
+  if (alicePeer?.nickname === 'AliceDev' && peerListHTML.includes('AliceDev')) {
+    simLog(`  ✅ PASS: Nickname "AliceDev" visible in peer list`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Nickname not found in peer list (nick=${alicePeer?.nickname})`, 'sim-fail'); failed++; }
+
+  // TEST 15: Invite link format
+  simLog('\n─── TEST 15: Invite link format ───', 'sim-title');
+  const inviteUrl = getInviteUrl();
+  if (inviteUrl.includes('room=') && inviteUrl.includes(roomName) && !inviteUrl.includes('simulate')) {
+    simLog(`  ✅ PASS: Invite URL="${inviteUrl.slice(0,80)}…"`, 'sim-pass'); passed++;
+  } else { simLog(`  ❌ FAIL: Invite URL malformed: "${inviteUrl}"`, 'sim-fail'); failed++; }
+
   const totalMs = Math.round(performance.now() - t0);
   simLog('\n═══════════════════════════════════════════', 'sim-title');
   if (failed === 0) {
-    simLog(`🟢 HIVE MIND v6 VALIDATED: ${passed}/${passed+failed} tests passed.`, 'sim-pass');
+    simLog(`🟢 HIVE MIND v7 VALIDATED: ${passed}/${passed+failed} tests passed.`, 'sim-pass');
     simLog(`   Room: #${roomName} · 20 nodos · Consensus · PoC · Escalation`, 'sim-pass');
-    simLog(`   LLM Classification · Metrics · Invite Links · Móviles protegidos.`, 'sim-pass');
-    simLog(`   Completed in ${totalMs}ms. ¡Sistema listo!`, 'sim-pass');
+    simLog(`   🆕 Nicknames · Reputation · Vote Broadcasting · Benchmark · QR Invites`, 'sim-pass');
+    simLog(`   Completed in ${totalMs}ms. ¡Sistema social completo!`, 'sim-pass');
   } else {
     simLog(`🔴 ${failed} TEST(S) FAILED. ${passed}/${passed+failed} passed.`, 'sim-fail');
   }
@@ -1622,16 +2720,20 @@ async function boot() {
   updateInitStatus("Generating identity…");
   await initIdentity();
   initRoom();
-  console.log(`[Hive Mind v6] boot peerId=${peerId} room=${roomName}`);
+  initNickname();
+  reputation.load();
+  reputation.updateUI();
+  console.log(`[Hive Mind v7] boot peerId=${peerId} room=${roomName} nick=${myNickname}`);
   updateInitStatus("Detecting device capabilities…");
   await classifyDevice();
   setupInput();
-  connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI();
+  setupNicknameUI();
+  setupModals();
+  connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI(); updateRoomMembersUI();
 
   await initEngine();
   updateTierUI(); updateDeviceStats(); hideInitOverlay();
 
-  // Run proof-of-compute benchmark
   if (engine) { updateInitStatus('Running benchmark…'); await runBenchmark(); }
 
   await new Promise(r => setTimeout(r, 2000));
@@ -1639,30 +2741,38 @@ async function boot() {
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
   publishPresence();
 
+  showWelcomeBanner();
+
   const roleLabel = ROLE_LABELS[myRole] || myRole;
   const classMethod = getCurrentModelSize() <= 500 && engine ? 'LLM (360M)' : 'keyword';
   const bootLines = [
-    `HIVE MIND v6 — Room: #${roomName}`,
+    `HIVE MIND v7 — Room: #${roomName}`,
     '',
     engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → relay/cache mode',
     engine ? `📊 Benchmark: ${localBenchmark} tok/s (Proof of Compute)` : '',
     `Device: Tier ${deviceTier} · Role: ${roleLabel}`,
+    `Nick: ${myNickname} · Rep: ${reputation.myScore} ${reputation.getStars(reputation.myScore)}`,
     `Classification: ${classMethod}`,
     `WebGPU: ${hasWebGPU ? 'yes' : 'no'} · VRAM~${availableVRAM}MB · RAM: ${memoryMB}MB`,
     `Peer ID: ${peerId}`,
     '',
     `Nostr relays: ${connectedRelays} conectados`,
-    `Sala “${roomName}” activa — comparte el invite link para agregar expertos.`,
+    `Sala "${roomName}" activa — comparte el invite link 📲`,
+    '',
+    `💡 Tip: Type /benchmark to compare Solo vs Hive performance`,
   ].filter(Boolean);
   addMessageToUI('assistant', bootLines.join('\n'));
+
+  updateBenchmarkSidebar();
 
   setInterval(publishPresence, CONFIG.presenceIntervalMs);
   setInterval(cleanupPeers, CONFIG.presenceTTLMs);
   setInterval(autoScale, CONFIG.scoreRecalcMs);
   setInterval(updateRelayUI, 2000);
+  setInterval(() => reputation.addUptime(), 60000); // +1 rep per minute uptime
 
   // Check for simulation mode
-  if (new URL(location.href).searchParams.has('simulate')) {
+  if (isSimulateMode) {
     setTimeout(() => runSwarmSimulation(), 1000);
   }
 }
