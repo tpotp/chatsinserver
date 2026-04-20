@@ -1109,7 +1109,7 @@ const consensusPending = new Map();
 const consensusVotes = new Map(); // reqId -> { votes: Map<candidateIdx, Set<peerId>>, timer, resolved }
 
 // ── WEB-PETALS ENGINE ───────────────────────────────────────────────────
-const PETALS_CDN = 'https://huggingface.co/powerpudu/Web-Petals-SmolLM2-1.7B/resolve/main/';
+const PETALS_CDN = 'https://huggingface.co/powerpudu/Web-Petals-SmolLM2-1.7B-q8/resolve/main/';
 const PETALS_HIDDEN_SIZE = 2048;
 const PETALS_TOTAL_LAYERS = 24;
 let petalsActive = false;
@@ -3549,8 +3549,8 @@ async function boot() {
     }
     const nostr = await getNostrMod();
     simLog(`═══ COLMENA CHILE REAL: SmolLM2-1.7B Shardeado en ${n} Celulares ═══`, 'sim-title');
-    simLog(`Modelo: SmolLM2-1.7B-Instruct (24 capas, hidden=2048, ~6.75GB ONNX)`, 'sim-info');
-    simLog(`Este modelo NO cabe en un solo celular. Se distribuye entre ${n} dispositivos.`, 'sim-info');
+    simLog(`Modelo: SmolLM2-1.7B-Instruct-Q8 (24 capas, hidden=2048, ~1.7GB ONNX)`, 'sim-info');
+    simLog(`Modelo original (6.7GB) fue cuantizado a INT8 para evitar crash de WebGPU RAM en navegadores convencionales.`, 'sim-info');
     simLog(`Generando identidades Nostr + perfiles de celulares chilenos reales...`, 'sim-info');
     
     // === PERFILES REALES DE CELULARES CHILENOS ===
@@ -3573,15 +3573,15 @@ async function boot() {
     for (let i = 0; i < n; i++) phones.push(chilePhones[i % chilePhones.length]);
     
     // === DISTRIBUTE 24 TRANSFORMER LAYERS BY DEVICE RAM ===
-    // SmolLM2-1.7B: embeds + 24 layers + head = 26 components
-    // Each layer ONNX ~256MB. Embeds ~384MB. Head ~384MB.
-    // Total ~6.75GB — impossible for any single phone.
+    // SmolLM2-1.7B-q8: embeds + 24 layers + head = 26 components
+    // Each layer ONNX ~64MB. Embeds ~96MB. Head ~96MB.
+    // Total ~1.7GB — easily distributed among the swarm.
     const allComponents = ['embeds'];
     for(let i = 0; i < PETALS_TOTAL_LAYERS; i++) allComponents.push(`layer_${i}`);
     allComponents.push('head');
     
-    // Weight components by size: embeds=384MB, layer=256MB, head=384MB
-    const compSizeMB = allComponents.map(c => c === 'embeds' ? 384 : c === 'head' ? 384 : 256);
+    // Weight components by size: embeds=96MB, layer=64MB, head=96MB
+    const compSizeMB = allComponents.map(c => c === 'embeds' ? 96 : c === 'head' ? 96 : 64);
     
     // Calculate how many components each phone can hold based on RAM
     // Rule: a phone can dedicate ~40% of RAM to model weights
@@ -3631,8 +3631,8 @@ async function boot() {
     }
 
     if (!petalsActive) {
-       simLog(`\nActivando Web-Petals REAL — SmolLM2-1.7B (24 capas, hidden=2048)...`, 'sim-info');
-       simLog(`Descargando ${allComponents.length} capas ONNX desde HuggingFace (~6.75GB primera vez)...`, 'sim-info');
+       simLog(`\nActivando Web-Petals REAL — SmolLM2-1.7B-INT8 (24 capas, hidden=2048)...`, 'sim-info');
+       simLog(`Descargando ${allComponents.length} capas ONNX desde HuggingFace (~1.7GB primera vez)...`, 'sim-info');
        simLog(`Tu RTX 4070 Ti correrá TODAS las capas simulando que ${n} celulares las corren.`, 'sim-info');
        try {
            const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
@@ -3642,7 +3642,7 @@ async function boot() {
            let loadedCount = 0;
            for(const comp of allComponents) {
                const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
-               const sizeMB = comp === 'embeds' || comp === 'head' ? 384 : 256;
+               const sizeMB = comp === 'embeds' || comp === 'head' ? 96 : 64;
                document.getElementById('petals-status').textContent = `${comp} (${loadedCount+1}/${allComponents.length})`;
                simLog(`  ⬇️ Cargando ${file} (~${sizeMB}MB)... [${loadedCount+1}/${allComponents.length}]`, 'sim-info');
                petalsONNXSessions[comp] = await ort.InferenceSession.create(
@@ -3653,12 +3653,12 @@ async function boot() {
            }
            petalsActive = true;
            petalsMyLayers = [...allComponents];
-           document.getElementById('petals-status').textContent = 'Online (1.7B)';
+           document.getElementById('petals-status').textContent = 'Online (1.7B-Q8)';
            document.getElementById('petals-status').style.color = 'var(--peer-online)';
            document.getElementById('petals-my-layers').textContent = allComponents.length + ' loaded (1.7B)';
            simLog(`\n✅ SmolLM2-1.7B COMPLETO: ${allComponents.length} capas cargadas en WebGPU.`, 'sim-pass');
            simLog(`   Tu PC simula ${n} celulares, cada uno con sus capas asignadas.`, 'sim-pass');
-           simLog(`   Modelo total: ~6.75GB — IMPOSIBLE en un solo celular.`, 'sim-pass');
+           simLog(`   Modelo total: ~1.7GB — Optimizado para WebGPU en Host.`, 'sim-pass');
        } catch(e) {
            simLog(`❌ Error cargando SmolLM2-1.7B: ${e.message}`, 'sim-fail');
        }
