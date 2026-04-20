@@ -1077,8 +1077,10 @@ const petalsReadyPeers = new Map(); // peerId -> { layers: [...] }
 async function petalsActivate() {
   if (petalsActive) return;
   const btn = document.getElementById('petals-activate-btn');
+  const fab = document.getElementById('petals-fab');
   btn.textContent = '⏳ Loading tokenizer...';
   btn.disabled = true;
+  if(fab) { fab.style.opacity = '0.5'; fab.style.animation = 'none'; }
   try {
     // Load tokenizer
     const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
@@ -1122,6 +1124,7 @@ async function petalsActivate() {
     btn.textContent = '✅ Petals Active';
     btn.style.borderColor = 'rgba(0,184,148,0.5)';
     btn.style.color = 'var(--peer-online)';
+    if(fab) { fab.classList.add('active'); fab.style.opacity = '1'; }
     document.getElementById('petals-status').textContent = 'Online';
     document.getElementById('petals-status').style.color = 'var(--peer-online)';
     document.getElementById('petals-my-layers').textContent = myComponents.length + ' loaded';
@@ -1136,6 +1139,7 @@ async function petalsActivate() {
     console.error('[Petals] Activation error:', err);
     btn.textContent = '❌ ' + err.message;
     btn.disabled = false;
+    if(fab) { fab.style.opacity = '1'; fab.style.animation = ''; }
   }
 }
 
