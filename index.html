@@ -770,6 +770,7 @@ const ROLE_LABELS = {
   fast_router: '📱 Router',
   relay: '📟 Relay',
   kv_cache: '🗄️ KV Cache',
+  semantic_rag: '🧠 RAG Node',
 };
 
 const CONFIG = {
@@ -1178,6 +1179,27 @@ async function initEngine() {
   isModelLoading = false; showModelProgress(false);
   const cacheLimit = estimateKVCacheCapacity();
   if (cacheLimit > 10) {
+    try {
+      updateInitStatus('Memoria Semantic RAG (CPU)…');
+      showModelProgress(true);
+      const transformers = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");
+      transformers.env.allowLocalModels = false;
+      window.cpuRAG = await transformers.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+        progress_callback: x => { 
+          if(x.progress) {
+             const pct = Math.round(x.progress);
+             updateModelProgress(pct, `WASM [${x.file||'Model'}]`);
+             updateInitProgress(pct);
+          }
+        }
+      });
+      myShardInfo = { modelId: 'all-MiniLM-L6-v2', capacityMB: cacheLimit, role: "semantic_rag", vecCount: 0 };
+      myRole = "semantic_rag"; deviceTier = "D"; inferenceMode = "federated"; 
+      showModelProgress(false); updateInitStatus('Semantic RAG active ✓'); return;
+    } catch(e) {
+      console.warn("WASM RAG fallback failed:", e);
+    }
+    
     myShardInfo = { modelId: 'kv-cache-node', capacityMB: cacheLimit, role: "kv_cache" };
     myRole = "kv_cache"; deviceTier = "D"; inferenceMode = "federated";
   } else {
@@ -1673,10 +1695,15 @@ async function runCloudFallback(userMessage) {
   aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av');
   aiMsgEl.querySelector('.msg-header').textContent = `Cloud Relay - Nostr Subnet (Tier S)`;
   
+  let middleStepHtml = `<div class="pipeline-step" style="opacity:0.6"><div class="pipeline-icon" style="filter:grayscale(1)">🗄️</div> Red Local Vacía <span>(Sin Motores Activos)</span></div>`;
+  if (myRole === 'semantic_rag') {
+     middleStepHtml = `<div class="pipeline-step"><div class="pipeline-icon active">🧠</div> Vectorizado Semántico <span>(Aportado por Ti)</span></div>`;
+  }
+
   const pipelineHtml = `
     <div class="swarm-pipeline">
       <div class="pipeline-step"><div class="pipeline-icon">📲</div> Recepción & Ruteo <span>(Tu Node - Tier ${deviceTier})</span></div>
-      <div class="pipeline-step" style="opacity:0.6"><div class="pipeline-icon" style="filter:grayscale(1)">🗄️</div> Red Local Vacía <span>(Sin Motores Activos)</span></div>
+      ${middleStepHtml}
       <div class="pipeline-step"><div class="pipeline-icon" style="background:var(--tier-s);color:#000">☁️</div> Backup Cloud Mined <span>(Garantía de Computo)</span></div>
     </div>
   `;
@@ -1708,11 +1735,16 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
   const peerNick = peer.nickname || remotePeerId.slice(0,6);
   aiMsgEl.querySelector('.msg-header').textContent = `${ROLE_LABELS[route.role] || route.role} - ${peerNick} (Tier ${route.tier})`;
 
+  let middleStepHtml = `<div class="pipeline-step"><div class="pipeline-icon active">🗄️</div> KV Cache Offload <span>(Aportado al Enjambre por ti)</span></div>`;
+  if (myRole === 'semantic_rag') {
+     middleStepHtml = `<div class="pipeline-step"><div class="pipeline-icon active">🧠</div> Vectorizado Semántico <span>(Aportado por Ti)</span></div>`;
+  }
+
   // Display Swarm Pipeline
   const pipelineHtml = `
     <div class="swarm-pipeline">
       <div class="pipeline-step"><div class="pipeline-icon">📲</div> Recepción & Ruteo <span>(Tu Node - Tier ${deviceTier})</span></div>
-      <div class="pipeline-step"><div class="pipeline-icon active">🗄️</div> KV Cache Offload <span>(Aportado al Enjambre por ti)</span></div>
+      ${middleStepHtml}
       <div class="pipeline-step"><div class="pipeline-icon">🧠</div> Inferencia de LLM <span>(${peerNick} - Tier ${route.tier})</span></div>
     </div>
   `;
@@ -2331,7 +2363,20 @@ function addMessageToUI(role, content, streaming = false) {
   if (streaming) {
     div.querySelector('.msg-body').innerHTML = `<div class="msg-header">${headerTxt}</div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div><div class="msg-content"></div><div class="msg-meta"></div>`;
   }
-  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight; return div;
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight; 
+  if (!streaming && content) processRAGVector(content);
+  return div;
+}
+
+window.ragMemory = [];
+async function processRAGVector(text) {
+  if (myRole !== 'semantic_rag' || !window.cpuRAG || !text) return;
+  try {
+    const output = await window.cpuRAG(text, { pooling: 'mean', normalize: true });
+    window.ragMemory.push({ text: text.slice(0,50), vector: output.data });
+    if (myShardInfo) myShardInfo.vecCount = window.ragMemory.length;
+    updateTierUI();
+  } catch(e) { console.warn('RAG Error', e); }
 }
 
 function updateTierUI() {
@@ -2340,7 +2385,12 @@ function updateTierUI() {
   const color = tierColors[deviceTier] || 'var(--peer-dead)';
   document.getElementById('chip-tier-text').textContent = `TIER: ${deviceTier}`;
   document.getElementById('chip-tier-dot').style.background = color;
-  document.getElementById('chip-role-text').textContent = `ROLE: ${(myRole || 'relay').toUpperCase()}`;
+  
+  let roleLabel = (myRole || 'relay').toUpperCase();
+  if (myRole === 'semantic_rag' && window.ragMemory) {
+    roleLabel += ` [${window.ragMemory.length} VECTORS]`;
+  }
+  document.getElementById('chip-role-text').textContent = `ROLE: ${roleLabel}`;
   document.getElementById('chip-role-dot').style.background = color;
   document.getElementById('chip-mode-text').textContent = `MODE: ${modeLabels[inferenceMode] || inferenceMode.toUpperCase()}`;
   document.getElementById('chip-mode-dot').style.background = color;
