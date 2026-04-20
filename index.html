@@ -615,6 +615,17 @@ body::before {
       </div>
     </div>
 
+    <div class="sidebar-section" id="petals-section">
+      <h3>🌸 Web-Petals Shard</h3>
+      <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="petals-status" style="color:var(--tier-d)">Offline</span></div>
+      <div class="stat-row"><span class="stat-label">My Layers</span><span class="stat-value" id="petals-my-layers">—</span></div>
+      <div class="stat-row"><span class="stat-label">Peers</span><span class="stat-value" id="petals-peers">0</span></div>
+      <div style="margin-top:8px">
+        <button id="petals-activate-btn" style="width:100%;padding:8px;border-radius:var(--radius-sm);border:1px solid rgba(139,92,246,0.3);background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(0,206,201,0.1));color:var(--accent-secondary);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-mono);transition:all var(--transition-fast)">🌸 Activate Layer Sharding</button>
+      </div>
+      <div id="petals-layer-grid" style="display:none;margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
+    </div>
+
     <div class="sidebar-section" id="relay-section">
       <h3>🔗 Nostr Relays</h3>
       <div id="relay-list"></div>
@@ -716,6 +727,7 @@ body::before {
 
 <div id="sim-log"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
 <script type="module">
 // ═══════════════════════════════════════════════════════════════════════════
 //  HIVE MIND v7 — Social Product Layer
@@ -979,9 +991,10 @@ const MSG = {
   TOK_REQ: 2, TOK_RES: 3, TOK_CHUNK: 4, TOK_END: 5,
   CACHE_REQ: 6, CACHE_RES: 7, CACHE_STORE: 8,
   PING: 0x10, PONG: 0x11, CHAT: 0x20,
-  MOE_REQ: 0x50, MOE_RES: 0x51,
+  MOE_REQ: 0x50, MOE_RES: 0x51, SHARD_HANDOFF: 0x52,
   CONSENSUS_REQ: 0x60, CONSENSUS_RES: 0x61,
   VOTE: 0x70, REP_UPDATE: 0x71,
+  PETALS_TENSOR: 0x80, PETALS_ASSIGN: 0x81, PETALS_READY: 0x82,
 };
 
 function encodeMsg(type, reqId, seq, payload) {
@@ -1030,6 +1043,222 @@ let isMobile = false, isSimMode = false;
 let localBenchmark = 0; // tokens/sec from proof-of-compute
 const consensusPending = new Map();
 const consensusVotes = new Map(); // reqId -> { votes: Map<candidateIdx, Set<peerId>>, timer, resolved }
+
+// ── WEB-PETALS ENGINE ───────────────────────────────────────────────────
+const PETALS_CDN = 'https://huggingface.co/powerpudu/Web-Petals-Slices/resolve/main/';
+const PETALS_HIDDEN_SIZE = 576;
+const PETALS_TOTAL_LAYERS = 30;
+let petalsActive = false;
+let petalsONNXSessions = {}; // 'embeds' | 'layer_N' | 'head' -> InferenceSession
+let petalsMyLayers = [];     // which layers this node owns
+let petalsTokenizer = null;
+const petalsReadyPeers = new Map(); // peerId -> { layers: [...] }
+
+async function petalsActivate() {
+  if (petalsActive) return;
+  const btn = document.getElementById('petals-activate-btn');
+  btn.textContent = '⏳ Loading tokenizer...';
+  btn.disabled = true;
+  try {
+    // Load tokenizer
+    const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
+    petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-135M');
+
+    // Figure out which layers to claim based on how many petals-ready peers exist
+    const otherPetalsPeers = Array.from(petalsReadyPeers.keys());
+    const totalPeers = otherPetalsPeers.length + 1; // +1 = me
+    const layersPerPeer = Math.ceil(PETALS_TOTAL_LAYERS / totalPeers);
+    const myIndex = totalPeers - 1; // I'm the latest joiner
+    const start = myIndex * layersPerPeer;
+    const end = Math.min(start + layersPerPeer, PETALS_TOTAL_LAYERS);
+
+    // Always claim embeds if I'm the first, or head if I'm the last
+    const myComponents = [];
+    if (myIndex === 0) myComponents.push('embeds');
+    for (let i = start; i < end; i++) myComponents.push(`layer_${i}`);
+    if (myIndex === totalPeers - 1 || totalPeers === 1) myComponents.push('head');
+    // If solo, claim everything
+    if (totalPeers === 1) {
+      myComponents.length = 0;
+      myComponents.push('embeds');
+      for (let i = 0; i < PETALS_TOTAL_LAYERS; i++) myComponents.push(`layer_${i}`);
+      myComponents.push('head');
+    }
+    petalsMyLayers = myComponents;
+
+    // Load ONNX sessions
+    ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
+    for (const comp of myComponents) {
+      const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
+      btn.textContent = `⏳ ${file}...`;
+      document.getElementById('petals-status').textContent = file;
+      petalsONNXSessions[comp] = await ort.InferenceSession.create(
+        PETALS_CDN + file,
+        { executionProviders: ['wasm'] }
+      );
+    }
+
+    petalsActive = true;
+    btn.textContent = '✅ Petals Active';
+    btn.style.borderColor = 'rgba(0,184,148,0.5)';
+    btn.style.color = 'var(--peer-online)';
+    document.getElementById('petals-status').textContent = 'Online';
+    document.getElementById('petals-status').style.color = 'var(--peer-online)';
+    document.getElementById('petals-my-layers').textContent = myComponents.length + ' loaded';
+
+    // Broadcast to peers
+    for (const [pid, p] of peers) {
+      if (p.dc?.readyState === 'open') {
+        p.dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers }));
+      }
+    }
+  } catch(err) {
+    console.error('[Petals] Activation error:', err);
+    btn.textContent = '❌ ' + err.message;
+    btn.disabled = false;
+  }
+}
+
+async function petalsRunLayer(component, inputData, seqLen) {
+  const session = petalsONNXSessions[component];
+  if (!session) return null;
+  if (component === 'embeds') {
+    const inputTensor = new ort.Tensor('int64', BigInt64Array.from(inputData.map(BigInt)), [1, seqLen]);
+    const results = await session.run({ input_ids: inputTensor });
+    return { data: Array.from(results.hidden_states.data), seqLen };
+  } else if (component === 'head') {
+    const hiddenTensor = new ort.Tensor('float32', new Float32Array(inputData), [1, seqLen, PETALS_HIDDEN_SIZE]);
+    const results = await session.run({ hidden_states: hiddenTensor });
+    const logits = results.logits.data;
+    let maxIdx = 0, maxVal = -Infinity;
+    for (let i = 0; i < logits.length; i++) { if (logits[i] > maxVal) { maxVal = logits[i]; maxIdx = i; } }
+    const tokenStr = petalsTokenizer.decode([maxIdx]);
+    return { tokenId: maxIdx, tokenStr };
+  } else {
+    // layer_N
+    const hiddenTensor = new ort.Tensor('float32', new Float32Array(inputData), [1, seqLen, PETALS_HIDDEN_SIZE]);
+    const maskTensor = new ort.Tensor('float32', new Float32Array(seqLen * seqLen).fill(1.0), [1, 1, seqLen, seqLen]);
+    const posTensor = new ort.Tensor('int64', BigInt64Array.from(Array.from({length: seqLen}, (_, i) => BigInt(i))), [1, seqLen]);
+    const results = await session.run({ input_hidden: hiddenTensor, attention_mask: maskTensor, position_ids: posTensor });
+    return { data: Array.from(results.output_hidden.data), seqLen };
+  }
+}
+
+function petalsGetNextComponent(current) {
+  if (current === 'embeds') return 'layer_0';
+  if (current === 'head') return null; // done
+  const m = current.match(/layer_(\d+)/);
+  if (m) {
+    const next = parseInt(m[1]) + 1;
+    if (next >= PETALS_TOTAL_LAYERS) return 'head';
+    return `layer_${next}`;
+  }
+  return null;
+}
+
+function petalsFindPeerForComponent(comp) {
+  for (const [pid, info] of petalsReadyPeers) {
+    if (info.layers.includes(comp)) {
+      const peer = peers.get(pid);
+      if (peer?.dc?.readyState === 'open') return pid;
+    }
+  }
+  return null;
+}
+
+async function petalsInference(text) {
+  if (!petalsActive || !petalsTokenizer) return null;
+  const { input_ids } = await petalsTokenizer(text);
+  const idArray = Array.from(input_ids.data);
+  const seqLen = idArray.length;
+
+  let currentComp = 'embeds';
+  let currentData = idArray;
+  let currentSeqLen = seqLen;
+
+  while (currentComp) {
+    if (petalsONNXSessions[currentComp]) {
+      // We have it locally
+      const result = await petalsRunLayer(currentComp, currentData, currentSeqLen);
+      if (currentComp === 'head') return result; // final token
+      currentData = result.data;
+      currentSeqLen = result.seqLen;
+      currentComp = petalsGetNextComponent(currentComp);
+    } else {
+      // Need to send to a peer
+      const peerId_target = petalsFindPeerForComponent(currentComp);
+      if (!peerId_target) return { tokenStr: '[No peer for ' + currentComp + ']' };
+      const peer = peers.get(peerId_target);
+      // Send tensor + wait for response
+      const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+      return new Promise((resolve) => {
+        fedPending.set(reqId, {
+          resolve,
+          onChunk: () => {},
+        });
+        // Chunk the data to avoid exceeding DataChannel limits
+        const payload = JSON.stringify({ component: currentComp, data: currentData, seqLen: currentSeqLen });
+        peer.dc.send(encodeMsg(MSG.PETALS_TENSOR, reqId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
+        setTimeout(() => { if (fedPending.has(reqId)) { fedPending.delete(reqId); resolve({ tokenStr: '[Timeout]' }); } }, 30000);
+      });
+    }
+  }
+  return null;
+}
+
+// Handle incoming Petals tensor from peer
+async function handlePetalsTensor(fromId, m) {
+  const { component, data, seqLen } = m.payload;
+  if (!petalsONNXSessions[component]) return; // I don't have this layer
+
+  const result = await petalsRunLayer(component, data, seqLen);
+  const nextComp = petalsGetNextComponent(component);
+
+  if (component === 'head' || !nextComp) {
+    // Send final result back
+    const peer = peers.get(fromId);
+    if (peer?.dc?.readyState === 'open') {
+      peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
+    }
+    return;
+  }
+
+  // Check if we have the next component too
+  if (petalsONNXSessions[nextComp]) {
+    // Chain locally
+    const nextResult = await petalsRunLayer(nextComp, result.data, result.seqLen);
+    // Keep chaining while we have layers
+    let comp = nextComp;
+    let chainData = nextResult;
+    while (true) {
+      const nc = petalsGetNextComponent(comp);
+      if (!nc || !petalsONNXSessions[nc]) {
+        // Need to forward or return
+        if (comp === 'head' || !nc) {
+          const peer = peers.get(fromId);
+          if (peer?.dc?.readyState === 'open') peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
+          return;
+        }
+        // Forward to peer that has nc
+        const target = petalsFindPeerForComponent(nc);
+        if (target) {
+          const tp = peers.get(target);
+          if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nc, data: chainData.data, seqLen: chainData.seqLen }));
+        }
+        return;
+      }
+      chainData = await petalsRunLayer(nc, chainData.data, chainData.seqLen);
+      comp = nc;
+    }
+  } else {
+    // Forward to the peer that has nextComp
+    const target = petalsFindPeerForComponent(nextComp);
+    if (target) {
+      const tp = peers.get(target);
+      if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nextComp, data: result.data, seqLen: result.seqLen }));
+    }
+  }
+}
 
 // ── METRICS SYSTEM ──────────────────────────────────────────────────────
 const metrics = {
@@ -1735,17 +1964,23 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
   const peerNick = peer.nickname || remotePeerId.slice(0,6);
   aiMsgEl.querySelector('.msg-header').textContent = `${ROLE_LABELS[route.role] || route.role} - ${peerNick} (Tier ${route.tier})`;
 
+  const tierValue = { 'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1 };
+  let useSpeculative = engine && tierValue[deviceTier] <= tierValue[route.tier] && deviceTier !== 'D';
+
   let middleStepHtml = `<div class="pipeline-step"><div class="pipeline-icon active">🗄️</div> KV Cache Offload <span>(Aportado al Enjambre por ti)</span></div>`;
   if (myRole === 'semantic_rag') {
      middleStepHtml = `<div class="pipeline-step"><div class="pipeline-icon active">🧠</div> Vectorizado Semántico <span>(Aportado por Ti)</span></div>`;
   }
+  if (useSpeculative) {
+     middleStepHtml = `<div class="pipeline-step"><div class="pipeline-icon active" style="color:var(--tier-s);text-shadow:0 0 5px var(--gold-glow)">⚡</div> Cognitive Sharding <span>(Draft Local + Verify Remoto)</span></div>`;
+  }
 
   // Display Swarm Pipeline
   const pipelineHtml = `
-    <div class="swarm-pipeline">
+    <div class="swarm-pipeline" ${useSpeculative ? 'style="border-color:var(--tier-s);background:rgba(241,196,15,0.05)"' : ''}>
       <div class="pipeline-step"><div class="pipeline-icon">📲</div> Recepción & Ruteo <span>(Tu Node - Tier ${deviceTier})</span></div>
       ${middleStepHtml}
-      <div class="pipeline-step"><div class="pipeline-icon">🧠</div> Inferencia de LLM <span>(${peerNick} - Tier ${route.tier})</span></div>
+      <div class="pipeline-step"><div class="pipeline-icon">🧠</div> ${useSpeculative ? 'Verificación (Supernodo)' : 'Inferencia LLM'} <span>(${peerNick} - Tier ${route.tier})</span></div>
     </div>
   `;
   const pipelineEl = document.createElement('div');
@@ -1767,14 +2002,51 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
 
   const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
   let fullRemoteText = "";
+  let draftText = "";
+  let divergenceFound = false;
+  let activeHops = new Set([peerNick]);
+  
+  const enginePeersCount = Array.from(peers.values()).filter(p => p.dc?.readyState==='open' && p.hasEngine).length;
+  const isThermalSharding = enginePeersCount >= 1;
+
   const resultPromise = new Promise((resolve, reject) => {
     fedPending.set(reqId, {
       resolve, reject,
-      onChunk: (token) => {
+      onChunk: (token, hopNode) => {
         aiMsgEl.querySelector('.typing-indicator')?.remove();
+        if (token) fullRemoteText += token;
+        
+        if (hopNode && !activeHops.has(hopNode)) {
+           activeHops.add(hopNode);
+           const plEl = aiMsgEl.querySelector('.swarm-pipeline .pipeline-step:last-child span');
+           if (plEl) plEl.innerHTML = `(Round-Robin: <span style="color:var(--accent-secondary)">${Array.from(activeHops).join(" ➔ ")}</span>)`;
+           const plIcon = aiMsgEl.querySelector('.swarm-pipeline .pipeline-step:last-child .pipeline-icon');
+           if (plIcon) { plIcon.style.color = '#00f2fe'; plIcon.style.textShadow = '0 0 8px #00f2fe'; }
+        }
+
         const contentEl = aiMsgEl.querySelector('.msg-content');
         if (contentEl.textContent.startsWith('📡') || contentEl.textContent.startsWith('⚠️') || contentEl.textContent.startsWith('⟳')) contentEl.textContent = '';
-        fullRemoteText += token; contentEl.textContent = fullRemoteText;
+        
+        if (useSpeculative) {
+           let i = 0;
+           while(i < fullRemoteText.length && i < draftText.length && fullRemoteText[i] === draftText[i]) i++;
+           if (i < fullRemoteText.length && i < draftText.length) divergenceFound = true;
+           
+           const common = fullRemoteText.slice(0, i);
+           const verifiedRem = fullRemoteText.slice(i);
+           const draftRem = draftText.slice(i);
+           
+           let html = escapeHtml(common) + escapeHtml(verifiedRem);
+           if (!divergenceFound && draftRem.length > 0) {
+               html += `<span style="opacity:0.5; color:var(--accent-secondary)">${escapeHtml(draftRem)}</span>`;
+           } else if (divergenceFound) {
+               const struck = draftRem.split(' ')[0] || draftRem.slice(0, 10);
+               if (struck) html += `<span style="text-decoration:line-through; opacity:0.3; color:#e17055">${escapeHtml(struck)}</span>`;
+           }
+           contentEl.innerHTML = html;
+        } else {
+           contentEl.textContent = fullRemoteText;
+        }
         document.getElementById('messages').scrollTop = 99999;
       }
     });
@@ -1786,7 +2058,19 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
   if (useNostrFallback) {
     publishSignal(remotePeerId, { type: "moe_fallback_req", reqId, max_tokens: 512, intent: intent.category, targetRole: route.role, messages: histTail });
   } else {
-    peer.dc.send(encodeMsg(MSG.MOE_REQ, reqId, 0, { messages: histTail, max_tokens: 512, intent: intent.category, targetRole: route.role }));
+    peer.dc.send(encodeMsg(MSG.MOE_REQ, reqId, 0, { messages: histTail, max_tokens: 512, intent: intent.category, targetRole: route.role, isThermalSharding, originalRequester: peerId }));
+  }
+
+  if (useSpeculative) {
+     const histTailLocal = [ { role: "system", content: `You are an expert AI (role: drafter). Be concise.` }, ...chatHistory.slice(-10) ];
+     engine.chat.completions.create({ messages: histTailLocal, stream: true, temperature: 0.1, max_tokens: 150 })
+       .then(async (chunks) => {
+           for await (const chunk of chunks) {
+               if (divergenceFound) { try { engine.interruptGenerate(); } catch(e){} break; }
+               draftText += chunk.choices[0]?.delta?.content || "";
+               fedPending.get(reqId)?.onChunk?.(""); 
+           }
+       }).catch(()=>{});
   }
 
   const startTime = performance.now();
@@ -1796,7 +2080,13 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
     const result = await resultPromise;
     const ms = performance.now() - startTime;
     if (!result.text && fullRemoteText) result.text = fullRemoteText;
-    aiMsgEl.querySelector('.msg-content').textContent = result.text;
+    
+    if (useSpeculative) {
+      aiMsgEl.querySelector('.msg-content').innerHTML = escapeHtml(result.text); 
+    } else {
+      aiMsgEl.querySelector('.msg-content').textContent = result.text;
+    }
+
     const metaEl = aiMsgEl.querySelector('.msg-meta');
     if (metaEl) metaEl.textContent = `${result.model || 'remote'} · ${route.role} · ${peerNick} · ${Math.round(ms)}ms`;
     const pill = document.createElement('div');
@@ -1805,7 +2095,7 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
     chatHistory.push({ role: "assistant", content: result.text });
     broadcastChat("assistant", result.text, remotePeerId, result.model);
-    metrics.record('remote', ms, fullRemoteText.length, route);
+    metrics.record('remote', ms, result.text.length, route);
     reputation.updatePeerScore(remotePeerId, 5);
   } catch(err) {
     aiMsgEl.querySelector('.msg-content').textContent = `Error: ${err.message}`;
@@ -2295,6 +2585,7 @@ async function handleBinMsg(fromId, buf) {
     case MSG.CONSENSUS_REQ:
     case MSG.MOE_REQ:
     case MSG.TOK_REQ:
+    case MSG.SHARD_HANDOFF:
       if (engine && (m.payload?.messages || m.payload?.hash)) {
         if (isGenerating) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null })); break; }
         isGenerating = true;
@@ -2307,13 +2598,44 @@ async function handleBinMsg(fromId, buf) {
           if (!ctxMessages) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'KV Cache miss.', model: null })); isGenerating = false; break; }
         }
         const resType = m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_END;
+        const isHandoff = m.type === MSG.SHARD_HANDOFF || m.payload.isThermalSharding;
+        const maxLimit = m.payload.max_tokens || 512;
+        const limitToGen = isHandoff ? 25 : maxLimit;
+
         try {
-          const chunks = await engine.chat.completions.create({ messages: ctxMessages, stream: true, temperature: 0.7, max_tokens: m.payload.max_tokens || 512 });
+          const chunks = await engine.chat.completions.create({ messages: ctxMessages, stream: true, temperature: 0.7, max_tokens: limitToGen });
           let fullR = "", seqC = 0;
-          for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ) peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
-          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
+          for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ && m.type !== MSG.SHARD_HANDOFF) peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); else if (token && m.type === MSG.SHARD_HANDOFF) { const originalRequester = peers.get(m.payload.originalRequester); if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token, hopNode: peerId.slice(0,4) })); } }
+          
+          let generatedNaturalEOS = (seqC < limitToGen - 1);
+          
+          if (isHandoff && !generatedNaturalEOS && seqC > 5) {
+             const enginePeers = [];
+             for(const [pid, p] of peers) if(p.dc?.readyState==='open' && p.hasEngine && pid !== peerId) enginePeers.push(pid);
+             if (enginePeers.length > 0) {
+                 const nextId = enginePeers[Math.floor(Math.random() * enginePeers.length)];
+                 const nextPeer = peers.get(nextId);
+                 const newCtx = JSON.parse(JSON.stringify(ctxMessages));
+                 if (newCtx[newCtx.length-1].role === 'assistant') newCtx[newCtx.length-1].content += fullR;
+                 else newCtx.push({role: 'assistant', content: fullR});
+                 
+                 const originalRequester = m.payload.originalRequester || fromId;
+                 if (nextPeer.dc?.readyState === 'open') {
+                     nextPeer.dc.send(encodeMsg(MSG.SHARD_HANDOFF, m.reqId, 0, { messages: newCtx, max_tokens: maxLimit, isThermalSharding: true, originalRequester }));
+                 }
+             } else {
+                 const originalRequester = peers.get(m.payload.originalRequester || fromId);
+                 if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
+             }
+          } else {
+             const originalRequester = peers.get(m.payload.originalRequester || fromId);
+             if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
+          }
           reputation.addInference();
-        } catch(e) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(resType, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
+        } catch(e) { 
+           const originalRequester = peers.get(m.payload?.originalRequester || fromId);
+           if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); 
+        }
         isGenerating = false;
       }
       break;
@@ -2325,13 +2647,22 @@ async function handleBinMsg(fromId, buf) {
       if (myShardInfo?.role === 'kv_cache' && m.payload?.hash && peer.dc?.readyState === 'open') { const entry = kvCacheStore.get(m.payload.hash); if (entry) peer.dc.send(encodeMsg(MSG.CACHE_RES, m.reqId, 0, { hash: m.payload.hash, messages: entry.messages })); }
       break;
     case MSG.TOK_CHUNK:
-      if (m.payload && fedPending.has(m.reqId)) fedPending.get(m.reqId).onChunk?.(m.payload.token);
+      if (m.payload && fedPending.has(m.reqId)) fedPending.get(m.reqId).onChunk?.(m.payload.token, m.payload.hopNode);
       break;
     case MSG.TOK_END: case MSG.TOK_RES: case MSG.MOE_RES:
       if (m.payload && fedPending.has(m.reqId)) { const { resolve } = fedPending.get(m.reqId); fedPending.delete(m.reqId); peer.tps = m.payload.tps || peer.tps; resolve(m.payload); }
       break;
     case MSG.CONSENSUS_RES:
       if (m.payload && consensusPending.has(m.reqId)) { consensusPending.get(m.reqId).resolve(m.payload); }
+      break;
+    case MSG.PETALS_TENSOR:
+      if (m.payload && petalsActive) handlePetalsTensor(fromId, m);
+      break;
+    case MSG.PETALS_READY:
+      if (m.payload?.layers) {
+        petalsReadyPeers.set(fromId, { layers: m.payload.layers });
+        document.getElementById('petals-peers').textContent = petalsReadyPeers.size;
+      }
       break;
   }
 }
@@ -2810,6 +3141,7 @@ async function boot() {
   setupInput();
   setupNicknameUI();
   setupModals();
+  document.getElementById('petals-activate-btn').addEventListener('click', () => petalsActivate());
   connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI(); updateRoomMembersUI();
 
   await initEngine();

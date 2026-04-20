@@ -1,9 +1,12 @@
+# Dependencies
 node_modules/
-.env
-.env.local
-.vercel
-*.log
-relay.js
-package.json
-package-lock.json
-deploy.bat
+
+# ONNX model weights (hosted on HuggingFace CDN)
+onnx_layers/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Slice script (not needed in production)
+slice_model.py
