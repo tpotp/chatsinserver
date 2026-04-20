@@ -1299,7 +1299,10 @@ async function runPetalsInference(userMessage) {
 
   const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
   const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
-  if (!petalsTokenizer) { isGenerating = false; return; }
+  if (!petalsTokenizer) { 
+      const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
+      petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
+  }
   const encoded = await petalsTokenizer(promptText);
   let allTokenIds = Array.from(encoded.input_ids.data);
 
@@ -1707,8 +1710,8 @@ async function generateResponse(userMessage) {
   const intent = await classifyIntentWithLLM(userMessage);
   const classifyNote = intent.method === 'llm' ? ` [LLM ${intent.ms}ms]` : ' [keyword]';
 
-  // If Web-Petals is active, intercept it!
-  if (petalsActive && petalsReadyPeers.size > 0) {
+  // If Web-Petals swarm is available, intercept ANY prompt to run natively through the Swarm!
+  if (petalsReadyPeers.size > 0) {
     showRouteBanner(`🌸 Intercepción Sharding: Derivando a Enjambre Petals (O(1))`);
     return await runPetalsInference(userMessage);
   }
@@ -2790,7 +2793,6 @@ async function handleBinMsg(fromId, buf, myVirtualId = null) {
              const chunks = await engine.chat.completions.create({ messages: m.payload.messages, stream: true, temperature: 0.7, max_tokens: limit });
              let fullR = "", seqC = 0;
              for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && rConn?.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ) rConn.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
-             fullR += `\n\n> ✅ *Inferencia distribuida vía Colmena Chile (SmolLM2-1.7B shardeado en ${masqueradedPeers.size} celulares): nodo ${vp.nickname} (WebRTC)*`;
              if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: vp.tps }));
           } catch(e) { if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(m.type===MSG.CONSENSUS_REQ?MSG.CONSENSUS_RES:MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
           isGenerating = false;

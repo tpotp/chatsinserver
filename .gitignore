@@ -13,3 +13,6 @@ __pycache__/
 slice_model.py
 slice_model_real.py
 upload_to_hf.py
+test_quant.py
+quantize_and_upload.py
+onnx_layers_1.7b_int8/
