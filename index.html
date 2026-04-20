@@ -1214,7 +1214,12 @@ async function petalsRunLayer(component, inputData, seqLen) {
     const results = await session.run({ hidden_states: hiddenTensor });
     const logits = results.logits.data;
     let maxIdx = 0, maxVal = -Infinity;
-    for (let i = 0; i < logits.length; i++) { if (logits[i] > maxVal) { maxVal = logits[i]; maxIdx = i; } }
+    const vocabSize = 49152;
+    const startIndex = (seqLen - 1) * vocabSize;
+    for (let i = 0; i < vocabSize; i++) { 
+      const val = logits[startIndex + i];
+      if (val > maxVal) { maxVal = val; maxIdx = i; } 
+    }
     return { tokenId: maxIdx, tokenStr: petalsTokenizer.decode([maxIdx]) };
   } else {
     // layer_N with causal mask
