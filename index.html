@@ -1354,7 +1354,7 @@ function findEscalationTarget(intent) {
   const tierOrder = minTier === 'S' ? ['master_reasoner'] : ['coder', 'scientist', 'master_reasoner'];
   for (const role of tierOrder) {
     for (const [pid, p] of peers) {
-      if (p.dc?.readyState === 'open' && p.hasEngine && p.moeRole === role) return { type: 'remote', peerId: pid, role, tier: p.deviceTier };
+      if (p.hasEngine && p.moeRole === role) return { type: 'remote', peerId: pid, role, tier: p.deviceTier };
     }
   }
   return null;
@@ -1715,7 +1715,7 @@ async function runRemoteInference(userMessage, remotePeerId, intent, route) {
         document.getElementById('messages').scrollTop = 99999;
       }
     });
-    setTimeout(() => { if (fedPending.has(reqId)) { fedPending.delete(reqId); reject(new Error('Timeout del experto.')); } }, 45000);
+    setTimeout(() => { if (fedPending.has(reqId)) { fedPending.delete(reqId); reject(new Error('Timeout del experto.')); } }, 90000);
   });
 
   const histTail = [ { role: "system", content: `You are an expert AI (role: ${route.role}). Be concise and helpful.` }, ...chatHistory.slice(-10) ];
