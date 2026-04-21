@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<title>PudúChat — Bosque Mágico</title>
+<title>11PudúChat — Bosque Mágico</title>
 
 <style>
 /* ── PUDÚ 3D OVERLAY ── */
@@ -47,7 +47,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Nunito', sans-seri
 }
 canvas{position:fixed;inset:0;z-index:0}
 #bg-overlay{position:fixed;inset:0;z-index:1;background:linear-gradient(to bottom,rgba(5,8,20,0.5) 0%,rgba(15,10,30,0.3) 40%,rgba(5,8,20,0.6) 100%)}
-#three-canvas{position:fixed;inset:0;z-index:2}
+#three-canvas{position:fixed;inset:0;z-index:2;pointer-events:none}
 #bg-img{
   position:fixed;inset:0;z-index:0;
   background:url('https://media-cldnry.s-nbcnews.com/image/upload/t_social_share_1024x768_scale,f_auto,q_auto:best/rockcms/2024-11/Pudu-Argentina-207469.jpg') center/cover no-repeat;
@@ -3025,6 +3025,9 @@ const HIVE_NAMESPACE = 'p2p-hive-public';
 const HIVE_TIMEOUT_MS = 45000;
 const TRIGGER_REGEX = /^@pudubot\b/i;
 
+// peerId: primeros 12 chars de pubKeyHex, igual que index.html
+let peerId = null;
+
 // Map de reqId → {resolve, reject, timer}
 const pudubotPending = new Map();
 // Map de peerId → {hasEngine, tps, lastSeen} de la colmena
@@ -3317,6 +3320,29 @@ async function initPuduBotModule() {
   hiveHookNostrEvent();
   // Suscribir sockets del chat al namespace de la colmena
   hiveStartListening();
+
+  // Asignar peerId igual que index.html (esperar a que pubKeyHex esté listo)
+  const waitForIdentity = setInterval(() => {
+    if (pubKeyHex && pubKeyHex.length > 0) {
+      clearInterval(waitForIdentity);
+      peerId = pubKeyHex.slice(0, 12);
+      console.log('[PuduBot] peerId listo:', peerId);
+      // Publicar presencia para alimentar la colmena (igual que clientes de index.html)
+      function hivePublishPresence() {
+        hivePublish({
+          type: 'presence',
+          peerId: peerId,
+          hasEngine: false,
+          tps: 0,
+          ts: Date.now()
+        });
+        console.log('[PuduBot] Presencia publicada, peerId=' + peerId);
+      }
+      setTimeout(hivePublishPresence, 3000);
+      setInterval(hivePublishPresence, 30000);
+    }
+  }, 500);
+
   setInterval(() => HiveCounter.updateUI(), 20000);
   console.log('🦌 PuduBot v4 — sockets del chat, protocolo nativo index.html');
 }
