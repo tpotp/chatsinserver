@@ -1274,12 +1274,30 @@ async function petalsForwardPass(tokenIds) {
       currentSeqLen = result.seqLen;
       currentComp = petalsGetNextComponent(currentComp);
     } else {
-      const target = petalsFindPeerForComponent(currentComp);
-      if (!target) return null;
+      // Try to find a peer with this component AND an open WebRTC channel
+      let target = petalsFindPeerForComponent(currentComp);
+      if (!target) {
+        // No open connection — try to initiate WebRTC to any petals peer that has this component
+        for (const [pid, info] of petalsReadyPeers) {
+          if (info.layers.includes(currentComp)) {
+            const p = peers.get(pid);
+            if (p && (!p.conn || p.conn.connectionState !== 'connected')) {
+              initiateWebRTC(pid);
+            }
+          }
+        }
+        // Wait up to 10 seconds for connection
+        for (let wait = 0; wait < 20; wait++) {
+          await new Promise(r => setTimeout(r, 500));
+          target = petalsFindPeerForComponent(currentComp);
+          if (target) break;
+        }
+        if (!target) return null; // No peer available
+      }
       const peer = peers.get(target);
       const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
       const res = await new Promise((resolve) => {
-        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 15000);
+        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 30000);
         fedPending.set(reqId, {
           resolve: (res) => { clearTimeout(timeout); resolve(res); },
           onChunk: () => {}
@@ -1306,6 +1324,99 @@ async function runPetalsInference(userMessage) {
   const startTime = performance.now();
   let fullResponse = "", tokenCount = 0;
 
+  // Check if we have local ONNX layers OR a reachable petals peer with WebRTC
+  const hasLocalLayers = petalsMyLayers.length > 0;
+  let hasReachablePeer = false;
+  for (const [pid] of petalsReadyPeers) {
+    const p = peers.get(pid);
+    if (p?.dc?.readyState === 'open') { hasReachablePeer = true; break; }
+  }
+
+  // If no local layers and no reachable peer, try remote MOE inference instead
+  if (!hasLocalLayers && !hasReachablePeer) {
+    aiMsgEl.querySelector('.typing-indicator')?.remove();
+    const contentEl = aiMsgEl.querySelector('.msg-content');
+    contentEl.textContent = '⟳ Conectando P2P con el enjambre...';
+    
+    // Try to establish WebRTC connections first
+    for (const [pid] of petalsReadyPeers) {
+      const p = peers.get(pid);
+      if (p && (!p.conn || p.conn.connectionState !== 'connected')) {
+        initiateWebRTC(pid);
+      }
+    }
+    // Wait up to 12 seconds for any connection
+    for (let wait = 0; wait < 24; wait++) {
+      await new Promise(r => setTimeout(r, 500));
+      for (const [pid] of petalsReadyPeers) {
+        const p = peers.get(pid);
+        if (p?.dc?.readyState === 'open') { hasReachablePeer = true; break; }
+      }
+      if (hasReachablePeer) break;
+    }
+    
+    if (!hasReachablePeer) {
+      // No WebRTC — fall back to Nostr relay MOE request
+      contentEl.textContent = '📡 WebRTC no disponible — usando Relay Nostr...';
+      
+      // Find any peer with an engine for Nostr fallback
+      let fallbackPeerId = null;
+      for (const [pid, p] of peers) {
+        if (p.hasEngine) { fallbackPeerId = pid; break; }
+      }
+      
+      if (fallbackPeerId) {
+        const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+        const resultPromise = new Promise((resolve) => {
+          const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 60000);
+          fedPending.set(reqId, {
+            resolve: (res) => { clearTimeout(timeout); resolve(res); },
+            onChunk: (token) => {
+              if (token) {
+                fullResponse += token;
+                contentEl.textContent = fullResponse;
+                document.getElementById('messages').scrollTop = 99999;
+              }
+            }
+          });
+        });
+        
+        const messages = [
+          { role: "system", content: "You are a helpful AI assistant running in a decentralized peer-to-peer swarm. Be concise and helpful." },
+          ...chatHistory.slice(-10)
+        ];
+        publishSignal(fallbackPeerId, { type: "moe_fallback_req", reqId, max_tokens: 512, intent: 'general', targetRole: 'general', messages });
+        
+        const result = await resultPromise;
+        if (result?.text) {
+          fullResponse = result.text;
+          contentEl.textContent = fullResponse;
+          tokenCount = fullResponse.split(/\s+/).length;
+        } else {
+          fullResponse = '[Sin respuesta del enjambre via Nostr]';
+          contentEl.textContent = fullResponse;
+        }
+        
+        const pill = document.createElement('div');
+        pill.className = 'fed-pill';
+        pill.textContent = '🌸 Web-Petals Swarm · Nostr Relay Fallback';
+        aiMsgEl.querySelector('.msg-body').appendChild(pill);
+        
+        const ms = performance.now() - startTime;
+        const metaEl = aiMsgEl.querySelector('.msg-meta');
+        if (metaEl) metaEl.textContent = 'Swarm-1.7B · Nostr fallback · ' + Math.round(ms) + 'ms';
+        chatHistory.push({ role: "assistant", content: fullResponse });
+        broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
+        isGenerating = false;
+        return;
+      }
+      
+      // No engine peers at all? Use cloud fallback
+      isGenerating = false;
+      return await runCloudFallback(userMessage);
+    }
+  }
+
   const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
   const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
   if (!petalsTokenizer) { 
@@ -1325,7 +1436,10 @@ async function runPetalsInference(userMessage) {
   try {
     while (tokenCount < 200) {
       const result = await petalsForwardPass(allTokenIds);
-      if (!result || result.tokenId === undefined) { fullResponse += " [P2P timeout]"; break; }
+      if (!result || result.tokenId === undefined) { 
+        if (fullResponse.length === 0) fullResponse = '[P2P timeout]';
+        break; 
+      }
 
       const { tokenId, tokenStr } = result;
       // Check for end-of-text tokens
