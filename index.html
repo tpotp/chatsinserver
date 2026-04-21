@@ -2795,19 +2795,38 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
     const vp = masqueradedPeers.get(myVirtualId);
     const rConn = vp.connections.get(fromId);
     if (m.type === MSG.PETALS_TENSOR) {
-       if (!petalsONNXSessions[m.payload.component]) return; // Fallback if layer isn't loaded
+       if (!petalsONNXSessions[m.payload.component]) return;
        try {
-           const result = await petalsRunLayer(m.payload.component, m.payload.data, m.payload.seqLen);
-           const nextComp = petalsGetNextComponent(m.payload.component);
-           if (!nextComp || m.payload.component === 'head') {
-                if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
-                return;
+           // Chain through ALL layers from the requested component to the head
+           // Since the host PC has all ONNX sessions loaded, we can do the full forward pass
+           let comp = m.payload.component;
+           let data = m.payload.data;
+           let seqLen = m.payload.seqLen;
+           
+           while (comp) {
+               if (!petalsONNXSessions[comp]) {
+                   // This shouldn't happen since host has all layers, but handle gracefully
+                   if (rConn?.dc?.readyState === "open") {
+                       rConn.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, { pending: true, nextComp: comp, resultData: data, seqLen: seqLen }));
+                   }
+                   return;
+               }
+               const result = await petalsRunLayer(comp, data, seqLen);
+               if (comp === 'head') {
+                   // Final result — send token back to client
+                   if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
+                   return;
+               }
+               data = result.data;
+               seqLen = result.seqLen;
+               comp = petalsGetNextComponent(comp);
            }
-           // Send PETALS_TENSOR back to the orchestrator (mobile phone) so it bounces to the next virtual peer!
+       } catch(e) { 
+           console.error("Simulated Petals Layer Error", e);
            if (rConn?.dc?.readyState === "open") {
-                rConn.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, { pending: true, nextComp, resultData: result.data, seqLen: result.seqLen })); 
+               rConn.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, { tokenId: 0, tokenStr: `[Error: ${e.message}]` }));
            }
-       } catch(e) { console.error("Simulated Petals Layer Error", e); }
+       }
        return;
     }
     if (m.type === MSG.MOE_REQ || m.type === MSG.TOK_REQ || m.type === MSG.CONSENSUS_REQ) {
@@ -2971,20 +2990,8 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
     case MSG.TOK_CHUNK:
       if (m.payload && fedPending.has(m.reqId)) fedPending.get(m.reqId).onChunk?.(m.payload.token, m.payload.hopNode);
       break;
-    case MSG.TOK_END: case MSG.TOK_RES: case MSG.MOE_RES:
-      if (m.payload && fedPending.has(m.reqId)) { const { resolve } = fedPending.get(m.reqId); fedPending.delete(m.reqId); peer.tps = m.payload.tps || peer.tps; resolve(m.payload); }
-      break;
     case MSG.CONSENSUS_RES:
       if (m.payload && consensusPending.has(m.reqId)) { consensusPending.get(m.reqId).resolve(m.payload); }
-      break;
-    case MSG.PETALS_TENSOR:
-      if (m.payload && petalsActive) handlePetalsTensor(fromId, m, dc);
-      break;
-    case MSG.PETALS_READY:
-      if (m.payload?.layers) {
-        petalsReadyPeers.set(fromId, { layers: m.payload.layers });
-        document.getElementById('petals-peers').textContent = petalsReadyPeers.size;
-      }
       break;
   }
 }
