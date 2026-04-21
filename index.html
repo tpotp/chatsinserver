@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>legatoP2P-LLM — Distributed Hive Mind</title>
+<title>CHACHAtoP2P-LLM — Distributed Hive Mind</title>
 <meta name="description" content="Browser-based peer-to-peer distributed edge routing with 5-tier hardware classification. Zero-install, zero-server AI inference.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1920,14 +1920,20 @@ function routeRequest(targetRole) {
     let bestPeer = null, bestScore = Infinity;
     for (const [pid, p] of peers) {
       if (!p.hasEngine || p.moeRole !== role) continue;
+      // FIX: Skip simulated/masqueraded peers — local stubs with no-op dc.send that silently drop requests
+      if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
       const rtt = p.rtt < Infinity ? p.rtt : 9999;
-      const score = (p.dc?.readyState === 'open' ? 0 : 20000) + rtt;
+      // Real peers via Nostr fallback get a lower penalty than before (5000 not 20000),
+      // so they remain preferred over giving up
+      const score = (p.dc?.readyState === 'open' ? 0 : 5000) + rtt;
       if (score < bestScore) { bestPeer = pid; bestScore = score; }
     }
     if (bestPeer) return { type: 'remote', peerId: bestPeer, role, tier: peers.get(bestPeer).deviceTier };
   }
   if (engine) return { type: 'local', peerId: null, role: myRole, tier: deviceTier };
   for (const [pid, p] of peers) {
+    // FIX: Same guard — don't fall back to a simulated peer
+    if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
     if (p.hasEngine) return { type: 'remote', peerId: pid, role: p.moeRole || 'unknown', tier: p.deviceTier };
   }
   return null;
@@ -1948,7 +1954,11 @@ function broadcastChat(role, content, senderId, modelId, msgId = null, hops = 0,
 
 function countExpertPeers() {
   let count = 0;
-  for (const [, p] of peers) { if (p.hasEngine) count++; }
+  // FIX: Exclude simulated/masqueraded peers — they have no-op dc.send stubs
+  for (const [pid, p] of peers) {
+    if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
+    if (p.hasEngine) count++;
+  }
   return count;
 }
 
@@ -2110,6 +2120,8 @@ async function runConsensusInference(userMessage, intent) {
 
   const expertPeers = [];
   for (const [pid, p] of peers) {
+    // FIX: Exclude simulated/masqueraded peers from consensus voting
+    if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
     if (p.dc?.readyState === 'open' && p.hasEngine) expertPeers.push({ pid, tier: p.deviceTier, role: p.moeRole, p });
   }
 
@@ -2879,16 +2891,13 @@ function publishPresence() {
     currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: myRole,
     hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now(),
     nickname: myNickname, repScore: reputation.myScore,
+    // Flag so peers know this is a real node, not a simulator virtual peer
+    isSimNode: false,
   });
-  for (const [vId, vPeer] of masqueradedPeers) {
-    signAndPublish({
-      type: "presence", peerId: vId, deviceTier: vPeer.deviceTier, webgpu: vPeer.webgpu, memoryMB: vPeer.memoryMB, tps: vPeer.tps,
-      currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: vPeer.moeRole,
-      hasEngine: vPeer.hasEngine, shardInfo: vPeer.shardInfo, inferenceMode: vPeer.inferenceMode, timestamp: Date.now(),
-      nickname: vPeer.nickname, repScore: vPeer.repScore,
-      petalsLayers: vPeer.petalsLayers // inject layers silently into presence
-    }, vPeer.privKey);
-  }
+  // FIX: Virtual/simulated peers MUST NOT publish to the real hive namespace.
+  // They are local-only and publishing them makes remote peers route to a dead end
+  // (their dc.send is a no-op stub). Skip presence publish for masqueraded peers.
+  // If you want simulated peers visible only locally, they are already in peers Map.
 }
 function publishSignal(targetId, signal, fromVirtualId = null) { 
   const fromPrivKey = fromVirtualId ? masqueradedPeers.get(fromVirtualId)?.privKey : privKeyBytes;
@@ -2915,16 +2924,33 @@ function handleNostrContent(c) {
   }
 }
 
+// FIX: Queue for incoming Nostr inference requests so they are not dropped when busy.
+// Previously a "Ocupado" reply was sent but the requester had no retry logic — request died.
+const _nostrReqQueue = [];
+let _nostrServing = false;
+async function _drainNostrQueue() {
+  if (_nostrServing) return;
+  _nostrServing = true;
+  while (_nostrReqQueue.length > 0) {
+    const { fromId, signal, virtualId } = _nostrReqQueue.shift();
+    await _executeNostrFallbackReq(fromId, signal, virtualId);
+  }
+  _nostrServing = false;
+}
+
 async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
   // Need either WebLLM engine OR petals ONNX sessions to respond
   if (!engine && !petalsActive) return;
-  const reqId = signal.reqId;
-  // Use a separate serving flag so our own isGenerating doesn't block incoming requests
-  // (e.g. the simulator loads shards while isGenerating=false but might be true mid-load)
-  if (isGenerating && !petalsActive) {
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Ocupado, reintenta (NostrFallback)." }}, virtualId);
-    return;
+  // FIX: Instead of replying "busy" (which the sender ignores), queue the request.
+  // Limit queue depth to 3 to avoid unbounded buildup under heavy load.
+  if (_nostrReqQueue.length < 3) {
+    _nostrReqQueue.push({ fromId, signal, virtualId });
   }
+  _drainNostrQueue();
+}
+
+async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
+  const reqId = signal.reqId;
   isGenerating = true;
   try {
     let text = "";
@@ -2976,6 +3002,12 @@ function handleNostrFallbackRes(fromId, signal) {
 }
 
 function handlePeerPresence(p) {
+  // FIX: Reject presence from remote simulator nodes.
+  // When someone runs ?simulate=10 their masqueraded peers used to publish presence to Nostr,
+  // flooding every peer's routing table with stub nodes. Now they don't publish (Fix 1),
+  // but as a belt-and-suspenders guard: if a presence still has isSimNode:true, ignore it.
+  if (p.isSimNode === true) return;
+
   if (!peers.has(p.peerId)) {
     peers.set(p.peerId, {
       deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || 0, moeRole: p.moeRole || 'relay',
