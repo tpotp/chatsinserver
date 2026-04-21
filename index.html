@@ -819,6 +819,9 @@ const ROLE_LABELS = {
   kv_cache: '🗄️ KV Cache',
   semantic_rag: '🧠 RAG Node',
 };
+const LOCALHOST_RELAY = ['localhost', '127.0.0.1'].includes(location.hostname)
+  ? [`ws://${location.hostname}:7777`]
+  : [];
 
 const CONFIG = {
   models: [
@@ -829,7 +832,7 @@ const CONFIG = {
     { id: "Llama-3.1-8B-Instruct-q4f16_1-MLC",  name: "8B-q4",   label: "large",  vramMB: 5500, ramMB: 8000, modelSize: 8000, tier: "A", roles: ["coder", "scientist"] },
   ],
   maxPeers: 12,
-  nostrCoreRelays: [ "wss://relay.damus.io", "wss://relay.primal.net" ],
+  nostrCoreRelays: [ ...LOCALHOST_RELAY, "wss://relay.damus.io", "wss://relay.primal.net" ],
   nostrPoolRelays: [
     "wss://nos.lol","wss://offchain.pub","wss://nostr.mom","wss://nostr.wine",
     "wss://nostr.bitcoiner.social","wss://nostr-pub.wellorder.net","wss://relay.nostr.info",
@@ -1130,6 +1133,12 @@ let petalsONNXSessions = {}; // 'embeds' | 'layer_N' | 'head' -> InferenceSessio
 let petalsMyLayers = [];     // which layers this node owns
 let petalsTokenizer = null;
 const petalsReadyPeers = new Map(); // peerId -> { layers: [...] }
+let petalsDesired = false;
+let petalsSyncPromise = null;
+let petalsSyncTimer = null;
+let petalsAutoTimer = null;
+const PETALS_COMPONENTS = ['embeds', ...Array.from({ length: PETALS_TOTAL_LAYERS }, (_, i) => `layer_${i}`), 'head'];
+const PETALS_COMPONENT_MB = Object.fromEntries(PETALS_COMPONENTS.map(comp => [comp, (comp === 'embeds' || comp === 'head') ? 96 : 64]));
 
 // ── DISTRIBUTED INFERENCE STATE ─────────────────────────────────────────
 let gpuEngine = null;           // GPUInferenceEngine instance
@@ -1139,109 +1148,279 @@ let bandwidthProber = null;     // BandwidthProber instance
 let tensorRouter = null;        // TensorRouter instance
 let weightDistributor = null;   // PeerWeightDistributor instance
 
-async function petalsActivate() {
-  if (petalsActive) return;
-  const btn = document.getElementById('petals-activate-btn');
-  const fab = document.getElementById('petals-fab');
-  btn.textContent = '⏳ Loading tokenizer...';
-  btn.disabled = true;
-  if(fab) { fab.style.opacity = '0.5'; fab.style.animation = 'none'; }
-  try {
-    // Load tokenizer
-    const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
-    petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
+function petalsComponentSizeMB(comp) {
+  return PETALS_COMPONENT_MB[comp] || 64;
+}
 
-    // Figure out which layers to claim based on how many petals-ready peers exist
-    const otherPetalsPeers = Array.from(petalsReadyPeers.keys());
-    const totalPeers = otherPetalsPeers.length + 1; // +1 = me
-    const layersPerPeer = Math.ceil(PETALS_TOTAL_LAYERS / totalPeers);
-    const myIndex = totalPeers - 1; // I'm the latest joiner
-    const start = myIndex * layersPerPeer;
-    const end = Math.min(start + layersPerPeer, PETALS_TOTAL_LAYERS);
+function estimatePetalsBudgetMB(info, isSelfNode = false) {
+  const ram = Math.max(0, info?.memoryMB || 0);
+  const mobileish = isSelfNode ? isMobile : (info?.deviceTier === 'C' || (info?.deviceTier === 'D' && ram <= 3072));
+  if (mobileish) return Math.max(96, Math.min(288, Math.floor(ram * 0.18)));
+  if (info?.deviceTier === 'B') return Math.max(256, Math.min(1024, Math.floor(ram * 0.32)));
+  if (info?.deviceTier === 'A') return Math.max(768, Math.floor(ram * 0.45));
+  if (info?.deviceTier === 'S') return Math.max(1024, Math.floor(ram * 0.5));
+  return Math.max(128, Math.min(512, Math.floor(ram * 0.25)));
+}
 
-    // Always claim embeds if I'm the first, or head if I'm the last
-    const myComponents = [];
-    if (myIndex === 0) myComponents.push('embeds');
-    for (let i = start; i < end; i++) myComponents.push(`layer_${i}`);
-    if (myIndex === totalPeers - 1 || totalPeers === 1) myComponents.push('head');
-    // If solo, claim everything
-    if (totalPeers === 1) {
-      myComponents.length = 0;
-      myComponents.push('embeds');
-      for (let i = 0; i < PETALS_TOTAL_LAYERS; i++) myComponents.push(`layer_${i}`);
-      myComponents.push('head');
-    }
-    petalsMyLayers = myComponents;
+function estimatePetalsPeerScore(info, isSelfNode = false) {
+  const tierScore = { S: 12, A: 9, B: 6, C: 3, D: 1 }[info?.deviceTier || 'D'] || 1;
+  const perfScore = Math.max(info?.benchmark || 0, info?.tps || 0, info?.hasEngine ? 3 : 0);
+  const ramScore = Math.min(6, Math.max(1, Math.round((info?.memoryMB || 1024) / 2048)));
+  const webgpuBonus = info?.webgpu ? 2 : 0;
+  return tierScore + perfScore + ramScore + webgpuBonus + (isSelfNode ? 0.1 : 0);
+}
 
-    // Load ONNX sessions
-    ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-    if (isMobileUA) {
-      if (ort.env.webgpu) ort.env.webgpu.powerPreference = 'low-power';
-    }
+function upsertPetalsPeer(pid, layers = [], active = false, stamp = Date.now()) {
+  const uniqLayers = [...new Set((layers || []).filter(Boolean))];
+  if (active || uniqLayers.length > 0) petalsReadyPeers.set(pid, { layers: uniqLayers, active: true, lastSeen: stamp });
+  else petalsReadyPeers.delete(pid);
+}
 
-    // On mobile, limit how many layers we actually load to avoid OOM.
-    // Heuristic: 1 layer ~64MB. Leave 300MB headroom. Cap at 3 layers on mobile.
-    const ramBudgetMB = (navigator.deviceMemory || 2) * 1024;
-    const layerSizeMB = 64;
-    const maxLoadable = isMobileUA
-      ? Math.max(1, Math.min(3, Math.floor((ramBudgetMB * 0.5 - 300) / layerSizeMB)))
-      : myComponents.length;
-
-    const loadableComponents = myComponents.slice(0, maxLoadable);
-    const failedComponents = [];
-
-    for (const comp of loadableComponents) {
-      const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
-      btn.textContent = `⏳ ${file}...`;
-      document.getElementById('petals-status').textContent = file;
-      try {
-        petalsONNXSessions[comp] = await Promise.race([
-          ort.InferenceSession.create(PETALS_CDN + file, { executionProviders: ['webgpu', 'wasm'] }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 60s')), 60000))
-        ]);
-      } catch(loadErr) {
-        console.warn(`[Petals] Failed to load ${file}:`, loadErr.message);
-        failedComponents.push(comp);
-        // Remove from claimed layers so forward-pass routing skips it
-        const idx = petalsMyLayers.indexOf(comp);
-        if (idx !== -1) petalsMyLayers.splice(idx, 1);
-      }
-    }
-
-    // Remove components beyond budget from petalsMyLayers
-    for (const comp of myComponents.slice(maxLoadable)) {
-      const idx = petalsMyLayers.indexOf(comp);
-      if (idx !== -1) petalsMyLayers.splice(idx, 1);
-    }
-
-    if (petalsMyLayers.length === 0) {
-      throw new Error(`No se pudo cargar ningún shard (RAM ~${ramBudgetMB}MB insuficiente o red lenta).`);
-    }
-
-    petalsActive = true;
-    const failLabel = failedComponents.length > 0 ? ` (${failedComponents.length} fallidos)` : '';
-    btn.textContent = '✅ Petals Active';
-    btn.style.borderColor = 'rgba(0,184,148,0.5)';
-    btn.style.color = 'var(--peer-online)';
-    if(fab) { fab.classList.add('active'); fab.style.opacity = '1'; }
-    document.getElementById('petals-status').textContent = 'Online' + failLabel;
-    document.getElementById('petals-status').style.color = 'var(--peer-online)';
-    document.getElementById('petals-my-layers').textContent = petalsMyLayers.length + ' loaded' + failLabel;
-
-    // Broadcast to peers
-    for (const [pid, p] of peers) {
-      if (p.dc?.readyState === 'open') {
-        p.dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers }));
-      }
-    }
-  } catch(err) {
-    console.error('[Petals] Activation error:', err);
-    btn.textContent = '❌ ' + err.message;
-    btn.disabled = false;
-    if(fab) { fab.style.opacity = '1'; fab.style.animation = ''; }
+function buildPetalsParticipants() {
+  const now = Date.now();
+  const participants = [];
+  if (petalsDesired || petalsActive || petalsMyLayers.length > 0) {
+    participants.push({
+      peerId,
+      deviceTier,
+      memoryMB,
+      tps: localTPS,
+      benchmark: localBenchmark,
+      webgpu: hasWebGPU,
+      hasEngine: !!engine,
+      isSelf: true,
+      lastSeen: now,
+    });
   }
+  for (const [pid, info] of petalsReadyPeers) {
+    const peer = peers.get(pid);
+    if (!peer) continue;
+    const lastSeen = info?.lastSeen || peer.lastSeen || now;
+    if (now - lastSeen > CONFIG.presenceTTLMs) continue;
+    participants.push({
+      peerId: pid,
+      deviceTier: peer.deviceTier || 'D',
+      memoryMB: peer.memoryMB || 0,
+      tps: peer.tps || 0,
+      benchmark: peer.benchmark || 0,
+      webgpu: !!peer.webgpu,
+      hasEngine: !!peer.hasEngine,
+      isSelf: false,
+      lastSeen,
+    });
+  }
+  return participants;
+}
+
+function computePetalsAssignments(participants) {
+  const schedulable = participants
+    .map(info => ({
+      ...info,
+      budgetMB: estimatePetalsBudgetMB(info, !!info.isSelf),
+      score: estimatePetalsPeerScore(info, !!info.isSelf),
+    }))
+    .filter(info => info.budgetMB >= 64)
+    .sort((a, b) => (b.score - a.score) || a.peerId.localeCompare(b.peerId));
+
+  const assignments = new Map();
+  if (schedulable.length === 0) return assignments;
+
+  const totalMB = PETALS_COMPONENTS.reduce((sum, comp) => sum + petalsComponentSizeMB(comp), 0);
+  const totalScore = schedulable.reduce((sum, info) => sum + info.score, 0) || schedulable.length;
+  const usedMB = schedulable.map(() => 0);
+  const targetMB = schedulable.map(info => Math.max(96, Math.min(info.budgetMB, Math.round(totalMB * (info.score / totalScore)))));
+  schedulable.forEach(info => assignments.set(info.peerId, []));
+
+  let pointer = 0;
+  for (const comp of PETALS_COMPONENTS) {
+    const compMB = petalsComponentSizeMB(comp);
+    let assigned = false;
+    for (let attempt = 0; attempt < schedulable.length; attempt++) {
+      const idx = (pointer + attempt) % schedulable.length;
+      const fits = usedMB[idx] + compMB <= schedulable[idx].budgetMB;
+      const wantsMore = usedMB[idx] < targetMB[idx];
+      if (fits && (wantsMore || attempt === schedulable.length - 1)) {
+        assignments.get(schedulable[idx].peerId).push(comp);
+        usedMB[idx] += compMB;
+        assigned = true;
+        if (usedMB[idx] >= targetMB[idx] && idx === pointer && pointer < schedulable.length - 1) pointer++;
+        break;
+      }
+    }
+    if (assigned) continue;
+
+    let fallbackIdx = -1;
+    let bestRemaining = -Infinity;
+    for (let i = 0; i < schedulable.length; i++) {
+      const remaining = schedulable[i].budgetMB - usedMB[i];
+      if (remaining >= compMB && remaining > bestRemaining) {
+        fallbackIdx = i;
+        bestRemaining = remaining;
+      }
+    }
+    if (fallbackIdx === -1) {
+      fallbackIdx = schedulable.reduce((bestIdx, info, i) => info.score > schedulable[bestIdx].score ? i : bestIdx, 0);
+    }
+    assignments.get(schedulable[fallbackIdx].peerId).push(comp);
+    usedMB[fallbackIdx] += compMB;
+  }
+
+  return assignments;
+}
+
+async function ensurePetalsTokenizer() {
+  if (petalsTokenizer) return petalsTokenizer;
+  const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
+  petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
+  return petalsTokenizer;
+}
+
+function broadcastPetalsState() {
+  const active = petalsMyLayers.length > 0;
+  petalsActive = active;
+  for (const [, p] of peers) {
+    if (p.dc?.readyState === 'open') {
+      try { p.dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active })); } catch(_) {}
+    }
+  }
+  publishPresence();
+}
+
+function schedulePetalsSync(reason = 'update', delayMs = 800) {
+  if (isSimulateMode || isSimMode || (!petalsDesired && !petalsActive)) return;
+  clearTimeout(petalsSyncTimer);
+  petalsSyncTimer = setTimeout(() => {
+    syncPetalsShardPlan(reason).catch(err => console.warn('[Petals] sync failed:', err.message));
+  }, delayMs);
+}
+
+function maybeAutoActivatePetals(reason = 'peer') {
+  if (isSimulateMode || isSimMode || petalsDesired || petalsActive || petalsSyncPromise) return;
+  if (estimatePetalsBudgetMB({ deviceTier, memoryMB }, true) < 96) return;
+
+  let realPeers = 0;
+  for (const [pid, peer] of peers) {
+    if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
+    if (Date.now() - (peer.lastSeen || 0) < CONFIG.presenceTTLMs) realPeers++;
+  }
+  if (realPeers < 1) return;
+
+  clearTimeout(petalsAutoTimer);
+  petalsAutoTimer = setTimeout(() => {
+    if (!petalsDesired && !petalsActive) petalsActivate(`auto:${reason}`).catch(err => console.warn('[Petals] auto-join failed:', err.message));
+  }, 1500 + Math.random() * 1500);
+}
+
+async function syncPetalsShardPlan(reason = 'manual') {
+  if (isSimulateMode || isSimMode) return;
+  if (petalsSyncPromise) return petalsSyncPromise;
+
+  petalsSyncPromise = (async () => {
+    const participants = buildPetalsParticipants();
+    const assignments = computePetalsAssignments(participants);
+    const fallbackTarget = participants.length <= 1 ? PETALS_COMPONENTS : [];
+    const targetComponents = [...new Set(assignments.get(peerId) || fallbackTarget)];
+    const alreadyInSync =
+      targetComponents.length === petalsMyLayers.length &&
+      targetComponents.every((comp, idx) => petalsMyLayers[idx] === comp) &&
+      targetComponents.every(comp => !!petalsONNXSessions[comp]);
+    if (alreadyInSync) {
+      petalsSyncPromise = null;
+      return;
+    }
+
+    const btn = document.getElementById('petals-activate-btn');
+    const fab = document.getElementById('petals-fab');
+    if (btn) {
+      btn.textContent = reason.startsWith('auto') ? '🌸 Auto-joining hive...' : '⏳ Syncing shards...';
+      btn.disabled = true;
+    }
+    if (fab) { fab.style.opacity = '0.5'; fab.style.animation = 'none'; }
+
+    try {
+      if (targetComponents.length === 0) {
+        petalsActive = false;
+        petalsDesired = false;
+        broadcastPetalsState();
+        throw new Error('Sin shard asignable para este dispositivo.');
+      }
+      await ensurePetalsTokenizer();
+      const failedComponents = [];
+
+      ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
+      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+      if (isMobile && ort.env.webgpu) ort.env.webgpu.powerPreference = 'low-power';
+
+      for (const comp of Object.keys(petalsONNXSessions)) {
+        if (!targetComponents.includes(comp)) {
+          try { await petalsONNXSessions[comp]?.release?.(); } catch(_) {}
+          delete petalsONNXSessions[comp];
+        }
+      }
+
+      for (const comp of targetComponents) {
+        if (petalsONNXSessions[comp]) continue;
+        const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
+        if (btn) btn.textContent = `⏳ ${file}...`;
+        document.getElementById('petals-status').textContent = file;
+        try {
+          petalsONNXSessions[comp] = await Promise.race([
+            ort.InferenceSession.create(PETALS_CDN + file, { executionProviders: ['webgpu', 'wasm'] }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 60s')), 60000))
+          ]);
+        } catch (loadErr) {
+          console.warn(`[Petals] Failed to load ${file}:`, loadErr.message);
+          failedComponents.push(comp);
+          delete petalsONNXSessions[comp];
+        }
+      }
+
+      petalsMyLayers = targetComponents.filter(comp => !!petalsONNXSessions[comp]);
+      if (petalsMyLayers.length === 0) {
+        petalsActive = false;
+        petalsDesired = false;
+        broadcastPetalsState();
+        throw new Error('No se pudo cargar ningún shard asignado.');
+      }
+
+      petalsDesired = true;
+      petalsActive = true;
+      const failLabel = failedComponents.length > 0 ? ` (${failedComponents.length} fallidos)` : '';
+      if (btn) {
+        btn.textContent = '✅ Petals Active';
+        btn.disabled = false;
+        btn.style.borderColor = 'rgba(0,184,148,0.5)';
+        btn.style.color = 'var(--peer-online)';
+      }
+      if (fab) { fab.classList.add('active'); fab.style.opacity = '1'; }
+      document.getElementById('petals-status').textContent = 'Online' + failLabel;
+      document.getElementById('petals-status').style.color = 'var(--peer-online)';
+      document.getElementById('petals-my-layers').textContent = petalsMyLayers.length + ' loaded' + failLabel;
+      broadcastPetalsState();
+    } catch (err) {
+      console.error('[Petals] Activation error:', err);
+      if (petalsMyLayers.length === 0) {
+        petalsActive = false;
+        petalsDesired = false;
+        broadcastPetalsState();
+      }
+      if (btn) {
+        btn.textContent = '❌ ' + err.message;
+        btn.disabled = false;
+      }
+      if (fab) { fab.style.opacity = '1'; fab.style.animation = ''; }
+      throw err;
+    } finally {
+      petalsSyncPromise = null;
+    }
+  })();
+
+  return petalsSyncPromise;
+}
+
+async function petalsActivate(reason = 'manual') {
+  petalsDesired = true;
+  return syncPetalsShardPlan(reason);
 }
 
 
@@ -1302,6 +1481,60 @@ function petalsFindPeerForComponent(comp) {
     }
   }
   return null;
+}
+
+function pickPetalsFallbackPeer() {
+  const now = Date.now();
+  const candidates = [];
+  for (const [pid, info] of petalsReadyPeers) {
+    if (pid === peerId) continue;
+    const peer = peers.get(pid);
+    if (!peer) continue;
+    const lastSeen = info?.lastSeen || peer.lastSeen || 0;
+    if (lastSeen && now - lastSeen > CONFIG.presenceTTLMs * 2) continue;
+    candidates.push({
+      peerId: pid,
+      layers: info.layers || [],
+      lastSeen,
+      open: peer?.dc?.readyState === 'open',
+      score: estimatePetalsPeerScore({
+        deviceTier: peer.deviceTier,
+        memoryMB: peer.memoryMB,
+        tps: peer.tps,
+        benchmark: peer.benchmark,
+        webgpu: peer.webgpu,
+        hasEngine: peer.hasEngine,
+      }),
+    });
+  }
+  candidates.sort((a, b) =>
+    (Number(b.open) - Number(a.open)) ||
+    ((b.layers?.length || 0) - (a.layers?.length || 0)) ||
+    ((b.score || 0) - (a.score || 0)) ||
+    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
+    a.peerId.localeCompare(b.peerId)
+  );
+  return candidates[0]?.peerId || null;
+}
+
+function pickGeneralFallbackPeer() {
+  const petalsPeerId = pickPetalsFallbackPeer();
+  if (petalsPeerId) return petalsPeerId;
+
+  let bestPeerId = null;
+  let bestScore = -Infinity;
+  for (const [pid, peer] of peers) {
+    if (!peer?.hasEngine || pid === peerId) continue;
+    if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
+    const lastSeen = peer.lastSeen || 0;
+    if (lastSeen && Date.now() - lastSeen > CONFIG.presenceTTLMs * 2) continue;
+    const score = Math.max(peer.benchmark || 0, peer.tps || 0, peer.webgpu ? 2 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestPeerId = pid;
+    }
+  }
+  return bestPeerId;
 }
 
 // Full forward pass through all layers for a token sequence
@@ -1431,15 +1664,8 @@ async function runPetalsInference(userMessage) {
       // No WebRTC — fall back to Nostr relay MOE request
       contentEl.textContent = '📡 WebRTC no disponible — usando Relay Nostr...';
       
-      // Find any peer with an engine OR any known petals peer for Nostr fallback
-      let fallbackPeerId = null;
-      for (const [pid, p] of peers) {
-        if (p.hasEngine) { fallbackPeerId = pid; break; }
-      }
-      // Also consider petals peers reachable via Nostr even without open WebRTC
-      if (!fallbackPeerId) {
-        for (const [pid] of petalsReadyPeers) { fallbackPeerId = pid; break; }
-      }
+      // Prefer a real Petals shard owner; only fall back to any engine peer if none exists.
+      const fallbackPeerId = pickGeneralFallbackPeer();
       
       if (fallbackPeerId) {
         const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
@@ -1505,10 +1731,7 @@ async function runPetalsInference(userMessage) {
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
     contentEl.textContent = '⏳ Enviando al enjambre via Nostr...';
 
-    let fallbackPeerId = null;
-    for (const [pid, p] of peers) {
-      if (p.hasEngine || petalsReadyPeers.has(pid)) { fallbackPeerId = pid; break; }
-    }
+    const fallbackPeerId = pickGeneralFallbackPeer();
     if (!fallbackPeerId) { isGenerating = false; return await runCloudFallback(userMessage); }
 
     const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
@@ -2029,22 +2252,12 @@ async function generateResponse(userMessage) {
   const intent = await classifyIntentWithLLM(userMessage);
   const classifyNote = intent.method === 'llm' ? ` [LLM ${intent.ms}ms]` : ' [keyword]';
 
-  // If Web-Petals swarm is available, intercept ANY prompt to run natively through the Swarm!
-  // Only do this if we have something useful: local ONNX layers loaded OR at least one peer with open WebRTC.
-  if (petalsReadyPeers.size > 0) {
-    const hasLocalONNX = petalsMyLayers.length > 0 && Object.keys(petalsONNXSessions).length > 0;
-    const hasOpenWebRTC = (() => {
-      for (const [pid] of petalsReadyPeers) {
-        const p = peers.get(pid);
-        if (p?.dc?.readyState === 'open') return true;
-      }
-      return false;
-    })();
-    if (hasLocalONNX || hasOpenWebRTC) {
-      showRouteBanner(`🌸 Intercepción Sharding: Derivando a Enjambre Petals (O(1))`);
-      return await runPetalsInference(userMessage);
-    }
-    // petalsReadyPeers known but no usable connection yet — skip to MOE/cloud
+  // If Web-Petals swarm is available, intercept ANY prompt to run natively through the Swarm.
+  // runPetalsInference() already handles the WebRTC bootstrap and Nostr fallback path.
+  const hasLocalONNX = petalsMyLayers.length > 0 && Object.keys(petalsONNXSessions).length > 0;
+  if (hasLocalONNX || petalsReadyPeers.size > 0) {
+    showRouteBanner(`🌸 Intercepción Sharding: Derivando a Enjambre Petals (O(1))`);
+    return await runPetalsInference(userMessage);
   }
 
   const expertCount = countExpertPeers() + (engine ? 1 : 0);
@@ -2890,7 +3103,8 @@ function publishPresence() {
     type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS,
     currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: myRole,
     hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now(),
-    nickname: myNickname, repScore: reputation.myScore,
+    nickname: myNickname, repScore: reputation.myScore, benchmark: localBenchmark,
+    petalsActive, petalsLayers: petalsMyLayers,
     // Flag so peers know this is a real node, not a simulator virtual peer
     isSimNode: false,
   });
@@ -3008,39 +3222,64 @@ function handlePeerPresence(p) {
   // but as a belt-and-suspenders guard: if a presence still has isSimNode:true, ignore it.
   if (p.isSimNode === true) return;
 
+  const now = Date.now();
   if (!peers.has(p.peerId)) {
     peers.set(p.peerId, {
       deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || 0, moeRole: p.moeRole || 'relay',
       tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null, inferenceMode: p.inferenceMode || 'relay',
       lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
-      nickname: p.nickname || null, repScore: p.repScore || 0,
+      nickname: p.nickname || null, repScore: p.repScore || 0, benchmark: p.benchmark || 0, petalsActive: !!p.petalsActive,
     });
     if (peerId < p.peerId) { if (getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }
     else { setTimeout(() => { const peer = peers.get(p.peerId); if (peer && (!peer.conn || peer.conn.connectionState === 'closed') && getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }, 3000 + Math.random() * 2000); }
   } else {
     const peer = peers.get(p.peerId);
-    Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || peer.modelSize, moeRole: p.moeRole || peer.moeRole, tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || peer.shardInfo, inferenceMode: p.inferenceMode || peer.inferenceMode, lastSeen: Date.now(), nickname: p.nickname || peer.nickname, repScore: p.repScore || peer.repScore });
+    Object.assign(peer, {
+      deviceTier: p.deviceTier,
+      webgpu: p.webgpu,
+      memoryMB: p.memoryMB,
+      modelSize: p.modelSize || peer.modelSize,
+      moeRole: p.moeRole || peer.moeRole,
+      tps: p.tps || 0,
+      hasEngine: p.hasEngine || false,
+      shardInfo: p.shardInfo || peer.shardInfo,
+      inferenceMode: p.inferenceMode || peer.inferenceMode,
+      lastSeen: now,
+      nickname: p.nickname || peer.nickname,
+      repScore: p.repScore || peer.repScore,
+      benchmark: p.benchmark || peer.benchmark || 0,
+      petalsActive: !!p.petalsActive,
+    });
   }
 
-  // Ensure petals knowledge is populated directly from Nostr presence
-  if (p.petalsLayers && p.petalsLayers.length > 0) {
-    petalsReadyPeers.set(p.peerId, { layers: p.petalsLayers });
-    // If we know this peer has petals layers but no open channel, try WebRTC now
-    const existingPeer = peers.get(p.peerId);
-    if (existingPeer && existingPeer.dc?.readyState !== 'open' && !existingPeer.conn) {
-      if (getActiveConnections() < CONFIG.maxPeers) {
-        initiateWebRTC(p.peerId);
-      }
+  const peer = peers.get(p.peerId);
+  const petalsLayers = Array.isArray(p.petalsLayers) ? p.petalsLayers : [];
+  peer.petalsActive = !!p.petalsActive || petalsLayers.length > 0;
+
+  if (peer.petalsActive) {
+    upsertPetalsPeer(p.peerId, petalsLayers, true, now);
+    if (peer.dc?.readyState !== 'open' && !peer.conn && getActiveConnections() < CONFIG.maxPeers) {
+      initiateWebRTC(p.peerId);
     }
+    if (petalsDesired || petalsActive) schedulePetalsSync('presence');
+  } else {
+    petalsReadyPeers.delete(p.peerId);
+    if (petalsDesired || petalsActive) schedulePetalsSync('presence-offline');
   }
-  
+
+  maybeAutoActivatePetals('presence');
   updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
 }
 function removePeer(pid) {
-  const p = peers.get(pid); if (!p) return;
-  clearTimeout(p.reconnectTimer); clearInterval(p.pingTimer);
-  try { p.dc?.close(); } catch(e) {} try { p.conn?.close(); } catch(e) {}
-  peers.delete(pid); updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
+  const p = peers.get(pid);
+  if (p) {
+    clearTimeout(p.reconnectTimer); clearInterval(p.pingTimer);
+    try { p.dc?.close(); } catch(e) {} try { p.conn?.close(); } catch(e) {}
+    peers.delete(pid);
+  }
+  petalsReadyPeers.delete(pid);
+  updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
+  if (petalsDesired || petalsActive) schedulePetalsSync('peer-left', 250);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3132,12 +3371,15 @@ function setupDC(dc, remoteId, myVirtualId = null) {
   dc.onopen = () => {
     if (myVirtualId) {
       const vp = masqueradedPeers.get(myVirtualId);
-      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId: myVirtualId, deviceTier: vp.deviceTier, webgpu: vp.webgpu, tps: vp.tps, hasEngine: vp.hasEngine, shardInfo: vp.shardInfo, inferenceMode: vp.inferenceMode, modelSize: getCurrentModelSize(), moeRole: vp.moeRole, benchmark: vp.benchmark, nickname: vp.nickname, repScore: vp.repScore, petalsLayers: vp.petalsLayers || [] }));
+      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId: myVirtualId, deviceTier: vp.deviceTier, webgpu: vp.webgpu, memoryMB: vp.memoryMB, tps: vp.tps, hasEngine: vp.hasEngine, shardInfo: vp.shardInfo, inferenceMode: vp.inferenceMode, modelSize: getCurrentModelSize(), moeRole: vp.moeRole, benchmark: vp.benchmark, nickname: vp.nickname, repScore: vp.repScore, petalsLayers: vp.petalsLayers || [], petalsActive: (vp.petalsLayers || []).length > 0 }));
       if (vp.petalsLayers?.length > 0) {
-        setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: vp.petalsLayers })); }, 100);
+        setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: vp.petalsLayers, active: true })); }, 100);
       }
     } else {
-      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore }));
+      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore, petalsLayers: petalsMyLayers, petalsActive }));
+      if (petalsActive) {
+        setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active: true })); }, 100);
+      }
       const peer = peers.get(remoteId);
       if (peer) { peer.pingTimer = setInterval(() => { if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); } }, CONFIG.pingIntervalMs); }
       updatePeerListUI(); updateRoomMembersUI();
@@ -3229,22 +3471,24 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
     case MSG.HELLO:
       if (m.payload) {
         peer.deviceTier = m.payload.deviceTier || peer.deviceTier; peer.webgpu = m.payload.webgpu || false;
+        peer.memoryMB = m.payload.memoryMB || peer.memoryMB || 0;
         peer.tps = m.payload.tps || 0; peer.hasEngine = m.payload.hasEngine || false;
         peer.shardInfo = m.payload.shardInfo || null; peer.inferenceMode = m.payload.inferenceMode || 'relay';
         peer.modelSize = m.payload.modelSize || 0; peer.moeRole = m.payload.moeRole || 'relay';
         peer.benchmark = m.payload.benchmark || 0;
         peer.nickname = m.payload.nickname || peer.nickname;
         peer.repScore = m.payload.repScore || 0;
-        // Register petals layers from HELLO (sent by virtual peers and real petals nodes)
-        if (m.payload.petalsLayers && m.payload.petalsLayers.length > 0) {
-          petalsReadyPeers.set(fromId, { layers: m.payload.petalsLayers });
-        }
+        peer.petalsActive = !!m.payload.petalsActive || (m.payload.petalsLayers?.length > 0);
+        if (peer.petalsActive) upsertPetalsPeer(fromId, m.payload.petalsLayers || [], true, Date.now());
+        else petalsReadyPeers.delete(fromId);
         if (peer.hasEngine && peer.benchmark > 0) {
           const claimed = peer.deviceTier;
           if (claimed === 'S' && peer.benchmark < 5) { console.warn(`[PoC] ${fromId} claims Tier S but benchmark=${peer.benchmark} — suspicious`); peer.proofValid = false; }
           else if (claimed === 'A' && peer.benchmark < 3) { console.warn(`[PoC] ${fromId} claims Tier A but benchmark=${peer.benchmark} — suspicious`); peer.proofValid = false; }
           else { peer.proofValid = true; }
         }
+        if (petalsDesired || petalsActive) schedulePetalsSync('hello');
+        maybeAutoActivatePetals('hello');
       }
       updatePeerListUI(); updateHiveUI(); updateRoomMembersUI(); break;
     case MSG.PING: if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.PONG, m.reqId, m.seq, null)); break;
@@ -3265,8 +3509,12 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
       break;
 
     case MSG.PETALS_READY:
-      if (m.payload && m.payload.layers) {
-        petalsReadyPeers.set(fromId, { layers: m.payload.layers });
+      if (m.payload) {
+        const layers = Array.isArray(m.payload.layers) ? m.payload.layers : [];
+        peer.petalsActive = !!m.payload.active || layers.length > 0;
+        if (peer.petalsActive) upsertPetalsPeer(fromId, layers, true, Date.now());
+        else petalsReadyPeers.delete(fromId);
+        if (petalsDesired || petalsActive) schedulePetalsSync('petals-ready', 300);
       }
       break;
     case MSG.PETALS_TENSOR:
@@ -3837,8 +4085,8 @@ async function boot() {
   setupInput();
   setupNicknameUI();
   setupModals();
-  document.getElementById('petals-activate-btn').addEventListener('click', () => petalsActivate());
-  document.getElementById('petals-fab').addEventListener('click', () => petalsActivate());
+  document.getElementById('petals-activate-btn').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
+  document.getElementById('petals-fab').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
   connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI(); updateRoomMembersUI();
 
   await initEngine();
