@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>osooooP2P-LLM — Distributed Hive Mind</title>
+<title>P2P-LLM — Distributed Hive Mind</title>
 <meta name="description" content="Browser-based peer-to-peer distributed edge routing with 5-tier hardware classification. Zero-install, zero-server AI inference.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1181,17 +1181,13 @@ async function petalsActivate() {
       if (ort.env.webgpu) ort.env.webgpu.powerPreference = 'low-power';
     }
 
-    // FIX 2: Cálculo real de capas cargables según RAM disponible (sin Math.min(3,...) hardcodeado)
-    // SmolLM2-1.7B: cada capa pesa ~64MB en q4. Headroom mínimo para OS: 400MB en móvil, 300MB en desktop.
+    // On mobile, limit how many layers we actually load to avoid OOM.
+    // Heuristic: 1 layer ~64MB. Leave 300MB headroom. Cap at 3 layers on mobile.
     const ramBudgetMB = (navigator.deviceMemory || 2) * 1024;
     const layerSizeMB = 64;
-    const headroomMB = isMobileUA ? 450 : 300; // OS + browser overhead
-    const usableMB = ramBudgetMB * (isMobileUA ? 0.45 : 0.60) - headroomMB; // % disponible para browser
-    // En móvil Android el browser tiene acceso a ~45% de la RAM antes del OOM killer
-    // Máximo: 16 capas en móvil (protección de batería), sin límite en desktop
-    const absoluteMax = isMobileUA ? 16 : PETALS_TOTAL_LAYERS;
-    const maxLoadable = Math.max(1, Math.min(absoluteMax, Math.floor(usableMB / layerSizeMB)));
-    console.log(`[Petals] RAM budget=${ramBudgetMB}MB usable=${Math.round(usableMB)}MB → maxLoadable=${maxLoadable} layers (${layerSizeMB}MB each)`);
+    const maxLoadable = isMobileUA
+      ? Math.max(1, Math.min(3, Math.floor((ramBudgetMB * 0.5 - 300) / layerSizeMB)))
+      : myComponents.length;
 
     const loadableComponents = myComponents.slice(0, maxLoadable);
     const failedComponents = [];
@@ -1227,8 +1223,6 @@ async function petalsActivate() {
     petalsActive = true;
     const failLabel = failedComponents.length > 0 ? ` (${failedComponents.length} fallidos)` : '';
     btn.textContent = '✅ Petals Active';
-    // Iniciar heartbeat + vigilancia OOM después de activar capas exitosamente
-    petalsStartHeartbeat();
     btn.style.borderColor = 'rgba(0,184,148,0.5)';
     btn.style.color = 'var(--peer-online)';
     if(fab) { fab.classList.add('active'); fab.style.opacity = '1'; }
@@ -1300,70 +1294,14 @@ function petalsGetNextComponent(current) {
   return null;
 }
 
-// ── NOSTR TENSOR TRANSPORT ──────────────────────────────────────────────
-// Cuando WebRTC falla por CGNAT, los tensores viajan por Nostr WebSocket.
-// Hidden state SmolLM2-1.7B = 4096 bytes por token → 5.5KB en base64.
-// Todos los relays Nostr públicos aceptan hasta 64KB-1MB por evento.
-
-function tensorToBase64(data) {
-  let buf;
-  if (data instanceof Float32Array) { buf = data.buffer; }
-  else if (ArrayBuffer.isView(data)) { buf = data.buffer; }
-  else {
-    const isInt = Array.isArray(data) && data.every(v => Number.isInteger(v) && v >= 0 && v < 200000);
-    buf = isInt ? new Int32Array(data).buffer : new Float32Array(data).buffer;
-  }
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
-function base64ToTensor(b64, dataType) {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return Array.from(dataType === 'int32' ? new Int32Array(bytes.buffer) : new Float32Array(bytes.buffer));
-}
-
-function detectDataType(data) {
-  if (!Array.isArray(data) || data.length === 0) return 'float32';
-  return data.every(v => Number.isInteger(v) && v >= 0 && v < 200000) ? 'int32' : 'float32';
-}
-
-// Encuentra peer con la capa: prioriza WebRTC (rápido), cae a Nostr (CGNAT bypass)
 function petalsFindPeerForComponent(comp) {
-  // Primero: WebRTC DataChannel abierto (óptimo, <10ms RTT)
   for (const [pid, info] of petalsReadyPeers) {
     if (info.layers.includes(comp)) {
       const peer = peers.get(pid);
-      if (peer?.dc?.readyState === 'open') return { pid, transport: 'webrtc' };
+      if (peer?.dc?.readyState === 'open') return pid;
     }
   }
-  // Fallback: peer conocido por Nostr presence aunque no haya WebRTC (CGNAT bypass)
-  // El tensor viaja base64 por WebSocket público — funciona siempre
-  for (const [pid, info] of petalsReadyPeers) {
-    if (info.layers.includes(comp)) return { pid, transport: 'nostr' };
-  }
   return null;
-}
-
-// Enviar tensor via Nostr cuando WebRTC no está disponible
-async function petalsSendTensorViaNostr(targetPid, reqId, comp, data, seqLen) {
-  const dataType = detectDataType(data);
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 25000);
-    fedPending.set(reqId, {
-      resolve: (res) => { clearTimeout(timeout); resolve(res); },
-      onChunk: () => {}
-    });
-    publishSignal(targetPid, {
-      type: 'petals_tensor_req',
-      reqId, component: comp,
-      data: tensorToBase64(data),
-      dataType, seqLen,
-    });
-  });
 }
 
 // Full forward pass through all layers for a token sequence
@@ -1381,82 +1319,70 @@ async function petalsForwardPass(tokenIds) {
       currentSeqLen = result.seqLen;
       currentComp = petalsGetNextComponent(currentComp);
     } else {
-      // Buscar peer con esta capa — WebRTC primero, Nostr como fallback CGNAT
-      let route = petalsFindPeerForComponent(currentComp);
-
-      if (!route) {
-        // Nadie tiene esta capa aún — intentar abrir WebRTC y esperar 8s
+      // Try to find a peer with this component AND an open WebRTC channel
+      let target = petalsFindPeerForComponent(currentComp);
+      if (!target) {
+        // No open connection — try to initiate WebRTC to any petals peer that has this component
         for (const [pid, info] of petalsReadyPeers) {
           if (info.layers.includes(currentComp)) {
             const p = peers.get(pid);
-            if (p && (!p.conn || p.conn.connectionState !== 'connected')) initiateWebRTC(pid);
-          }
-        }
-        for (let wait = 0; wait < 16; wait++) {
-          await new Promise(r => setTimeout(r, 500));
-          route = petalsFindPeerForComponent(currentComp);
-          if (route) break;
-        }
-        if (!route) return null;
-      }
-
-      const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-      let res = null;
-
-      if (route.transport === 'webrtc') {
-        // ── Camino rápido: WebRTC DataChannel ──
-        const peer = peers.get(route.pid);
-        const layerTimeoutMs = isMobile ? 12000 : 25000;
-        res = await new Promise((resolve) => {
-          const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, layerTimeoutMs);
-          fedPending.set(reqId, {
-            resolve: (r) => { clearTimeout(timeout); resolve(r); },
-            onChunk: () => {}
-          });
-          peer.dc.send(encodeMsg(MSG.PETALS_TENSOR, reqId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
-        });
-        // Si WebRTC falla, reintentar por Nostr automáticamente
-        if (!res) {
-          console.warn(`[Petals] WebRTC timeout para ${currentComp} → reintentando via Nostr`);
-          route = { pid: route.pid, transport: 'nostr' };
-        }
-      }
-
-      if (!res && route.transport === 'nostr') {
-        // ── Camino CGNAT: Nostr WebSocket (funciona en cualquier red) ──
-        // El tensor viaja base64 por relay público: 4096B hidden state = 5.5KB base64
-        console.log(`[Petals] Enviando tensor ${currentComp} via Nostr a ${route.pid.slice(0,8)}…`);
-        res = await petalsSendTensorViaNostr(route.pid, reqId, currentComp, currentData, currentSeqLen);
-      }
-
-      // Último recurso: buscar otro peer con la misma capa
-      if (!res) {
-        for (const [pid, info] of petalsReadyPeers) {
-          if (pid !== route.pid && info.layers.includes(currentComp)) {
-            const altRoute = { pid, transport: peers.get(pid)?.dc?.readyState === 'open' ? 'webrtc' : 'nostr' };
-            const retryId = Math.floor(Math.random() * 0xFFFFFFFF);
-            if (altRoute.transport === 'webrtc') {
-              const ap = peers.get(pid);
-              res = await new Promise((resolve) => {
-                const t2 = setTimeout(() => { fedPending.delete(retryId); resolve(null); }, 10000);
-                fedPending.set(retryId, { resolve: (r) => { clearTimeout(t2); resolve(r); }, onChunk: () => {} });
-                ap.dc.send(encodeMsg(MSG.PETALS_TENSOR, retryId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
-              });
-            } else {
-              res = await petalsSendTensorViaNostr(pid, retryId, currentComp, currentData, currentSeqLen);
+            if (p && (!p.conn || p.conn.connectionState !== 'connected')) {
+              initiateWebRTC(pid);
             }
-            if (res) break;
           }
         }
+        // Wait up to 10 seconds for connection
+        for (let wait = 0; wait < 20; wait++) {
+          await new Promise(r => setTimeout(r, 500));
+          target = petalsFindPeerForComponent(currentComp);
+          if (target) break;
+        }
+        if (!target) return null; // No peer available
       }
-
+      const peer = peers.get(target);
+      const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+      // On mobile, a 30s timeout per layer kills UX. Use 12s with one retry.
+      const isMobileCtx = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      const layerTimeoutMs = isMobileCtx ? 12000 : 25000;
+      let res = await new Promise((resolve) => {
+        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, layerTimeoutMs);
+        fedPending.set(reqId, {
+          resolve: (res) => { clearTimeout(timeout); resolve(res); },
+          onChunk: () => {}
+        });
+        peer.dc.send(encodeMsg(MSG.PETALS_TENSOR, reqId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
+      });
+      // One retry on timeout: try another peer that has this component
+      if (!res) {
+        const altTarget = (() => {
+          for (const [pid, info] of petalsReadyPeers) {
+            if (pid !== target && info.layers.includes(currentComp)) {
+              const ap = peers.get(pid);
+              if (ap?.dc?.readyState === 'open') return pid;
+            }
+          }
+          return null;
+        })();
+        if (altTarget) {
+          const altPeer = peers.get(altTarget);
+          const retryId = Math.floor(Math.random() * 0xFFFFFFFF);
+          res = await new Promise((resolve) => {
+            const t2 = setTimeout(() => { fedPending.delete(retryId); resolve(null); }, layerTimeoutMs);
+            fedPending.set(retryId, {
+              resolve: (r) => { clearTimeout(t2); resolve(r); },
+              onChunk: () => {}
+            });
+            altPeer.dc.send(encodeMsg(MSG.PETALS_TENSOR, retryId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
+          });
+        }
+      }
       if (!res) return null;
       if (res.bounced) {
-        currentData = res.data;
-        currentSeqLen = res.seqLen;
-        currentComp = res.nextComp;
+         currentData = res.data;
+         currentSeqLen = res.seqLen;
+         currentComp = res.nextComp;
       } else {
-        return res;
+         return res; // Final token or direct pass
       }
     }
   }
@@ -1567,25 +1493,9 @@ async function runPetalsInference(userMessage) {
     }
   }
 
-  // FIX 4: Si no tenemos capas locales PERO el dispositivo tiene WebGPU,
-  // intentar activar Petals antes de caer a relay puro.
-  // Esto convierte celulares Tier C en nodos de cómputo real en vez de relays.
-  if (petalsMyLayers.length === 0 && hasWebGPU && !petalsActive) {
-    const contentEl = aiMsgEl.querySelector('.msg-content');
-    contentEl.textContent = '🔧 Activando capas ONNX en este dispositivo...';
-    try {
-      await petalsActivate(); // intenta cargar capas ONNX localmente
-    } catch(activateErr) {
-      console.warn('[Petals] Auto-activación fallida:', activateErr.message);
-    }
-    // Si después de intentarlo tenemos capas → continuar con inferencia real
-    // Si no → caer al relay path de abajo
-    if (petalsMyLayers.length > 0) {
-      contentEl.textContent = `✅ ${petalsMyLayers.length} capas cargadas — procesando...`;
-    }
-  }
-
-  // Si el celular NO tiene WebGPU o la activación falló → relay al enjambre
+  // If mobile has NO local ONNX layers, skip the tokenizer+forward-pass entirely.
+  // Instead, use Nostr fallback directly against any petals peer — the PC host
+  // will respond using its full ONNX stack.
   if (petalsMyLayers.length === 0) {
     aiMsgEl.querySelector('.typing-indicator')?.remove();
     const contentEl = aiMsgEl.querySelector('.msg-content');
@@ -1797,65 +1707,32 @@ const metrics = {
 async function classifyDevice() {
   hasWebGPU = false; availableVRAM = 0;
   isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
-
-  // ── FIX 1: Multi-probe WebGPU para Adreno/Mali que reportan maxBufferSize=0 ──
   if ('gpu' in navigator && navigator.gpu) {
     try {
-      // Intento 1: high-performance (desktops, iOS Metal, algunos Android)
-      let adapter = await Promise.race([
+      const adapter = await Promise.race([
         navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
-      ]).catch(() => null);
-
-      // Intento 2: sin preferencia (muchos Android con Adreno/Mali necesitan esto)
-      if (!adapter) {
-        adapter = await Promise.race([
-          navigator.gpu.requestAdapter(),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
-        ]).catch(() => null);
-      }
-
+      ]);
       if (adapter) {
         hasWebGPU = true;
-        const lim = adapter.limits || {};
-
-        // maxBufferSize da 0 en Adreno 619, Mali-G77 y otros drivers Android
-        // Fallback cascade: maxBufferSize → maxStorageBufferBindingSize → maxUniformBufferBindingSize
-        let rawBytes = lim.maxBufferSize || lim.maxStorageBufferBindingSize || lim.maxUniformBufferBindingSize || 0;
-
-        if (rawBytes > 0) {
-          availableVRAM = Math.floor(rawBytes / 1024 / 1024);
-        } else {
-          // Driver no reporta nada: estimar por RAM del dispositivo
-          // Adreno 619 (Redmi Note 12, 4GB) → ~1GB VRAM compartida
-          // Apple A15 (iPhone 14, 6GB) → ~5GB unificada
-          // Dimensity 900 (3GB) → ~768MB
-          const ramRatio = isMobile ? 0.25 : 0.35; // móvil comparte más con OS
-          availableVRAM = Math.floor(memoryMB * ramRatio);
-          console.log(`[Device] VRAM no reportada por driver → estimado ${availableVRAM}MB (${Math.round(ramRatio*100)}% de ${memoryMB}MB RAM)`);
-        }
-
-        // Sanity: limitar a valores físicamente posibles
-        availableVRAM = Math.min(availableVRAM, memoryMB * 0.85);
-        console.log(`[Device] WebGPU OK · maxBufferSize=${lim.maxBufferSize||0} maxStorageBuf=${lim.maxStorageBufferBindingSize||0} → VRAM=${availableVRAM}MB`);
+        const info = adapter.limits || {};
+        const maxBuf = info.maxBufferSize || 0;
+        availableVRAM = maxBuf > 0 ? Math.floor(maxBuf / 1024 / 1024) : 0;
       }
     } catch(e) { console.log('[Device] WebGPU error:', e.message); }
   }
+  memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
+  if (hasWebGPU && availableVRAM === 0) { availableVRAM = Math.floor(memoryMB * 0.35); }
 
-  // ── Clasificación de tier con umbrales ajustados para móvil real 2025 ──
-  // Regla: si un celular tiene WebGPU y >= 2GB RAM, NUNCA es Tier D (relay puro)
-  // Tier D solo para dispositivos SIN WebGPU absolutamente
-  if      (hasWebGPU && availableVRAM >= 16000)                       { deviceTier = "S"; myRole = "master_reasoner"; }
-  else if (hasWebGPU && availableVRAM >= 5000)                        { deviceTier = "A"; myRole = "coder"; }
-  else if (hasWebGPU && (availableVRAM >= 1000 || memoryMB >= 6144)) { deviceTier = "B"; myRole = "creative"; }
-  else if (hasWebGPU && (availableVRAM >=  512 || memoryMB >= 3072)) { deviceTier = "C"; myRole = "fast_router"; }
-  else if (hasWebGPU && memoryMB >= 2048)                             { deviceTier = "C"; myRole = "fast_router"; } // Tier C mínimo si tiene WebGPU
-  else if (hasWebGPU)                                                  { deviceTier = "C"; myRole = "fast_router"; } // cualquier WebGPU = Tier C
-  else if (isMobile && memoryMB >= 4096)                              { deviceTier = "D"; myRole = "kv_cache"; }    // móvil sin GPU → cache
-  else                                                                 { deviceTier = "D"; myRole = "relay"; }
+  if (hasWebGPU && availableVRAM >= 16000) { deviceTier = "S"; myRole = "master_reasoner"; }
+  else if (hasWebGPU && availableVRAM >= 5000) { deviceTier = "A"; myRole = "coder"; }
+  else if (hasWebGPU && (availableVRAM >= 1500 || memoryMB >= 4096)) { deviceTier = "B"; myRole = "creative"; }
+  else if (hasWebGPU && memoryMB >= 2048) { deviceTier = "C"; myRole = "fast_router"; }
+  else if (!isMobile && memoryMB >= 4096 && hasWebGPU) { deviceTier = "B"; myRole = "general"; }
+  else if (hasWebGPU) { deviceTier = "C"; myRole = "fast_router"; }
+  else { deviceTier = "D"; myRole = "relay"; }
 
-  console.log(`[Device] Tier=${deviceTier} Role=${myRole} WebGPU=${hasWebGPU} VRAM~${availableVRAM}MB RAM=${memoryMB}MB Mobile=${isMobile}`);
+  console.log(`[Device] Tier=${deviceTier} Role=${myRole} WebGPU=${hasWebGPU} VRAM~${availableVRAM}MB RAM=${memoryMB}MB`);
   updateDeviceStats();
 }
 
@@ -3002,9 +2879,6 @@ function publishPresence() {
     currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: myRole,
     hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now(),
     nickname: myNickname, repScore: reputation.myScore,
-    // FIX 5: broadcast real Petals layers so peers can route tensors to us
-    petalsLayers: petalsMyLayers.length > 0 ? petalsMyLayers : undefined,
-    petalsActive: petalsActive,
   });
   for (const [vId, vPeer] of masqueradedPeers) {
     signAndPublish({
@@ -3035,126 +2909,9 @@ function handleNostrContent(c) {
   if (c.type === "presence") handlePeerPresence(c);
   else if (c.type === "signal" && (c.to === peerId || masqueradedPeers.has(c.to))) {
     const virtualId = masqueradedPeers.has(c.to) ? c.to : null;
-    const sig = c.signal;
-    if (sig.type === "moe_fallback_req")     handleNostrFallbackReq(c.from, sig, virtualId);
-    else if (sig.type === "moe_fallback_res") handleNostrFallbackRes(c.from, sig);
-    // ── NOSTR TENSOR TRANSPORT: manejo de tensores ONNX via Nostr (CGNAT bypass) ──
-    else if (sig.type === "petals_tensor_req") handleNostrTensorReq(c.from, sig);
-    else if (sig.type === "petals_tensor_res") handleNostrTensorRes(c.from, sig);
-    else if (sig.type === "petals_orphan_layers") handlePetalsOrphanLayers(c.from, sig);
-    else handleWebRTCSignal(c.from, sig, virtualId);
-  }
-}
-
-// Recibir tensor ONNX via Nostr, procesar localmente, responder
-async function handleNostrTensorReq(fromId, sig) {
-  const { reqId, component, data: b64, dataType, seqLen } = sig;
-  if (!petalsONNXSessions[component]) {
-    // No tenemos esta capa — responder con error para que el peer intente otro nodo
-    publishSignal(fromId, { type: 'petals_tensor_res', reqId, error: 'layer_not_found', component });
-    return;
-  }
-  try {
-    const data = base64ToTensor(b64, dataType || 'float32');
-    const result = await petalsRunLayer(component, data, seqLen);
-    const nextComp = petalsGetNextComponent(component);
-
-    if (component === 'head' || !nextComp) {
-      // Resultado final: token generado
-      publishSignal(fromId, { type: 'petals_tensor_res', reqId, tokenId: result.tokenId, tokenStr: result.tokenStr });
-    } else if (petalsONNXSessions[nextComp]) {
-      // Tenemos la siguiente capa también — encadenar localmente y responder con resultado
-      let chainData = result;
-      let comp = nextComp;
-      while (comp && petalsONNXSessions[comp]) {
-        chainData = await petalsRunLayer(comp, chainData.data, chainData.seqLen);
-        if (comp === 'head') {
-          publishSignal(fromId, { type: 'petals_tensor_res', reqId, tokenId: chainData.tokenId, tokenStr: chainData.tokenStr });
-          return;
-        }
-        comp = petalsGetNextComponent(comp);
-      }
-      // Llegamos a una capa que no tenemos — enviar hidden state de vuelta para que el requester continúe
-      publishSignal(fromId, {
-        type: 'petals_tensor_res', reqId,
-        bounced: true, nextComp: comp,
-        data: tensorToBase64(chainData.data), dataType: 'float32', seqLen: chainData.seqLen
-      });
-    } else {
-      // Siguiente capa no es nuestra — devolver hidden state procesado para que el requester enrute
-      publishSignal(fromId, {
-        type: 'petals_tensor_res', reqId,
-        bounced: true, nextComp,
-        data: tensorToBase64(result.data), dataType: 'float32', seqLen: result.seqLen
-      });
-    }
-  } catch(err) {
-    console.error('[Petals/Nostr] Error procesando tensor:', err.message);
-    publishSignal(fromId, { type: 'petals_tensor_res', reqId, error: err.message, tokenId: 0, tokenStr: '[Error ONNX]' });
-  }
-}
-
-// Manejar notificación de capas huérfanas — si tenemos RAM, las cargamos
-async function handlePetalsOrphanLayers(fromId, sig) {
-  if (!hasWebGPU || !petalsActive) return; // Solo nodos con WebGPU pueden ayudar
-  const { layers: orphaned } = sig;
-  if (!orphaned || orphaned.length === 0) return;
-
-  // Calcular cuántas capas podemos cargar sin OOM
-  const ramBudgetMB = (navigator.deviceMemory || 2) * 1024;
-  const usedByCurrentLayers = petalsMyLayers.filter(c => c.startsWith('layer_')).length * 64;
-  const availableMB = ramBudgetMB * 0.45 - 450 - usedByCurrentLayers;
-  const canLoad = Math.max(0, Math.floor(availableMB / 64));
-  if (canLoad === 0) return;
-
-  // Tomar las capas huérfanas que podemos cargar
-  const toLoad = orphaned.filter(c => !petalsMyLayers.includes(c)).slice(0, canLoad);
-  if (toLoad.length === 0) return;
-
-  console.log(`[Petals/Orphan] Cargando ${toLoad.length} capas huérfanas de ${fromId.slice(0,8)}: ${toLoad.join(', ')}`);
-  for (const comp of toLoad) {
-    try {
-      const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
-      petalsONNXSessions[comp] = await Promise.race([
-        ort.InferenceSession.create(PETALS_CDN + file, { executionProviders: ['webgpu', 'wasm'] }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 60000))
-      ]);
-      petalsMyLayers.push(comp);
-      petalsMyLayers.sort((a, b) => {
-        const order = c => c === 'embeds' ? -1 : c === 'head' ? 999 : parseInt(c.split('_')[1]);
-        return order(a) - order(b);
-      });
-      console.log(`[Petals/Orphan] ✅ ${comp} cargada exitosamente`);
-    } catch(e) {
-      console.warn(`[Petals/Orphan] No se pudo cargar ${comp}:`, e.message);
-    }
-  }
-
-  // Anunciar nuevas capas al swarm
-  publishPresence();
-  for (const [pid, p] of peers) {
-    if (p.dc?.readyState === 'open') p.dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers }));
-  }
-  document.getElementById('petals-my-layers').textContent = petalsMyLayers.length + ' loaded';
-}
-
-// Recibir respuesta de tensor via Nostr y resolver el fedPending correspondiente
-function handleNostrTensorRes(fromId, sig) {
-  const { reqId } = sig;
-  const pending = fedPending.get(reqId);
-  if (!pending) return;
-  fedPending.delete(reqId);
-  if (sig.error && !sig.tokenId && !sig.bounced) {
-    pending.resolve(null);
-    return;
-  }
-  if (sig.bounced) {
-    // Hidden state intermedio — el forward pass continúa desde aquí
-    const data = base64ToTensor(sig.data, sig.dataType || 'float32');
-    pending.resolve({ bounced: true, data, seqLen: sig.seqLen, nextComp: sig.nextComp });
-  } else {
-    // Token final generado
-    pending.resolve({ tokenId: sig.tokenId, tokenStr: sig.tokenStr });
+    if (c.signal.type === "moe_fallback_req") handleNostrFallbackReq(c.from, c.signal, virtualId);
+    else if (c.signal.type === "moe_fallback_res") handleNostrFallbackRes(c.from, c.signal);
+    else handleWebRTCSignal(c.from, c.signal, virtualId);
   }
 }
 
@@ -3236,13 +2993,8 @@ function handlePeerPresence(p) {
   // Ensure petals knowledge is populated directly from Nostr presence
   if (p.petalsLayers && p.petalsLayers.length > 0) {
     petalsReadyPeers.set(p.peerId, { layers: p.petalsLayers });
-    // Actualizar también el peer record con sus capas Petals
-    const existingPeer = peers.get(p.peerId);
-    if (existingPeer) {
-      existingPeer.petalsLayers = p.petalsLayers;
-      existingPeer.petalsActive = p.petalsActive || true;
-    }
     // If we know this peer has petals layers but no open channel, try WebRTC now
+    const existingPeer = peers.get(p.peerId);
     if (existingPeer && existingPeer.dc?.readyState !== 'open' && !existingPeer.conn) {
       if (getActiveConnections() < CONFIG.maxPeers) {
         initiateWebRTC(p.peerId);
@@ -3256,123 +3008,7 @@ function removePeer(pid) {
   const p = peers.get(pid); if (!p) return;
   clearTimeout(p.reconnectTimer); clearInterval(p.pingTimer);
   try { p.dc?.close(); } catch(e) {} try { p.conn?.close(); } catch(e) {}
-  peers.delete(pid);
-  // Si este peer tenía capas Petals, intentar redistribuirlas
-  if (petalsReadyPeers.has(pid)) {
-    const lostLayers = petalsReadyPeers.get(pid)?.layers || [];
-    petalsReadyPeers.delete(pid);
-    if (lostLayers.length > 0) {
-      console.warn(`[Petals] Peer ${pid.slice(0,8)} perdido — capas huérfanas: ${lostLayers.join(', ')}`);
-      petalsRedistributeLayers(lostLayers);
-    }
-  }
-  updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
-}
-
-// ── OOM RECOVERY + HEARTBEAT + LAYER REDISTRIBUTION ─────────────────────
-// Sistema de vigilancia de memoria para Android Chrome.
-// Chrome en Android puede matar el proceso del browser (OOM killer) sin avisar
-// cuando usa >512MB de heap. Esto detecta presión de memoria y libera capas
-// proactivamente antes del crash, evitando que tensores se pierdan.
-
-const petalsHeartbeatMap = new Map(); // peerId -> lastHeartbeatMs
-
-function petalsStartHeartbeat() {
-  if (!petalsActive || petalsMyLayers.length === 0) return;
-
-  // Enviar heartbeat cada 15s para que otros peers sepan que seguimos vivos
-  const heartbeatInterval = setInterval(() => {
-    if (!petalsActive) { clearInterval(heartbeatInterval); return; }
-    // Incluir estado de memoria si está disponible
-    const memInfo = performance.memory ? {
-      usedMB: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024),
-      limitMB: Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024),
-    } : null;
-    publishPresence(); // el presence ya incluye petalsLayers + petalsActive
-    if (memInfo) {
-      console.log(`[Petals/HB] mem=${memInfo.usedMB}/${memInfo.limitMB}MB layers=${petalsMyLayers.length}`);
-    }
-  }, 15000);
-
-  // Vigilar memoria cada 10s — descargar capas si estamos cerca del OOM
-  const oomWatchInterval = setInterval(async () => {
-    if (!petalsActive || !performance.memory) return;
-    const used = performance.memory.usedJSHeapSize;
-    const limit = performance.memory.jsHeapSizeLimit;
-    const pressurePct = (used / limit) * 100;
-
-    if (pressurePct > 85) {
-      // Presión crítica: descargar la mitad de las capas para evitar OOM kill
-      console.warn(`[Petals/OOM] Presión crítica ${pressurePct.toFixed(0)}% — descargando capas`);
-      await petalsUnloadLayersForMemory(Math.ceil(petalsMyLayers.length / 2));
-    } else if (pressurePct > 70) {
-      // Presión alta: descargar 1-2 capas
-      console.warn(`[Petals/OOM] Presión alta ${pressurePct.toFixed(0)}% — descargando 1 capa`);
-      await petalsUnloadLayersForMemory(1);
-    }
-  }, 10000);
-
-  // Vigilar heartbeats de otros peers con capas Petals
-  // Si un peer deja de aparecer en Nostr presence >45s, sus capas se marcan huérfanas
-  const staleCheckInterval = setInterval(() => {
-    const now = Date.now();
-    for (const [pid] of petalsReadyPeers) {
-      const lastSeen = peers.get(pid)?.lastSeen || 0;
-      const staleSec = (now - lastSeen) / 1000;
-      if (staleSec > 45 && pid !== peerId) {
-        console.warn(`[Petals/HB] Peer ${pid.slice(0,8)} sin heartbeat ${staleSec.toFixed(0)}s — marcando capas huérfanas`);
-        const lostLayers = petalsReadyPeers.get(pid)?.layers || [];
-        petalsReadyPeers.delete(pid);
-        if (lostLayers.length > 0) petalsRedistributeLayers(lostLayers);
-      }
-    }
-  }, 20000);
-}
-
-// Descargar N capas de ONNX para liberar memoria (las capas menos usadas primero)
-async function petalsUnloadLayersForMemory(n) {
-  // Descargar solo capas transformer (no embeds ni head — son necesarios para cualquier path)
-  const unloadable = petalsMyLayers.filter(c => c.startsWith('layer_'));
-  const toUnload = unloadable.slice(0, n);
-  for (const comp of toUnload) {
-    try {
-      if (petalsONNXSessions[comp]) {
-        // ONNX Runtime Web no expone dispose() directamente, pero podemos borrar la referencia
-        // y dejar que el GC libere el buffer
-        delete petalsONNXSessions[comp];
-        const idx = petalsMyLayers.indexOf(comp);
-        if (idx !== -1) petalsMyLayers.splice(idx, 1);
-        console.log(`[Petals/OOM] Capa ${comp} descargada para liberar memoria`);
-      }
-    } catch(e) { console.warn('[Petals/OOM] Error descargando capa:', e.message); }
-  }
-  // Anunciar el nuevo set de capas al swarm
-  if (toUnload.length > 0) {
-    publishPresence();
-    for (const [pid, p] of peers) {
-      if (p.dc?.readyState === 'open') {
-        p.dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers }));
-      }
-    }
-    // Si tenemos capas vecinas disponibles vía Nostr, ellas cubrirán las huérfanas
-    const orphaned = toUnload;
-    petalsRedistributeLayers(orphaned);
-  }
-}
-
-// Redistribuir capas huérfanas: anunciar via Nostr para que otros peers las carguen
-function petalsRedistributeLayers(orphanedLayers) {
-  if (orphanedLayers.length === 0) return;
-  console.log(`[Petals] Redistribuyendo ${orphanedLayers.length} capas huérfanas: ${orphanedLayers.join(', ')}`);
-  // Notificar a todos los peers conocidos que hay capas huérfanas disponibles
-  // Cualquier peer con RAM disponible puede cargarlas
-  for (const [pid] of peers) {
-    publishSignal(pid, {
-      type: 'petals_orphan_layers',
-      layers: orphanedLayers,
-      from: peerId,
-    });
-  }
+  peers.delete(pid); updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -4178,27 +3814,6 @@ async function boot() {
 
   if (engine) { updateInitStatus('Running benchmark…'); await runBenchmark(); }
 
-  // ── FIX 3: Auto-activación de Petals en móvil con WebGPU ──────────────────
-  // Si el dispositivo tiene WebGPU pero no pudo cargar el engine WebLLM completo
-  // (normal en móviles con 2-4GB RAM), activamos automáticamente las capas ONNX
-  // para que contribuya cómputo real a la colmena en vez de ser relay puro.
-  if (hasWebGPU && !engine && !petalsActive) {
-    setTimeout(async () => {
-      console.log(`[Petals] Auto-activando capas ONNX (Tier ${deviceTier}, WebGPU disponible, sin engine completo)…`);
-      updateInitStatus('🌸 Activando capas Petals para colmena…');
-      try {
-        await petalsActivate();
-        if (petalsMyLayers.length > 0) {
-          console.log(`[Petals] ✅ Auto-activación exitosa: ${petalsMyLayers.length} capas ONNX listas`);
-          updateInitStatus(`🌸 ${petalsMyLayers.length} capas Petals activas ✓`);
-          publishPresence(); // broadcast nuevo estado al swarm
-        }
-      } catch(autoErr) {
-        console.warn('[Petals] Auto-activación falló (no crítico):', autoErr.message);
-      }
-    }, 3000); // esperar 3s para que los relays Nostr se conecten primero
-  }
-
   // ── DISTRIBUTED INFERENCE BOOT ──────────────────────────────────────
   try {
     // Phase 1: Initialize WebGPU compute engine (if available)
@@ -4267,9 +3882,8 @@ async function boot() {
   const bootLines = [
     `HIVE MIND v8 — Room: #${roomName}`,
     '',
-    engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → Petals/relay mode',
+    engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → relay/cache mode',
     engine ? `📊 Benchmark: ${localBenchmark} tok/s (Proof of Compute)` : '',
-    hasWebGPU && !engine ? `🌸 Petals ONNX: auto-activando en 3s (${availableVRAM}MB VRAM disponible)…` : '',
     `Device: Tier ${deviceTier} · Role: ${roleLabel}`,
     `Nick: ${myNickname} · Rep: ${reputation.myScore} ${reputation.getStars(reputation.myScore)}`,
     `Classification: ${classMethod}`,
