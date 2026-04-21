@@ -646,6 +646,9 @@ canvas{position:fixed;inset:0;z-index:0}
 //  PUDÚ CHAT v5 — Bosque Mágico Ultra
 // ═══════════════════════════════════════════════════════════════
 
+// ── Estado global de modo (debe declararse antes que enterChat) ──
+let liteMode = false;
+
 // ── PRE-CARGA nostr-tools para que enterChat() sea instantáneo ──
 // Se inicia la descarga en segundo plano apenas carga el módulo,
 // así cuando el usuario presiona "Entrar" ya está disponible.
@@ -1098,14 +1101,6 @@ window.enter3DAndEnter=async function(){
 window.chooseLiteAndEnter=async function(){
   liteMode=true;
   await window.enterChat();
-};
-  try{await generateKeypair();}catch(e){document.getElementById('connecting-text').textContent='Error: '+e.message;return;}
-  if(!myName)myName=randomName();persistName(myName);
-  document.getElementById('connecting-text').textContent='Conectando a relays Nostr...';
-  RELAY_URLS.forEach(url=>connectNostrRelay(url));
-  if(relayReadyCalled&&!discoveryDone){document.getElementById('connecting-text').textContent='Buscando bosques...';clearTimeout(discoveryTimer);discoveryTimer=setTimeout(finishDiscoveryAndEnter,2500);}
-  setInterval(()=>{if(myName&&currentRoomId){const room=rooms.get(currentRoomId);setTimeout(()=>signAndPublish({type:'hello',roomId:currentRoomId,roomName:(room&&room.roomName),from:pubKeyHex,name:myName,ts:Date.now()}),Math.random()*3000);}},HELLO_INTERVAL);
-  setTimeout(()=>{if(!chatEntered&&!discoveryDone)finishDiscoveryAndEnter();},4000);
 };
 
 function enterChatScreen(){
@@ -2594,7 +2589,6 @@ function animate3(ts){
 animate3();
 
 // ── MODO LITE — desactiva animaciones Three.js para dispositivos lentos ──
-let liteMode = false;
 // Auto-activar en Tier D o mobile detectado
 function initLiteMode() {
   // Si ya sabemos que es mobile gama baja, activar automáticamente
