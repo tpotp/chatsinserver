@@ -1080,7 +1080,20 @@ function decodeMsg(buf) {
 let privKeyBytes = null, pubKeyHex = "", peerId = "";
 async function initIdentity() {
   const nostr = await getNostrMod();
-  const STORAGE_KEY = 'p2p-llm-identity-v4';
+  const urlParams = new URLSearchParams(window.location.search);
+  const isSimulator = !!urlParams.get('simulate');
+  const isClient = !!urlParams.get('client');
+  // Use different storage keys for simulator vs client to avoid identity collision
+  const STORAGE_KEY = isSimulator ? 'p2p-llm-identity-v4-sim' : isClient ? 'p2p-llm-identity-v4-cli' : 'p2p-llm-identity-v4';
+  if (isClient) {
+    // Client mode: always generate fresh identity to avoid collisions with other tabs
+    privKeyBytes = nostr.generateSecretKey();
+    pubKeyHex = nostr.getPublicKey(privKeyBytes);
+    peerId = pubKeyHex.slice(0, 12);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ priv: Array.from(privKeyBytes), pub: pubKeyHex })); } catch(e) {}
+    console.log('[Identity] CLIENT mode — fresh peerId=' + peerId);
+    return;
+  }
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) { const { priv, pub } = JSON.parse(saved); privKeyBytes = new Uint8Array(priv); pubKeyHex = pub; peerId = pubKeyHex.slice(0, 12); return; }
