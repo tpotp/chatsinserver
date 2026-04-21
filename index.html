@@ -1178,16 +1178,26 @@ async function petalsActivate() {
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
     if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
       if (ort.env.webgpu) ort.env.webgpu.powerPreference = 'low-power';
+      // Limitar a máximo 2 layers extra en mobile humilde
+      if (myComponents.length > 3) myComponents.length = 3;
     }
+    
+    const successfulLayers = [];
     for (const comp of myComponents) {
       const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
       btn.textContent = `⏳ ${file}...`;
       document.getElementById('petals-status').textContent = file;
-      petalsONNXSessions[comp] = await ort.InferenceSession.create(
-        PETALS_CDN + file,
-        { executionProviders: ['webgpu', 'wasm'] }
-      );
+      try {
+        petalsONNXSessions[comp] = await Promise.race([
+          ort.InferenceSession.create(PETALS_CDN + file, { executionProviders: ['webgpu', 'wasm'] }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 45000))
+        ]);
+        successfulLayers.push(comp);
+      } catch(err) {
+        console.warn(`[Petals] Escapando shard fallido ${comp}:`, err.message);
+      }
     }
+    petalsMyLayers = successfulLayers;
 
     petalsActive = true;
     btn.textContent = '✅ Petals Active';
@@ -1310,7 +1320,8 @@ async function petalsForwardPass(tokenIds) {
       const peer = peers.get(target);
       const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
       const res = await new Promise((resolve) => {
-        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 30000);
+        const timeoutMs = isMobile ? 12000 : 20000;
+        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, timeoutMs);
         fedPending.set(reqId, {
           resolve: (res) => { clearTimeout(timeout); resolve(res); },
           onChunk: () => {}
@@ -2743,7 +2754,7 @@ function handleNostrContent(c) {
 }
 
 async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
-  if (!engine) return;
+  if (!engine && !petalsActive) return;
   const reqId = signal.reqId;
   const publishTo = virtualId || peerId;
   if (isGenerating) {
@@ -2752,8 +2763,47 @@ async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
   }
   isGenerating = true;
   try {
-    const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
-    let text = res.choices[0]?.message?.content || "";
+    let text = "";
+    if (engine) {
+      const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
+      text = res.choices[0]?.message?.content || "";
+    } else if (petalsActive && petalsONNXSessions['embeds']) {
+      if (!petalsTokenizer) {
+        const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
+        petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
+      }
+      let promptText = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.\n";
+      for (const m of signal.messages) {
+          if (m.role === 'user') promptText += `User: ${m.content}\n`;
+          else if (m.role === 'assistant') promptText += `Assistant: ${m.content}\n`;
+      }
+      promptText += "Assistant:";
+      const encoded = await petalsTokenizer(promptText);
+      let allTokenIds = Array.from(encoded.input_ids.data);
+      let localTokenCount = 0;
+      
+      while (localTokenCount < 200) {
+        let currentComp = 'embeds';
+        let currentData = allTokenIds;
+        let currentSeqLen = allTokenIds.length;
+        let result = null;
+        while (currentComp) {
+          result = await petalsRunLayer(currentComp, currentData, currentSeqLen);
+          if (currentComp === 'head') break;
+          currentData = result.data;
+          currentSeqLen = result.seqLen;
+          currentComp = petalsGetNextComponent(currentComp);
+        }
+        if (!result || result.tokenId === undefined) break;
+        const { tokenId, tokenStr } = result;
+        if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) break;
+        text += tokenStr;
+        allTokenIds.push(tokenId);
+        localTokenCount++;
+        if (allTokenIds.length > 256) break;
+      }
+    }
+    
     if (virtualId) {
       const vnick = masqueradedPeers.get(virtualId).nickname;
       text += `\n\n> ✅ *Inferencia distribuida vía Colmena Chile (SmolLM2-1.7B shardeado): procesado por ${vnick}*`;
