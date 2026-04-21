@@ -2798,6 +2798,12 @@ function handlePeerPresence(p) {
     const peer = peers.get(p.peerId);
     Object.assign(peer, { deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || peer.modelSize, moeRole: p.moeRole || peer.moeRole, tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || peer.shardInfo, inferenceMode: p.inferenceMode || peer.inferenceMode, lastSeen: Date.now(), nickname: p.nickname || peer.nickname, repScore: p.repScore || peer.repScore });
   }
+
+  // Ensure petals knowledge is populated directly from Nostr presence
+  if (p.petalsLayers && p.petalsLayers.length > 0) {
+    petalsReadyPeers.set(p.peerId, { layers: p.petalsLayers });
+  }
+  
   updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
 }
 function removePeer(pid) {
