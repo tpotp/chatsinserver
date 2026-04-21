@@ -1176,37 +1176,59 @@ async function petalsActivate() {
     // Load ONNX sessions
     ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    if (isMobileUA) {
       if (ort.env.webgpu) ort.env.webgpu.powerPreference = 'low-power';
-      // Limitar a máximo 2 layers extra en mobile humilde
-      if (myComponents.length > 3) myComponents.length = 3;
     }
-    
-    const successfulLayers = [];
-    for (const comp of myComponents) {
+
+    // On mobile, limit how many layers we actually load to avoid OOM.
+    // Heuristic: 1 layer ~64MB. Leave 300MB headroom. Cap at 3 layers on mobile.
+    const ramBudgetMB = (navigator.deviceMemory || 2) * 1024;
+    const layerSizeMB = 64;
+    const maxLoadable = isMobileUA
+      ? Math.max(1, Math.min(3, Math.floor((ramBudgetMB * 0.5 - 300) / layerSizeMB)))
+      : myComponents.length;
+
+    const loadableComponents = myComponents.slice(0, maxLoadable);
+    const failedComponents = [];
+
+    for (const comp of loadableComponents) {
       const file = comp === 'head' ? 'lm_head.onnx' : `${comp}.onnx`;
       btn.textContent = `⏳ ${file}...`;
       document.getElementById('petals-status').textContent = file;
       try {
         petalsONNXSessions[comp] = await Promise.race([
           ort.InferenceSession.create(PETALS_CDN + file, { executionProviders: ['webgpu', 'wasm'] }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 45000))
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 60s')), 60000))
         ]);
-        successfulLayers.push(comp);
-      } catch(err) {
-        console.warn(`[Petals] Escapando shard fallido ${comp}:`, err.message);
+      } catch(loadErr) {
+        console.warn(`[Petals] Failed to load ${file}:`, loadErr.message);
+        failedComponents.push(comp);
+        // Remove from claimed layers so forward-pass routing skips it
+        const idx = petalsMyLayers.indexOf(comp);
+        if (idx !== -1) petalsMyLayers.splice(idx, 1);
       }
     }
-    petalsMyLayers = successfulLayers;
+
+    // Remove components beyond budget from petalsMyLayers
+    for (const comp of myComponents.slice(maxLoadable)) {
+      const idx = petalsMyLayers.indexOf(comp);
+      if (idx !== -1) petalsMyLayers.splice(idx, 1);
+    }
+
+    if (petalsMyLayers.length === 0) {
+      throw new Error(`No se pudo cargar ningún shard (RAM ~${ramBudgetMB}MB insuficiente o red lenta).`);
+    }
 
     petalsActive = true;
+    const failLabel = failedComponents.length > 0 ? ` (${failedComponents.length} fallidos)` : '';
     btn.textContent = '✅ Petals Active';
     btn.style.borderColor = 'rgba(0,184,148,0.5)';
     btn.style.color = 'var(--peer-online)';
     if(fab) { fab.classList.add('active'); fab.style.opacity = '1'; }
-    document.getElementById('petals-status').textContent = 'Online';
+    document.getElementById('petals-status').textContent = 'Online' + failLabel;
     document.getElementById('petals-status').style.color = 'var(--peer-online)';
-    document.getElementById('petals-my-layers').textContent = myComponents.length + ' loaded';
+    document.getElementById('petals-my-layers').textContent = petalsMyLayers.length + ' loaded' + failLabel;
 
     // Broadcast to peers
     for (const [pid, p] of peers) {
@@ -1319,15 +1341,41 @@ async function petalsForwardPass(tokenIds) {
       }
       const peer = peers.get(target);
       const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-      const res = await new Promise((resolve) => {
-        const timeoutMs = isMobile ? 12000 : 20000;
-        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, timeoutMs);
+      // On mobile, a 30s timeout per layer kills UX. Use 12s with one retry.
+      const isMobileCtx = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      const layerTimeoutMs = isMobileCtx ? 12000 : 25000;
+      let res = await new Promise((resolve) => {
+        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, layerTimeoutMs);
         fedPending.set(reqId, {
           resolve: (res) => { clearTimeout(timeout); resolve(res); },
           onChunk: () => {}
         });
         peer.dc.send(encodeMsg(MSG.PETALS_TENSOR, reqId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
       });
+      // One retry on timeout: try another peer that has this component
+      if (!res) {
+        const altTarget = (() => {
+          for (const [pid, info] of petalsReadyPeers) {
+            if (pid !== target && info.layers.includes(currentComp)) {
+              const ap = peers.get(pid);
+              if (ap?.dc?.readyState === 'open') return pid;
+            }
+          }
+          return null;
+        })();
+        if (altTarget) {
+          const altPeer = peers.get(altTarget);
+          const retryId = Math.floor(Math.random() * 0xFFFFFFFF);
+          res = await new Promise((resolve) => {
+            const t2 = setTimeout(() => { fedPending.delete(retryId); resolve(null); }, layerTimeoutMs);
+            fedPending.set(retryId, {
+              resolve: (r) => { clearTimeout(t2); resolve(r); },
+              onChunk: () => {}
+            });
+            altPeer.dc.send(encodeMsg(MSG.PETALS_TENSOR, retryId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
+          });
+        }
+      }
       if (!res) return null;
       if (res.bounced) {
          currentData = res.data;
@@ -1378,112 +1426,122 @@ async function runPetalsInference(userMessage) {
       }
       if (hasReachablePeer) break;
     }
-    }
     
-    // We have reachable peers! Try Web-Petals Tensor routing first
-    const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
-    const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
-    if (!petalsTokenizer) { 
-        const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
-        petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
-    }
-    const encoded = await petalsTokenizer(promptText);
-    let allTokenIds = Array.from(encoded.input_ids.data);
-
-    aiMsgEl.querySelector('.typing-indicator')?.remove();
-    const contentEl = aiMsgEl.querySelector('.msg-content');
-    let pill = document.createElement('div');
-    pill.className = 'fed-pill';
-    pill.textContent = '\uD83C\uDF38 Web-Petals Swarm \u00B7 ' + petalsMyLayers.length + ' local layers';
-    aiMsgEl.querySelector('.msg-body').appendChild(pill);
-    
-    let petalsSuccess = false;
-    try {
-      while (tokenCount < 200) {
-        const result = await petalsForwardPass(allTokenIds);
-        if (!result || result.tokenId === undefined) { 
-          if (fullResponse.length === 0) fullResponse = '[P2P timeout]';
-          break; 
-        }
-
-        const { tokenId, tokenStr } = result;
-        if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) {
-          petalsSuccess = true;
-          break;
-        }
-
-        fullResponse += tokenStr;
-        contentEl.textContent = fullResponse;
-        document.getElementById('messages').scrollTop = 99999;
-        tokenCount++;
-        allTokenIds.push(tokenId);
-        if (allTokenIds.length > 256) { petalsSuccess = true; break; }
+    if (!hasReachablePeer) {
+      // No WebRTC — fall back to Nostr relay MOE request
+      contentEl.textContent = '📡 WebRTC no disponible — usando Relay Nostr...';
+      
+      // Find any peer with an engine OR any known petals peer for Nostr fallback
+      let fallbackPeerId = null;
+      for (const [pid, p] of peers) {
+        if (p.hasEngine) { fallbackPeerId = pid; break; }
       }
-    } catch(e) { contentEl.textContent += '\n[P2P Error: ' + e.message + ']'; }
-    
-    if (petalsSuccess && fullResponse.length > 0) {
-      const ms = performance.now() - startTime;
-      localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
-      const metaEl = aiMsgEl.querySelector('.msg-meta');
-      if (metaEl) metaEl.textContent = 'Swarm-1.7B \u00B7 ' + petalsMyLayers.length + ' local layers \u00B7 ' + localTPS + ' tok/s \u00B7 ' + Math.round(ms) + 'ms';
-      chatHistory.push({ role: "assistant", content: fullResponse });
-      broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
-      isGenerating = false;
-      return;
-    }
-    
-    // If Web-Petals failed (e.g. timeout mid-generation), cascade to Nostr Fallback!
-    contentEl.textContent = '📡 Petals interrumpido — usando Relay Nostr Fallback...';
-    pill.remove();
-    let fallbackPeerId = null;
-    for (const [pid, p] of peers) {
-      if (p.hasEngine) { fallbackPeerId = pid; break; }
-    }
-    
-    if (fallbackPeerId) {
-      const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-      const resultPromise = new Promise((resolve) => {
-        const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 60000);
-        fedPending.set(reqId, {
-          resolve: (res) => { clearTimeout(timeout); resolve(res); },
-          onChunk: (token) => {
-            if (token) {
-              if (contentEl.textContent.includes('Petals interrumpido')) fullResponse = "";
-              fullResponse += token;
-              contentEl.textContent = fullResponse;
-              document.getElementById('messages').scrollTop = 99999;
+      // Also consider petals peers reachable via Nostr even without open WebRTC
+      if (!fallbackPeerId) {
+        for (const [pid] of petalsReadyPeers) { fallbackPeerId = pid; break; }
+      }
+      
+      if (fallbackPeerId) {
+        const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+        const resultPromise = new Promise((resolve) => {
+          const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 60000);
+          fedPending.set(reqId, {
+            resolve: (res) => { clearTimeout(timeout); resolve(res); },
+            onChunk: (token) => {
+              if (token) {
+                fullResponse += token;
+                contentEl.textContent = fullResponse;
+                document.getElementById('messages').scrollTop = 99999;
+              }
             }
-          }
+          });
         });
-      });
-      const messages = [{ role: "system", content: "You are a helpful AI assistant running in a decentralized peer-to-peer swarm." }, ...chatHistory.slice(-10)];
-      publishSignal(fallbackPeerId, { type: "moe_fallback_req", reqId, max_tokens: 512, intent: 'general', targetRole: 'general', messages });
-      
-      const result = await resultPromise;
-      if (result?.text) {
-        fullResponse = result.text;
-        contentEl.textContent = fullResponse;
-        tokenCount = fullResponse.split(/\s+/).length;
-      } else {
-        fullResponse = '[Sin respuesta del enjambre via Nostr]';
-        contentEl.textContent = fullResponse;
+        
+        const messages = [
+          { role: "system", content: "You are a helpful AI assistant running in a decentralized peer-to-peer swarm. Be concise and helpful." },
+          ...chatHistory.slice(-10)
+        ];
+        publishSignal(fallbackPeerId, { type: "moe_fallback_req", reqId, max_tokens: 512, intent: 'general', targetRole: 'general', messages });
+        
+        const result = await resultPromise;
+        if (result?.text) {
+          fullResponse = result.text;
+          contentEl.textContent = fullResponse;
+          tokenCount = fullResponse.split(/\s+/).length;
+        } else {
+          fullResponse = '[Sin respuesta del enjambre via Nostr]';
+          contentEl.textContent = fullResponse;
+        }
+        
+        const pill = document.createElement('div');
+        pill.className = 'fed-pill';
+        pill.textContent = '🌸 Web-Petals Swarm · Nostr Relay Fallback';
+        aiMsgEl.querySelector('.msg-body').appendChild(pill);
+        
+        const ms = performance.now() - startTime;
+        const metaEl = aiMsgEl.querySelector('.msg-meta');
+        if (metaEl) metaEl.textContent = 'Swarm-1.7B · Nostr fallback · ' + Math.round(ms) + 'ms';
+        chatHistory.push({ role: "assistant", content: fullResponse });
+        broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
+        isGenerating = false;
+        return;
       }
       
-      pill = document.createElement('div');
-      pill.className = 'fed-pill';
-      pill.textContent = '🌸 Web-Petals Swarm · Nostr Relay Fallback';
-      aiMsgEl.querySelector('.msg-body').appendChild(pill);
-      const ms = performance.now() - startTime;
-      const metaEl = aiMsgEl.querySelector('.msg-meta');
-      if (metaEl) metaEl.textContent = 'Swarm-1.7B · Nostr fallback · ' + Math.round(ms) + 'ms';
-      chatHistory.push({ role: "assistant", content: fullResponse });
-      broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
+      // No engine peers at all? Use cloud fallback
       isGenerating = false;
-      return;
+      return await runCloudFallback(userMessage);
     }
-    
-    isGenerating = false;
-    return await runCloudFallback(userMessage);
+  }
+
+  const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
+  const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
+  if (!petalsTokenizer) { 
+      const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
+      petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
+  }
+  const encoded = await petalsTokenizer(promptText);
+  let allTokenIds = Array.from(encoded.input_ids.data);
+
+  aiMsgEl.querySelector('.typing-indicator')?.remove();
+  const contentEl = aiMsgEl.querySelector('.msg-content');
+  const pill = document.createElement('div');
+  pill.className = 'fed-pill';
+  pill.textContent = '\uD83C\uDF38 Web-Petals Swarm \u00B7 ' + petalsMyLayers.length + ' local layers';
+  aiMsgEl.querySelector('.msg-body').appendChild(pill);
+
+  try {
+    while (tokenCount < 200) {
+      const result = await petalsForwardPass(allTokenIds);
+      if (!result || result.tokenId === undefined) { 
+        if (fullResponse.length === 0) fullResponse = '[P2P timeout]';
+        break; 
+      }
+
+      const { tokenId, tokenStr } = result;
+      // Check for end-of-text tokens
+      if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) break;
+
+      fullResponse += tokenStr;
+      contentEl.textContent = fullResponse;
+      document.getElementById('messages').scrollTop = 99999;
+      tokenCount++;
+
+      // Append new token and recompute full context next iteration
+      allTokenIds.push(tokenId);
+
+      // Safety: cap context at 256 tokens to keep mobile responsive
+      if (allTokenIds.length > 256) break;
+    }
+  } catch(e) { contentEl.textContent += '\n[P2P Error: ' + e.message + ']'; }
+
+  const ms = performance.now() - startTime;
+  localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
+  const metaEl = aiMsgEl.querySelector('.msg-meta');
+  if (metaEl) metaEl.textContent = 'Swarm-1.7B \u00B7 ' + petalsMyLayers.length + ' local layers \u00B7 ' + localTPS + ' tok/s \u00B7 ' + Math.round(ms) + 'ms';
+
+  chatHistory.push({ role: "assistant", content: fullResponse });
+  broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
+  isGenerating = false;
 }
 
 // Handle incoming Petals tensor from peer
@@ -1515,20 +1573,31 @@ async function handlePetalsTensor(fromId, m, dc = null) {
       let comp = nextComp;
       let chainData = result;
       while (true) {
+        // Run this component
+        chainData = await petalsRunLayer(comp, chainData.data, chainData.seqLen);
+        // If this was the head, chainData is a token — send it back
+        if (comp === 'head') {
+          sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
+          return;
+        }
         const nc = petalsGetNextComponent(comp);
-        if (!nc || !petalsONNXSessions[nc]) {
-          if (comp === 'head' || !nc) {
-            sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
-            return;
-          }
+        if (!nc) {
+          // Unexpected end of chain — send what we have
+          sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
+          return;
+        }
+        if (!petalsONNXSessions[nc]) {
+          // Next component not local — route to a peer
           const target = petalsFindPeerForComponent(nc);
           if (target) {
             const tp = peers.get(target);
             if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nc, data: chainData.data, seqLen: chainData.seqLen }));
+          } else {
+            // No peer has it — inform requester so it doesn't time out 30s
+            sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, { tokenId: 0, tokenStr: '[missing layer]' }));
           }
           return;
         }
-        chainData = await petalsRunLayer(nc, chainData.data, chainData.seqLen);
         comp = nc;
       }
     } else {
@@ -1870,9 +1939,21 @@ async function generateResponse(userMessage) {
   const classifyNote = intent.method === 'llm' ? ` [LLM ${intent.ms}ms]` : ' [keyword]';
 
   // If Web-Petals swarm is available, intercept ANY prompt to run natively through the Swarm!
+  // Only do this if we have something useful: local ONNX layers loaded OR at least one peer with open WebRTC.
   if (petalsReadyPeers.size > 0) {
-    showRouteBanner(`🌸 Intercepción Sharding: Derivando a Enjambre Petals (O(1))`);
-    return await runPetalsInference(userMessage);
+    const hasLocalONNX = petalsMyLayers.length > 0 && Object.keys(petalsONNXSessions).length > 0;
+    const hasOpenWebRTC = (() => {
+      for (const [pid] of petalsReadyPeers) {
+        const p = peers.get(pid);
+        if (p?.dc?.readyState === 'open') return true;
+      }
+      return false;
+    })();
+    if (hasLocalONNX || hasOpenWebRTC) {
+      showRouteBanner(`🌸 Intercepción Sharding: Derivando a Enjambre Petals (O(1))`);
+      return await runPetalsInference(userMessage);
+    }
+    // petalsReadyPeers known but no usable connection yet — skip to MOE/cloud
   }
 
   const expertCount = countExpertPeers() + (engine ? 1 : 0);
@@ -2754,6 +2835,7 @@ function handleNostrContent(c) {
 }
 
 async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
+  // Need either WebLLM engine OR petals ONNX sessions to respond
   if (!engine && !petalsActive) return;
   const reqId = signal.reqId;
   const publishTo = virtualId || peerId;
@@ -2765,50 +2847,33 @@ async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
   try {
     let text = "";
     if (engine) {
+      // WebLLM path (fast)
       const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
       text = res.choices[0]?.message?.content || "";
-    } else if (petalsActive && petalsONNXSessions['embeds']) {
-      if (!petalsTokenizer) {
-        const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
-        petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
-      }
-      let promptText = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.\n";
-      for (const m of signal.messages) {
-          if (m.role === 'user') promptText += `User: ${m.content}\n`;
-          else if (m.role === 'assistant') promptText += `Assistant: ${m.content}\n`;
-      }
-      promptText += "Assistant:";
+    } else if (petalsActive && petalsTokenizer) {
+      // Petals ONNX path — build prompt from messages and run forward pass
+      const sysMsg = signal.messages.find(m => m.role === 'system')?.content || "You are a helpful AI assistant.";
+      const userMsg = signal.messages.filter(m => m.role !== 'system').map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+      const promptText = sysMsg + "\n" + userMsg + "\nAssistant:";
       const encoded = await petalsTokenizer(promptText);
       let allTokenIds = Array.from(encoded.input_ids.data);
-      let localTokenCount = 0;
-      
-      while (localTokenCount < 200) {
-        let currentComp = 'embeds';
-        let currentData = allTokenIds;
-        let currentSeqLen = allTokenIds.length;
-        let result = null;
-        while (currentComp) {
-          result = await petalsRunLayer(currentComp, currentData, currentSeqLen);
-          if (currentComp === 'head') break;
-          currentData = result.data;
-          currentSeqLen = result.seqLen;
-          currentComp = petalsGetNextComponent(currentComp);
-        }
+      let generated = "";
+      const maxTok = Math.min(signal.max_tokens || 200, 200);
+      for (let i = 0; i < maxTok; i++) {
+        const result = await petalsForwardPass(allTokenIds);
         if (!result || result.tokenId === undefined) break;
-        const { tokenId, tokenStr } = result;
-        if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) break;
-        text += tokenStr;
-        allTokenIds.push(tokenId);
-        localTokenCount++;
+        if (result.tokenId === 0 || result.tokenStr?.includes('im_end') || result.tokenStr?.includes('endoftext')) break;
+        generated += result.tokenStr;
+        allTokenIds.push(result.tokenId);
         if (allTokenIds.length > 256) break;
       }
+      text = generated || "[sin respuesta del enjambre]";
     }
-    
     if (virtualId) {
-      const vnick = masqueradedPeers.get(virtualId).nickname;
-      text += `\n\n> ✅ *Inferencia distribuida vía Colmena Chile (SmolLM2-1.7B shardeado): procesado por ${vnick}*`;
+      const vnick = masqueradedPeers.get(virtualId)?.nickname || virtualId;
+      text += `\n\n> ✅ *Colmena Chile (SmolLM2-1.7B shardeado): ${vnick}*`;
     }
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: currentModelId, tps: localTPS }}, virtualId);
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: currentModelId || 'SmolLM2-1.7B', tps: localTPS }}, virtualId);
     reputation.addInference();
   } catch (e) {
     publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }}, virtualId);
@@ -2846,6 +2911,14 @@ function handlePeerPresence(p) {
   // Ensure petals knowledge is populated directly from Nostr presence
   if (p.petalsLayers && p.petalsLayers.length > 0) {
     petalsReadyPeers.set(p.peerId, { layers: p.petalsLayers });
+    // If we know this peer has petals layers but no open channel, try WebRTC now
+    const existingPeer = peers.get(p.peerId);
+    if (existingPeer && existingPeer.dc?.readyState !== 'open' && !existingPeer.conn) {
+      if (getActiveConnections() < CONFIG.maxPeers) {
+        initiateWebRTC(p.peerId);
+      }
+    }
+  }
   }
   
   updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
@@ -3880,6 +3953,13 @@ async function boot() {
     simLog(`➡️ Abre tu celular real y conéctate. La colmena responderá con SmolLM2-1.7B.`, 'sim-pass');
     simLog(`   El celular verá que el modelo fue procesado por la Colmena distribuida.`, 'sim-pass');
     publishPresence();
+    // Re-publish every 5s for the first minute so a mobile joining late sees the swarm immediately
+    let earlyBroadcasts = 0;
+    const earlyInterval = setInterval(() => {
+      publishPresence();
+      earlyBroadcasts++;
+      if (earlyBroadcasts >= 12) clearInterval(earlyInterval); // stop after 60s
+    }, 5000);
   }
 
   // Check for simulation mode via URL parameter
