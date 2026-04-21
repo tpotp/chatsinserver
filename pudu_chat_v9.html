@@ -698,7 +698,7 @@ function connectNostrRelay(url){
   function connect(){
     if(nostrSockets[url]&&nostrSockets[url].readyState<=1)return;
     const ws=new WebSocket(url);nostrSockets[url]=ws;
-    ws.onopen=()=>{dot.className='rdot ok';retryDelay=3000;const since=Math.floor(Date.now()/1000)-SIG_TTL*4;ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":[GLOBAL_TAG],since}]));};
+    ws.onopen=()=>{dot.className='rdot ok';retryDelay=3000;const since=Math.floor(Date.now()/1000)-SIG_TTL*4;ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":[GLOBAL_TAG],since}]));onRelayReady();};
     ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT")handleNostrEvent(msg[2]);else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
     ws.onerror=()=>{dot.className='rdot fail';};
     ws.onclose=()=>{dot.className='rdot fail';nostrSockets[url]=null;setTimeout(connect,retryDelay);retryDelay=Math.min(retryDelay*2,60000);};
@@ -976,7 +976,7 @@ window.enterChat=async function(){
   RELAY_URLS.forEach(url=>connectNostrRelay(url));
   if(relayReadyCalled&&!discoveryDone){document.getElementById('connecting-text').textContent='Buscando bosques...';clearTimeout(discoveryTimer);discoveryTimer=setTimeout(finishDiscoveryAndEnter,2500);}
   setInterval(()=>{if(myName&&currentRoomId){const room=rooms.get(currentRoomId);setTimeout(()=>signAndPublish({type:'hello',roomId:currentRoomId,roomName:(room&&room.roomName),from:pubKeyHex,name:myName,ts:Date.now()}),Math.random()*3000);}},HELLO_INTERVAL);
-  setTimeout(()=>{if(!chatEntered&&!discoveryDone)finishDiscoveryAndEnter();},8000);
+  setTimeout(()=>{if(!chatEntered&&!discoveryDone)finishDiscoveryAndEnter();},4000);
 };
 
 function enterChatScreen(){
@@ -3070,16 +3070,16 @@ const HiveBridge = (() => {
   function getBestWorker() {
     const now = Date.now();
     let best = null, bestScore = -1;
-    let anyWorker = null; // fallback: cualquier worker reciente aunque no tenga engine listo
+    let anyWorker = null;
     for (const [pid, w] of hiveWorkers) {
-      if (now - w.lastSeen > 90000) continue; // stale
-      anyWorker = w; // guardar cualquiera como plan B
+      if (now - w.lastSeen > 90000) continue;
+      anyWorker = w;
       if (!w.hasEngine) continue;
       const score = w.tps || 1;
       if (score > bestScore) { bestScore = score; best = w; }
     }
     if (!best && anyWorker) {
-      console.warn('[HiveBridge] No hay workers con engine listo, intentando con:', anyWorker.peerId?.slice(0,8));
+      console.warn('[HiveBridge] Sin workers con engine listo, intentando con:', anyWorker.peerId?.slice(0,8));
       return anyWorker;
     }
     return best;
