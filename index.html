@@ -1474,58 +1474,6 @@ async function runPetalsInference(userMessage) {
     isGenerating = false;
     return await runCloudFallback(userMessage);
 }
-  }
-
-  const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
-  const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
-  if (!petalsTokenizer) { 
-      const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
-      petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
-  }
-  const encoded = await petalsTokenizer(promptText);
-  let allTokenIds = Array.from(encoded.input_ids.data);
-
-  aiMsgEl.querySelector('.typing-indicator')?.remove();
-  const contentEl = aiMsgEl.querySelector('.msg-content');
-  const pill = document.createElement('div');
-  pill.className = 'fed-pill';
-  pill.textContent = '\uD83C\uDF38 Web-Petals Swarm \u00B7 ' + petalsMyLayers.length + ' local layers';
-  aiMsgEl.querySelector('.msg-body').appendChild(pill);
-
-  try {
-    while (tokenCount < 200) {
-      const result = await petalsForwardPass(allTokenIds);
-      if (!result || result.tokenId === undefined) { 
-        if (fullResponse.length === 0) fullResponse = '[P2P timeout]';
-        break; 
-      }
-
-      const { tokenId, tokenStr } = result;
-      // Check for end-of-text tokens
-      if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) break;
-
-      fullResponse += tokenStr;
-      contentEl.textContent = fullResponse;
-      document.getElementById('messages').scrollTop = 99999;
-      tokenCount++;
-
-      // Append new token and recompute full context next iteration
-      allTokenIds.push(tokenId);
-
-      // Safety: cap context at 256 tokens to keep mobile responsive
-      if (allTokenIds.length > 256) break;
-    }
-  } catch(e) { contentEl.textContent += '\n[P2P Error: ' + e.message + ']'; }
-
-  const ms = performance.now() - startTime;
-  localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
-  const metaEl = aiMsgEl.querySelector('.msg-meta');
-  if (metaEl) metaEl.textContent = 'Swarm-1.7B \u00B7 ' + petalsMyLayers.length + ' local layers \u00B7 ' + localTPS + ' tok/s \u00B7 ' + Math.round(ms) + 'ms';
-
-  chatHistory.push({ role: "assistant", content: fullResponse });
-  broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
-  isGenerating = false;
-}
 
 // Handle incoming Petals tensor from peer
 async function handlePetalsTensor(fromId, m, dc = null) {
