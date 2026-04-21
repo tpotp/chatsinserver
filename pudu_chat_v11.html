@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<title>11PudúChat — Bosque Mágico</title>
+<title>1111PudúChat — Bosque Mágico</title>
 
 <style>
 /* ── PUDÚ 3D OVERLAY ── */
@@ -549,6 +549,8 @@ canvas{position:fixed;inset:0;z-index:0}
         <span>🦌</span><span id="h-room-count">0</span>
       </div>
       <div class="h-logo">🌿</div>
+      <button id="btn-lite-mode" onclick="toggleLiteMode()" title="Desactivar animaciones 3D" style="font-family:'Fredoka One',cursive;font-size:11px;letter-spacing:1.5px;padding:5px 10px;border-radius:8px;border:1.5px solid rgba(0,229,255,0.4);background:rgba(0,229,255,0.08);color:rgba(0,229,255,0.8);cursor:pointer;transition:all .2s;backdrop-filter:blur(8px);white-space:nowrap;flex-shrink:0;">⚡ LITE</button>
+      <span id="device-tier-badge" style="font-family:'Fredoka One',cursive;font-size:10px;letter-spacing:1.5px;padding:3px 7px;border-radius:6px;border:1px solid rgba(177,107,255,0.3);background:rgba(177,107,255,0.08);color:rgba(177,107,255,0.7);flex-shrink:0;">TIER ?</span>
     </div>
     <div class="chat-messages" id="chat-messages">
       <div id="load-more-sentinel" class="hidden" onclick="loadOlderMessages()">↑ mensajes anteriores ↑</div>
@@ -1065,6 +1067,7 @@ function enterChatScreen(){
   addSystemMsgVS(currentRoomId,`🌿 Entraste al bosque como ${myName} 🦌`);
   addSystemMsgVS(currentRoomId,`🏡 Tu bosque: "${(rooms.get(currentRoomId)&&rooms.get(currentRoomId).roomName)}" — esperando más pudúes...`);
   addSystemMsgVS(currentRoomId,'⚡ Chat mesh P2P listo. En móvil: "Cambiar de Bosque" arriba izquierda 🌿');
+  setTimeout(()=>{const t=typeof DEVICE_TIER!=='undefined'?DEVICE_TIER:'?';const m=typeof DEVICE_MEM_MB!=='undefined'?DEVICE_MEM_MB+'MB RAM':'';const gpu=typeof DEVICE_HAS_WEBGPU!=='undefined'&&DEVICE_HAS_WEBGPU?'WebGPU ✓':'sin WebGPU';const role=t==='D'?'cliente colmena':(t==='C'?'cliente+':'nodo colmena');addSystemMsgVS(currentRoomId,'🦌 Dispositivo: Tier '+t+' · '+m+' · '+gpu+' · '+role+' 🌿');const badge=document.getElementById('device-tier-badge');if(badge)badge.textContent='TIER '+t;},2000);
   updateStatus();updateMeshIndicator();renderRoomSidebar();
   try{schedulePuduEntry();}catch(e){}
 }
@@ -1093,6 +1096,40 @@ try{
 
 const PUDU_GLB_URL='https://chatp2p-bice.vercel.app/objetos3d/pudu.glb';
 const DEVICE_PERF=(()=>{const c=navigator.hardwareConcurrency||4;const m=navigator.deviceMemory||4;return(c>=4&&m>=4)?'high':'low';})();
+
+// ── CLASIFICACIÓN DE TIER 5 NIVELES (igual que index.html) ────────────
+// S: GPU ≥16GB · A: WebGPU ≥5GB · B: WebGPU ≥1.5GB/RAM≥4GB
+// C: WebGPU básico/mobile bueno · D: sin WebGPU o gama baja → solo cliente
+let DEVICE_TIER = 'D';
+let DEVICE_HAS_WEBGPU = false;
+let DEVICE_MEM_MB = Math.round((navigator.deviceMemory || 2) * 1024);
+let DEVICE_IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+(async function classifyDeviceTier() {
+  if ('gpu' in navigator && navigator.gpu) {
+    try {
+      const adapter = await Promise.race([
+        navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+      ]);
+      if (adapter) {
+        DEVICE_HAS_WEBGPU = true;
+        const maxBuf = (adapter.limits || {}).maxBufferSize || 0;
+        const vram = maxBuf > 0 ? Math.floor(maxBuf / 1024 / 1024)
+                                : Math.floor(DEVICE_MEM_MB * 0.35);
+        if (vram >= 16000)                                              DEVICE_TIER = 'S';
+        else if (vram >= 5000)                                          DEVICE_TIER = 'A';
+        else if (vram >= 1500 || DEVICE_MEM_MB >= 4096)                DEVICE_TIER = 'B';
+        else                                                            DEVICE_TIER = 'C';
+        // Mobile con WebGPU pero RAM baja → degradar a D (solo cliente, no corre shards)
+        if (DEVICE_IS_MOBILE && DEVICE_MEM_MB < 3000 && vram < 2000)  DEVICE_TIER = 'D';
+      }
+    } catch(e) { console.log('[Tier] WebGPU error:', e.message); }
+  }
+  console.log(`[Tier] ${DEVICE_TIER} | WebGPU=${DEVICE_HAS_WEBGPU} | RAM=${DEVICE_MEM_MB}MB | Mobile=${DEVICE_IS_MOBILE}`);
+  const badge = document.getElementById('device-tier-badge');
+  if (badge) badge.textContent = `TIER ${DEVICE_TIER}`;
+})();
 const NEON_COLORS=[0x00e5ff,0xff00ff,0x00ff88,0xffff00,0xff6600,0x8800ff,0xff0088];
 let neonColorIdx=0;
 function nextNeon(){const c=NEON_COLORS[neonColorIdx%NEON_COLORS.length];neonColorIdx++;return c;}
@@ -2506,6 +2543,50 @@ function animate3(ts){
 }
 animate3();
 
+// ── MODO LITE — desactiva animaciones Three.js para dispositivos lentos ──
+let liteMode = false;
+// Auto-activar en Tier D o mobile detectado
+function initLiteMode() {
+  // Si ya sabemos que es mobile gama baja, activar automáticamente
+  if (typeof DEVICE_IS_MOBILE !== 'undefined' && DEVICE_IS_MOBILE &&
+      typeof DEVICE_MEM_MB !== 'undefined' && DEVICE_MEM_MB < 3000) {
+    activateLiteMode(true); // auto, sin toast
+  }
+}
+function activateLiteMode(silent) {
+  liteMode = true;
+  // Ocultar los 3 canvas Three.js
+  const tc = document.getElementById('three-canvas');
+  const msg3d = document.getElementById('msg3d');
+  const text3d = document.getElementById('text3d-canvas');
+  const bgOverlay = document.getElementById('bg-overlay');
+  if (tc)   { tc.style.display = 'none'; }
+  if (msg3d){ msg3d.style.display = 'none'; }
+  if (text3d){ text3d.style.display = 'none'; }
+  if (bgOverlay) bgOverlay.style.background = 'rgba(5,8,20,0.7)';
+  const btn = document.getElementById('btn-lite-mode');
+  if (btn) { btn.textContent = '🌿 3D'; btn.style.color = '#4ade80'; btn.style.borderColor = 'rgba(74,222,128,0.4)'; }
+  if (!silent) addSystemMsgVS(currentRoomId, '⚡ Modo Lite activado · animaciones 3D desactivadas 🌿');
+}
+function deactivateLiteMode() {
+  liteMode = false;
+  const tc = document.getElementById('three-canvas');
+  const msg3d = document.getElementById('msg3d');
+  const text3d = document.getElementById('text3d-canvas');
+  const bgOverlay = document.getElementById('bg-overlay');
+  if (tc)   { tc.style.display = ''; }
+  if (msg3d){ msg3d.style.display = ''; }
+  if (text3d){ text3d.style.display = ''; }
+  if (bgOverlay) bgOverlay.style.background = '';
+  const btn = document.getElementById('btn-lite-mode');
+  if (btn) { btn.textContent = '⚡ LITE'; btn.style.color = 'rgba(0,229,255,0.8)'; btn.style.borderColor = 'rgba(0,229,255,0.4)'; }
+  addSystemMsgVS(currentRoomId, '✨ Animaciones 3D reactivadas 🦌');
+}
+function toggleLiteMode() {
+  if (liteMode) deactivateLiteMode(); else activateLiteMode(false);
+}
+setTimeout(initLiteMode, 1500);
+
 // ── Inicialización diferida del fondo Three.js ────────────────
 // Se ejecuta en segundo plano, sin bloquear la interactividad del botón
 setTimeout(()=>{
@@ -3329,14 +3410,21 @@ async function initPuduBotModule() {
       console.log('[PuduBot] peerId listo:', peerId);
       // Publicar presencia para alimentar la colmena (igual que clientes de index.html)
       function hivePublishPresence() {
+        // Tier D (gama baja / sin WebGPU) = solo cliente, no corre shards
+        // Tier C+ con WebGPU = puede contribuir (hasEngine:true si tiene motor)
+        const canContribute = typeof DEVICE_TIER !== 'undefined'
+          && DEVICE_TIER !== 'D'
+          && typeof DEVICE_HAS_WEBGPU !== 'undefined'
+          && DEVICE_HAS_WEBGPU;
         hivePublish({
           type: 'presence',
           peerId: peerId,
-          hasEngine: false,
+          hasEngine: canContribute,
           tps: 0,
+          deviceTier: typeof DEVICE_TIER !== 'undefined' ? DEVICE_TIER : 'D',
           ts: Date.now()
         });
-        console.log('[PuduBot] Presencia publicada, peerId=' + peerId);
+        console.log('[PuduBot] Presencia publicada, peerId=' + peerId + ' tier=' + (typeof DEVICE_TIER !== 'undefined' ? DEVICE_TIER : '?') + ' canContribute=' + canContribute);
       }
       setTimeout(hivePublishPresence, 3000);
       setInterval(hivePublishPresence, 30000);
