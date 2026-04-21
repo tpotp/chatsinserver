@@ -1225,7 +1225,11 @@ async function petalsRunLayer(component, inputData, seqLen) {
     // layer_N with causal mask
     const hiddenTensor = new ort.Tensor('float32', new Float32Array(inputData), [1, seqLen, PETALS_HIDDEN_SIZE]);
     const mask = new Float32Array(seqLen * seqLen);
-    for (let i = 0; i < seqLen; i++) for (let j = 0; j <= i; j++) mask[i * seqLen + j] = 1.0;
+    for (let i = 0; i < seqLen; i++) {
+        for (let j = 0; j < seqLen; j++) {
+            mask[i * seqLen + j] = j <= i ? 0.0 : -10000.0;
+        }
+    }
     const maskTensor = new ort.Tensor('float32', mask, [1, 1, seqLen, seqLen]);
     const posTensor = new ort.Tensor('int64', BigInt64Array.from(Array.from({length: seqLen}, (_, i) => BigInt(i))), [1, seqLen]);
     const results = await session.run({ input_hidden: hiddenTensor, attention_mask: maskTensor, position_ids: posTensor });
@@ -1351,48 +1355,66 @@ async function runPetalsInference(userMessage) {
 }
 
 // Handle incoming Petals tensor from peer
-async function handlePetalsTensor(fromId, m) {
+async function handlePetalsTensor(fromId, m, dc = null) {
   const { component, data, seqLen } = m.payload;
   if (!petalsONNXSessions[component]) return;
 
-  const result = await petalsRunLayer(component, data, seqLen);
-  const nextComp = petalsGetNextComponent(component);
+  try {
+    const result = await petalsRunLayer(component, data, seqLen);
+    const nextComp = petalsGetNextComponent(component);
+    
+    // Helper to send back either to specific DC or to global peer
+    const sendResponse = (msg) => {
+        if (dc && dc.readyState === 'open') {
+            dc.send(msg);
+        } else {
+            const peer = peers.get(fromId);
+            if (peer?.dc?.readyState === 'open') peer.dc.send(msg);
+        }
+    };
 
-  if (component === 'head' || !nextComp) {
-    const peer = peers.get(fromId);
-    if (peer?.dc?.readyState === 'open') {
-      peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
+    if (component === 'head' || !nextComp) {
+      sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
+      return;
     }
-    return;
-  }
 
-  // Chain through local layers
-  if (petalsONNXSessions[nextComp]) {
-    let comp = nextComp;
-    let chainData = result;
-    while (true) {
-      const nc = petalsGetNextComponent(comp);
-      if (!nc || !petalsONNXSessions[nc]) {
-        if (comp === 'head' || !nc) {
-          const peer = peers.get(fromId);
-          if (peer?.dc?.readyState === 'open') peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
+    // Chain through local layers
+    if (petalsONNXSessions[nextComp]) {
+      let comp = nextComp;
+      let chainData = result;
+      while (true) {
+        const nc = petalsGetNextComponent(comp);
+        if (!nc || !petalsONNXSessions[nc]) {
+          if (comp === 'head' || !nc) {
+            sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
+            return;
+          }
+          const target = petalsFindPeerForComponent(nc);
+          if (target) {
+            const tp = peers.get(target);
+            if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nc, data: chainData.data, seqLen: chainData.seqLen }));
+          }
           return;
         }
-        const target = petalsFindPeerForComponent(nc);
-        if (target) {
-          const tp = peers.get(target);
-          if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nc, data: chainData.data, seqLen: chainData.seqLen }));
-        }
-        return;
+        chainData = await petalsRunLayer(nc, chainData.data, chainData.seqLen);
+        comp = nc;
       }
-      chainData = await petalsRunLayer(nc, chainData.data, chainData.seqLen);
-      comp = nc;
+    } else {
+      const target = petalsFindPeerForComponent(nextComp);
+      if (target) {
+        const tp = peers.get(target);
+        if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nextComp, data: result.data, seqLen: result.seqLen }));
+      }
     }
-  } else {
-    const target = petalsFindPeerForComponent(nextComp);
-    if (target) {
-      const tp = peers.get(target);
-      if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nextComp, data: result.data, seqLen: result.seqLen }));
+  } catch (err) {
+    console.error("[Petals] Tensor routing error:", err);
+    // Send dummy error token back to resolve pending states without timing out 15000ms
+    const errorToken = { tokenId: 0, tokenStr: `\n[ONNX Error: ${err.message}]` };
+    if (dc && dc.readyState === 'open') {
+      dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, errorToken));
+    } else {
+      const peer = peers.get(fromId);
+      if (peer?.dc?.readyState === 'open') peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, errorToken));
     }
   }
 }
@@ -2762,10 +2784,10 @@ function setupDC(dc, remoteId, myVirtualId = null) {
     dc.onclose = () => { const peer = peers.get(remoteId); if (peer?.conn?.connectionState !== 'failed') scheduleWebRTCReconnect(remoteId); };
     dc.onerror = () => scheduleWebRTCReconnect(remoteId);
   }
-  dc.onmessage = (e) => { handleBinMsg(remoteId, e.data, myVirtualId); };
+  dc.onmessage = (e) => { handleBinMsg(remoteId, e.data, myVirtualId, dc); };
 }
 
-async function handleBinMsg(fromId, buf, myVirtualId = null) {
+async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
   const m = decodeMsg(buf); 
 
   // Virtual Peer Inference Interception
@@ -2862,7 +2884,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null) {
       }
       break;
     case MSG.PETALS_TENSOR:
-      if (m.payload) handlePetalsTensor(fromId, m);
+      if (m.payload) handlePetalsTensor(fromId, m, dc);
       break;
     case MSG.TOK_RES:
     case MSG.TOK_END:
@@ -2956,7 +2978,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null) {
       if (m.payload && consensusPending.has(m.reqId)) { consensusPending.get(m.reqId).resolve(m.payload); }
       break;
     case MSG.PETALS_TENSOR:
-      if (m.payload && petalsActive) handlePetalsTensor(fromId, m);
+      if (m.payload && petalsActive) handlePetalsTensor(fromId, m, dc);
       break;
     case MSG.PETALS_READY:
       if (m.payload?.layers) {
