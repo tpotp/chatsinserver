@@ -400,6 +400,28 @@ canvas{position:fixed;inset:0;z-index:0}
   :root{--sidebar-w:280px;}
 }
 
+/* ── MOBILE: ocultar botones 3D para no tapar el input ── */
+@media(max-width:600px){
+  #pudu-mode-toggle{
+    /* En móvil, mover a la esquina superior derecha debajo del header */
+    bottom:auto;
+    top:calc(var(--header-h, 70px) + 4px);
+    right:8px;
+    gap:4px;
+  }
+  #pudu-mode-toggle > div:first-child{
+    display:none; /* ocultar el label "modo pudú 3D" en móvil */
+  }
+  #btn-mode-glb, #btn-mode-fallback, #btn-preview-now{
+    font-size:10px;padding:5px 8px;letter-spacing:0.5px;
+  }
+  #pudu-mode-label{ display:none; }
+  /* Cuando el teclado virtual está abierto (viewport muy reducido), ocultar todo */
+  @media(max-height:500px){
+    #pudu-mode-toggle{ display:none; }
+  }
+}
+
 /* ── MOBILE SIDEBAR TOGGLE ── */
 @media(max-width:600px){
   :root{--sidebar-w:240px}
@@ -3007,11 +3029,13 @@ const HiveBridge = (() => {
       hiveConnected = hiveWorkers.size > 0;
       workerCount = hiveWorkers.size;
       HiveCounter.setHiveWorkers(workerCount);
+      console.log(`[HiveBridge] Worker detectado: ${c.peerId?.slice(0,8)} hasEngine=${c.hasEngine} tps=${c.tps}`);
       return;
     }
 
     // Respuesta de inferencia dirigida a nosotros
     if (c.type === 'signal' && c.to === hivePubKey) {
+      console.log('[HiveBridge] Señal recibida para nosotros:', c.signal?.type);
       const sig = c.signal;
       if (sig?.type === 'moe_fallback_res') {
         const { reqId, payload } = sig;
@@ -3046,11 +3070,17 @@ const HiveBridge = (() => {
   function getBestWorker() {
     const now = Date.now();
     let best = null, bestScore = -1;
+    let anyWorker = null; // fallback: cualquier worker reciente aunque no tenga engine listo
     for (const [pid, w] of hiveWorkers) {
       if (now - w.lastSeen > 90000) continue; // stale
+      anyWorker = w; // guardar cualquiera como plan B
       if (!w.hasEngine) continue;
       const score = w.tps || 1;
       if (score > bestScore) { bestScore = score; best = w; }
+    }
+    if (!best && anyWorker) {
+      console.warn('[HiveBridge] No hay workers con engine listo, intentando con:', anyWorker.peerId?.slice(0,8));
+      return anyWorker;
     }
     return best;
   }
@@ -3066,6 +3096,7 @@ const HiveBridge = (() => {
     }
 
     const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+    console.log(`[HiveBridge] Enviando moe_fallback_req reqId=${reqId} a worker=${worker.peerId?.slice(0,8)} hivePubKey=${hivePubKey?.slice(0,8)}`);
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -3257,21 +3288,15 @@ REGLAS ABSOLUTAS:
         }
       }
 
-      // INTENTO 2: API Anthropic como fallback
+      // INTENTO 2: Mensaje informativo si la colmena no respondió
       if (!responseText) {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 200,
-            system: systemPrompt,
-            messages: [{ role: 'user', content: `${askerName} pregunta: ${question}` }]
-          })
-        });
-        const d = await r.json();
-        responseText = d.content?.[0]?.text || '...🦌...';
-        console.log('[PuduBot] Respondido por API fallback');
+        const workerCount = HiveBridge.getWorkerCount();
+        if (workerCount === 0) {
+          responseText = '🦌 *El bosque está dormido... abre chatsinserver.vercel.app en tu computador para despertar la colmena* 🌿';
+        } else {
+          responseText = `🦌 *La colmena tiene ${workerCount} nodo(s) pero el modelo no terminó de cargar. Espera unos minutos y vuelve a intentar* 🌿`;
+        }
+        console.log('[PuduBot] Usando respuesta de fallback local');
       }
 
       // Actualizar mensaje de "pensando"
