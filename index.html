@@ -1493,6 +1493,49 @@ async function runPetalsInference(userMessage) {
     }
   }
 
+  // If mobile has NO local ONNX layers, skip the tokenizer+forward-pass entirely.
+  // Instead, use Nostr fallback directly against any petals peer — the PC host
+  // will respond using its full ONNX stack.
+  if (petalsMyLayers.length === 0) {
+    aiMsgEl.querySelector('.typing-indicator')?.remove();
+    const contentEl = aiMsgEl.querySelector('.msg-content');
+    const pill = document.createElement('div');
+    pill.className = 'fed-pill';
+    pill.textContent = '🌸 Web-Petals Swarm · relay → colmena';
+    aiMsgEl.querySelector('.msg-body').appendChild(pill);
+    contentEl.textContent = '⏳ Enviando al enjambre via Nostr...';
+
+    let fallbackPeerId = null;
+    for (const [pid, p] of peers) {
+      if (p.hasEngine || petalsReadyPeers.has(pid)) { fallbackPeerId = pid; break; }
+    }
+    if (!fallbackPeerId) { isGenerating = false; return await runCloudFallback(userMessage); }
+
+    const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+    const messages = [
+      { role: "system", content: "You are a helpful AI assistant running in a decentralized peer-to-peer swarm. Be concise." },
+      ...chatHistory.slice(-10)
+    ];
+    const resultPromise = new Promise((resolve) => {
+      const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 60000);
+      fedPending.set(reqId, {
+        resolve: (res) => { clearTimeout(timeout); resolve(res); },
+        onChunk: (token) => { if (token) { contentEl.textContent += token; document.getElementById('messages').scrollTop = 99999; } }
+      });
+    });
+    publishSignal(fallbackPeerId, { type: "moe_fallback_req", reqId, max_tokens: 300, intent: 'general', targetRole: 'general', messages });
+    const result = await resultPromise;
+    const text = result?.text || '[Sin respuesta del enjambre]';
+    contentEl.textContent = text;
+    const ms = performance.now() - startTime;
+    const metaEl = aiMsgEl.querySelector('.msg-meta');
+    if (metaEl) metaEl.textContent = 'Swarm-1.7B · relay · ' + Math.round(ms) + 'ms';
+    chatHistory.push({ role: "assistant", content: text });
+    broadcastChat("assistant", text, peerId, "Swarm-1.7B");
+    isGenerating = false;
+    return;
+  }
+
   const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
   const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
   if (!petalsTokenizer) { 
@@ -2838,8 +2881,9 @@ async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
   // Need either WebLLM engine OR petals ONNX sessions to respond
   if (!engine && !petalsActive) return;
   const reqId = signal.reqId;
-  const publishTo = virtualId || peerId;
-  if (isGenerating) {
+  // Use a separate serving flag so our own isGenerating doesn't block incoming requests
+  // (e.g. the simulator loads shards while isGenerating=false but might be true mid-load)
+  if (isGenerating && !petalsActive) {
     publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Ocupado, reintenta (NostrFallback)." }}, virtualId);
     return;
   }
@@ -3018,7 +3062,7 @@ function setupDC(dc, remoteId, myVirtualId = null) {
   dc.onopen = () => {
     if (myVirtualId) {
       const vp = masqueradedPeers.get(myVirtualId);
-      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId: myVirtualId, deviceTier: vp.deviceTier, webgpu: vp.webgpu, tps: vp.tps, hasEngine: vp.hasEngine, shardInfo: vp.shardInfo, inferenceMode: vp.inferenceMode, modelSize: getCurrentModelSize(), moeRole: vp.moeRole, benchmark: vp.benchmark, nickname: vp.nickname, repScore: vp.repScore }));
+      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId: myVirtualId, deviceTier: vp.deviceTier, webgpu: vp.webgpu, tps: vp.tps, hasEngine: vp.hasEngine, shardInfo: vp.shardInfo, inferenceMode: vp.inferenceMode, modelSize: getCurrentModelSize(), moeRole: vp.moeRole, benchmark: vp.benchmark, nickname: vp.nickname, repScore: vp.repScore, petalsLayers: vp.petalsLayers || [] }));
       if (vp.petalsLayers?.length > 0) {
         setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: vp.petalsLayers })); }, 100);
       }
@@ -3121,6 +3165,10 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         peer.benchmark = m.payload.benchmark || 0;
         peer.nickname = m.payload.nickname || peer.nickname;
         peer.repScore = m.payload.repScore || 0;
+        // Register petals layers from HELLO (sent by virtual peers and real petals nodes)
+        if (m.payload.petalsLayers && m.payload.petalsLayers.length > 0) {
+          petalsReadyPeers.set(fromId, { layers: m.payload.petalsLayers });
+        }
         if (peer.hasEngine && peer.benchmark > 0) {
           const claimed = peer.deviceTier;
           if (claimed === 'S' && peer.benchmark < 5) { console.warn(`[PoC] ${fromId} claims Tier S but benchmark=${peer.benchmark} — suspicious`); peer.proofValid = false; }
