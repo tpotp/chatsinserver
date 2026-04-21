@@ -674,6 +674,52 @@ let myName=null,privKeyBytes=null,pubKeyHex="";
 let nostrMod=null,nostrSockets={},nostrDotEls={};
 let nostrSeen=new Set(),chatEntered=false,pickerMsgId=null;
 
+let pendingPudubotReqs = new Map();
+let colmenaPeerId = null;
+
+function sendPudubotRequest(prompt) {
+   if (!nostrMod) return;
+   if (!colmenaPeerId) {
+      addSystemMsgVS(currentRoomId, `❌ Colmena AI no encontrada en la red. Asegúrate de ejecutar ?simulate=10 en el host.`);
+      return;
+   }
+   
+   const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+   const msgId = uid();
+   pendingPudubotReqs.set(reqId, { prompt, msgId });
+   
+   const reqContent = {
+       type: "signal",
+       from: pubKeyHex,
+       to: colmenaPeerId,
+       signal: {
+           type: "moe_fallback_req",
+           reqId: reqId,
+           max_tokens: 400,
+           intent: 'general',
+           targetRole: 'master_reasoner',
+           messages: [{role: 'user', content: prompt}]
+       },
+       timestamp: Date.now()
+   };
+
+   const template = { kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", "p2p-hive-public"]], content: JSON.stringify(reqContent) };
+   let event;
+   try { event = nostrMod.finalizeEvent(template, privKeyBytes); } catch (e) { return null; }
+   nostrSeen.add(event.id);
+   const raw = JSON.stringify(["EVENT", event]);
+   let relaysUsed = 0;
+   for (const ws of Object.values(nostrSockets)) {
+       if ((ws && ws.readyState) === 1) { ws.send(raw); relaysUsed++; }
+   }
+   
+   if(relaysUsed > 0) {
+      addSystemMsgVS(currentRoomId, `🧠 @pudubot está procesando con la Colmena distribuida...`);
+   } else {
+      addSystemMsgVS(currentRoomId, `❌ Colmena inalcanzable (Relays offline)`);
+   }
+}
+
 const IDENTITY_KEY='pudu-identity-v1';
 async function generateKeypair(){
   nostrMod=await (_nostrPreload||import("https://esm.sh/nostr-tools@2/pure"));
@@ -698,7 +744,7 @@ function connectNostrRelay(url){
   function connect(){
     if(nostrSockets[url]&&nostrSockets[url].readyState<=1)return;
     const ws=new WebSocket(url);nostrSockets[url]=ws;
-    ws.onopen=()=>{dot.className='rdot ok';retryDelay=3000;const since=Math.floor(Date.now()/1000)-SIG_TTL*4;ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":[GLOBAL_TAG],since}]));onRelayReady();};
+    ws.onopen=()=>{dot.className='rdot ok';retryDelay=3000;const since=Math.floor(Date.now()/1000)-SIG_TTL*4;ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":[GLOBAL_TAG,"p2p-hive-public"],since}]));onRelayReady();};
     ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT")handleNostrEvent(msg[2]);else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
     ws.onerror=()=>{dot.className='rdot fail';};
     ws.onclose=()=>{dot.className='rdot fail';nostrSockets[url]=null;setTimeout(connect,retryDelay);retryDelay=Math.min(retryDelay*2,60000);};
@@ -719,6 +765,31 @@ function handleNostrEvent(ev){
   let data;try{data=JSON.parse(ev.content);}catch(e){return;}
   if(ev.pubkey===pubKeyHex)return;
   const fromPub=ev.pubkey,msgRoomId=data.roomId;
+  
+  if (data.type === "presence" && data.payload && (data.payload.hasEngine || data.payload.petalsLayers)) {
+      colmenaPeerId = data.from;
+  }
+  
+  if (data.type === "signal" && data.to === pubKeyHex && data.signal && data.signal.type === "moe_fallback_res") {
+      const res = data.signal;
+      if (pendingPudubotReqs.has(res.reqId)) {
+         const { msgId } = pendingPudubotReqs.get(res.reqId);
+         pendingPudubotReqs.delete(res.reqId);
+         const text = res.text || '[Sin respuesta validada]';
+         
+         const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:data.from,ts:Date.now(),hops:0,payload:{text:text,name:`@pudubot`}};
+         const room = rooms.get(currentRoomId);
+         if(room) {
+           room.seenMsgIds.add(msgId);
+           broadcastP2P(currentRoomId,msg);
+           addMsgToVS(currentRoomId,msgId,msg.payload.name,text,false,msg.ts);
+         }
+         try{add3DText(text,false);}catch(e){}
+         try{playMsgReceive();}catch(e){}
+      }
+      return;
+  }
+
   switch(data.type){
     case 'hello':{
       if(!msgRoomId)break;
@@ -934,12 +1005,20 @@ function addReact(msgId,emoji){
 window.sendMessage=function(){
   const inp=document.getElementById('chat-input');let txt=inp.value.trim();if(!txt)return;
   txt=filtrarGarabatos(txt);const msgId=uid(),room=rooms.get(currentRoomId);if(!room)return;
+  
+  const isPudubot = txt.toLowerCase().startsWith('@pudubot ');
+
   const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:pubKeyHex,ts:Date.now(),hops:0,payload:{text:txt,name:myName}};
   room.seenMsgIds.add(msgId);const sent=broadcastP2P(currentRoomId,msg);
   addMsgToVS(currentRoomId,msgId,myName,txt,true,Date.now());
   try{add3DText(txt,true);spawnStars(innerWidth-80,innerHeight-80);spawnRipple(innerWidth-80,innerHeight-80);playSendSound();}catch(e){}
   if(sent===0)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
   inp.value='';inp.style.height='auto';
+
+  if (isPudubot) {
+      const prompt = txt.trim().substring(9).trim();
+      sendPudubotRequest(prompt);
+  }
 };
 
 let myTypingTO=null,myTypingSent=false;
