@@ -5105,7 +5105,18 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
   isGenerating = true;
   try {
     let text = "";
-    if (engine && !STRICT_PUDU_HIVE) {
+    const collectiveSim = STRICT_PUDU_HIVE && hiveSimulation.active && inferenceMode === 'collective-sim' && !!engine;
+    if (collectiveSim) {
+      const stageState = getPuduStageState();
+      const maxTokens = Math.max(signal.max_tokens || 0, stageState.activeStage?.maxTokens || 48);
+      const res = await engine.chat.completions.create({
+        messages: signal.messages,
+        stream: false,
+        temperature: 0.4,
+        max_tokens: maxTokens
+      });
+      text = normalizePuduCollectiveText(res.choices[0]?.message?.content || "", true);
+    } else if (engine && !STRICT_PUDU_HIVE) {
       // WebLLM path (fast)
       const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
       text = res.choices[0]?.message?.content || "";
@@ -5113,12 +5124,13 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
       const result = await generatePetalsTextFromMessages(signal.messages, { maxTokens: signal.max_tokens || 200 });
       text = result.text;
     }
+    if (!text.trim()) throw new Error('La colmena no genero texto en el uplink relay.');
     if (virtualId) {
       const vnick = masqueradedPeers.get(virtualId)?.nickname || virtualId;
       const stage = getPuduStageState().activeStage;
       text += `\n\n> ✅ *${stage?.label || 'Colmena Pudu'}: ${vnick}*`;
     }
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: getPuduStageState().activeStage?.modelLabel || currentModelId || 'SmolLM2-1.7B', tps: localTPS }}, virtualId);
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: collectiveSim ? currentModelLabel : (getPuduStageState().activeStage?.modelLabel || currentModelId || 'SmolLM2-1.7B'), tps: localTPS }}, virtualId);
     reputation.addInference();
   } catch (e) {
     publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }}, virtualId);
