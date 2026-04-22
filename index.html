@@ -3497,7 +3497,16 @@ async function runPetalsInference(userMessage) {
     const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
     const messages = injectPuduSystemPrompt(chatHistory.slice(-10));
     const uplinkPeer = peers.get(uplinkPeerId);
+    const uplinkPayload = {
+      messages,
+      max_tokens: stage.maxTokens,
+      petalsHive: true,
+      intent: 'pudu_hive',
+      targetRole: 'pudu_hive',
+    };
+    const uplinkPayloadSize = JSON.stringify(uplinkPayload).length;
     const canUseDirectGuardian = uplinkPeer?.dc?.readyState === 'open';
+    const preferRelayUplink = STRICT_PUDU_HIVE || isMobile || uplinkPayloadSize > 4096;
     const resultPromise = new Promise((resolve) => {
       const timeout = setTimeout(() => {
         fedPending.delete(reqId);
@@ -3519,34 +3528,22 @@ async function runPetalsInference(userMessage) {
         }
       });
     });
-    if (canUseDirectGuardian) {
+    if (canUseDirectGuardian && !preferRelayUplink) {
       try {
-        uplinkPeer.dc.send(encodeMsg(MSG.TOK_REQ, reqId, 0, {
-          messages,
-          max_tokens: stage.maxTokens,
-          petalsHive: true,
-          intent: 'pudu_hive',
-          targetRole: 'pudu_hive',
-        }));
+        uplinkPeer.dc.send(encodeMsg(MSG.TOK_REQ, reqId, 0, uplinkPayload));
       } catch (err) {
         console.warn('[Pudu uplink] direct guardian send failed, retrying over Nostr:', err.message);
         publishSignal(uplinkPeerId, {
           type: "moe_fallback_req",
           reqId,
-          max_tokens: stage.maxTokens,
-          intent: 'pudu_hive',
-          targetRole: 'pudu_hive',
-          messages
+          ...uplinkPayload
         });
       }
     } else {
       publishSignal(uplinkPeerId, {
         type: "moe_fallback_req",
         reqId,
-        max_tokens: stage.maxTokens,
-        intent: 'pudu_hive',
-        targetRole: 'pudu_hive',
-        messages
+        ...uplinkPayload
       });
     }
     const result = await resultPromise;
@@ -3555,7 +3552,7 @@ async function runPetalsInference(userMessage) {
     tokenCount = text.trim().split(/\s+/).filter(Boolean).length;
     const ms = performance.now() - startTime;
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `${result?.model || stage.modelLabel} · ${canUseDirectGuardian ? 'uplink directo' : 'uplink relay'}${result?.partial ? ' · parcial' : ''} · ${Math.round(ms)}ms`;
+    if (metaEl) metaEl.textContent = `${result?.model || stage.modelLabel} · ${(canUseDirectGuardian && !preferRelayUplink) ? 'uplink directo' : 'uplink relay'}${result?.partial ? ' · parcial' : ''} · ${Math.round(ms)}ms`;
     chatHistory.push({ role: "assistant", content: text });
     broadcastChat("assistant", text, peerId, stage.modelLabel);
     isGenerating = false;
