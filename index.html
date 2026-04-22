@@ -1261,7 +1261,7 @@ const CONFIG = {
     "wss://nostr.oxtr.dev","wss://purplepag.es","wss://relay.nostr.wirednet.jp",
     "wss://relay.nostr.com.au","wss://relay.nostr.band","wss://nostr.cercatrova.me",
     "wss://nostr.fmt.wiz.biz","wss://relay.snort.social","wss://relay.nostr.bg",
-    "wss://nostr.zebedee.cloud","wss://relay.current.fyi","wss://eden.nostr.land",
+    "wss://nostr.zebedee.cloud","wss://eden.nostr.land",
     "wss://relay.noswhere.com","wss://nostr.einundzwanzig.space",
     "wss://nostr.mutinywallet.com","wss://nostr.developer.li"
   ],
@@ -3442,6 +3442,7 @@ async function runPetalsInference(userMessage) {
 
   const hasLocalLayers = petalsMyLayers.length > 0;
   let hasReachablePeer = false;
+  let uplinkCandidateId = null;
   for (const [pid] of petalsReadyPeers) {
     const p = peers.get(pid);
     if (p?.dc?.readyState === 'open') { hasReachablePeer = true; break; }
@@ -3467,7 +3468,6 @@ async function runPetalsInference(userMessage) {
     }
   }
 
-  let uplinkCandidateId = null;
   if (!hasLocalLayers && !hasReachablePeer) {
     uplinkCandidateId = pickPetalsFallbackPeer();
     if (!uplinkCandidateId) {
