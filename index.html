@@ -3112,13 +3112,18 @@ async function runPetalsInference(userMessage) {
     if (p?.dc?.readyState === 'open') { hasReachablePeer = true; break; }
   }
 
+  let uplinkCandidateId = null;
   if (!hasLocalLayers && !hasReachablePeer) {
-    contentEl.textContent = '⟳ Buscando una ruta viva hacia el pudu...';
+    uplinkCandidateId = pickPetalsFallbackPeer();
+    const mobileRelayFirst = isMobile && !!uplinkCandidateId;
+    contentEl.textContent = mobileRelayFirst
+      ? '⏳ El pudu encontro guardian por relay y sigue abriendo el puente directo...'
+      : '⟳ Buscando una ruta viva hacia el pudu...';
     for (const [pid] of petalsReadyPeers) {
       const p = peers.get(pid);
       if (p && (!p.conn || p.conn.connectionState !== 'connected')) initiateWebRTC(pid);
     }
-    for (let wait = 0; wait < 24; wait++) {
+    for (let wait = 0; wait < (mobileRelayFirst ? 4 : 24); wait++) {
       await new Promise(r => setTimeout(r, 500));
       for (const [pid] of petalsReadyPeers) {
         const p = peers.get(pid);
@@ -3128,7 +3133,6 @@ async function runPetalsInference(userMessage) {
     }
   }
 
-  let uplinkCandidateId = null;
   if (!hasLocalLayers && !hasReachablePeer) {
     uplinkCandidateId = pickPetalsFallbackPeer();
     if (!uplinkCandidateId) {
