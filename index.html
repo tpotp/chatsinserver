@@ -5102,8 +5102,21 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
   isGenerating = true;
   try {
     let text = "";
+    if (STRICT_PUDU_HIVE && hiveSimulation.active && !engine) {
+      try { await ensureSimulationCollectiveEngine(getPuduStageState()); } catch (err) { console.warn('[Pudu relay] collective engine preload failed:', err.message); }
+    }
     const collectiveSim = STRICT_PUDU_HIVE && hiveSimulation.active && inferenceMode === 'collective-sim' && !!engine;
     if (collectiveSim) {
+      if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
+        console.log('[Pudu relay][collectiveSim] req', {
+          reqId,
+          model: currentModelLabel,
+          roles: Array.isArray(signal.messages) ? signal.messages.map(msg => msg?.role) : [],
+          lastUser: Array.isArray(signal.messages)
+            ? [...signal.messages].reverse().find(msg => msg?.role === 'user')?.content?.slice(0, 160)
+            : null,
+        });
+      }
       const stageState = getPuduStageState();
       const maxTokens = Math.max(signal.max_tokens || 0, stageState.activeStage?.maxTokens || 48);
       const chunks = await engine.chat.completions.create({
@@ -5118,6 +5131,13 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
         if (!token) continue;
         text += token;
         tokenCount++;
+      }
+      if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
+        console.log('[Pudu relay][collectiveSim] done', {
+          reqId,
+          tokenCount,
+          sample: text.slice(0, 160),
+        });
       }
       text = normalizePuduCollectiveText(text, true);
       if (tokenCount > 0) localTPS = Math.max(localTPS || 0, tokenCount);
