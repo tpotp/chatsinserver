@@ -3128,12 +3128,17 @@ async function runPetalsInference(userMessage) {
     }
   }
 
+  let uplinkCandidateId = null;
   if (!hasLocalLayers && !hasReachablePeer) {
-    contentEl.textContent = 'La colmena existe, pero este nodo aun no encuentra un guardian reachable para enrutar tu pregunta.';
-    const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = 'Pudu uplink pendiente';
-    isGenerating = false;
-    return;
+    uplinkCandidateId = pickPetalsFallbackPeer();
+    if (!uplinkCandidateId) {
+      contentEl.textContent = 'La colmena existe, pero este nodo aun no encuentra un guardian reachable para enrutar tu pregunta.';
+      const metaEl = aiMsgEl.querySelector('.msg-meta');
+      if (metaEl) metaEl.textContent = 'Pudu uplink pendiente';
+      isGenerating = false;
+      return;
+    }
+    contentEl.textContent = '⏳ El pudu sigue ahi: subiendo la pregunta por relay mientras abre el puente directo...';
   }
 
   if (petalsMyLayers.length === 0) {
@@ -3143,7 +3148,7 @@ async function runPetalsInference(userMessage) {
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
     contentEl.textContent = '⏳ El pudu escucha desde otro nodo de la colmena...';
 
-    const uplinkPeerId = pickPetalsFallbackPeer();
+    const uplinkPeerId = uplinkCandidateId || pickPetalsFallbackPeer();
     if (!uplinkPeerId) {
       contentEl.textContent = 'No hay un nodo guardian disponible para recibir la pregunta.';
       isGenerating = false;
