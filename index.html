@@ -2547,7 +2547,10 @@ function getPuduStageState() {
     ? Math.min(100, Math.round((coveragePct * 0.6) + (capabilityPct * 0.4)))
     : Math.min(capabilityPct, coveragePct || capabilityPct);
   const collectiveReady = reportedCollective.ready || hasCollectivePetalsAvailability();
-  const ready = !!activeStageView && collectiveReady && coverageCount >= PETALS_COMPONENTS.length;
+  const collectiveBrainReady = !hiveSimulation.active
+    || (!!engine && currentModelLabel && currentModelLabel !== 'none')
+    || (!!reportedCollective.ready && !!reportedCollective.modelLabel && reportedCollective.modelLabel !== 'none');
+  const ready = !!activeStageView && collectiveReady && coverageCount >= PETALS_COMPONENTS.length && collectiveBrainReady;
   const missingPeers = Math.max(0, firstStage.minPeers - peerCount);
   const missingShards = Math.max(0, PETALS_COMPONENTS.length - coverageCount);
   const missingCollectiveTPS = Math.max(0, (nextStage || firstStage).minCollectiveTPS - metrics.collectiveTPS);
@@ -2560,7 +2563,9 @@ function getPuduStageState() {
       progressText = `La colmena ya tiene quorum parcial, pero faltan ${missingShards} shards y mas nucleo critico para encender el cerebro.`;
     }
   } else if (!ready) {
-    progressText = missingShards > 0
+    progressText = !collectiveBrainReady
+      ? `La colmena ya esta completa, pero el cerebro comunitario aun se esta cargando en el guardian anfitrion...`
+      : missingShards > 0
       ? `El ${activeStageView.label} ya sostiene ${metrics.collectiveTPS} tok/s. Faltan ${missingShards} shards para completar el cerebro.`
       : `La colmena esta sincronizando sus ultimos shards...`;
   } else if (nextStage) {
