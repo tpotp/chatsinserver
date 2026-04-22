@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Open the public Pudu swarm host with Chilean phone simulation ready for a real mobile to join.",
     )
-    parser.add_argument("--simulate", type=int, default=DEFAULT_SIMULATED_PHONES, help="Number of simulated Chilean phones (2-12).")
+    parser.add_argument("--simulate", type=int, default=DEFAULT_SIMULATED_PHONES, help="Number of simulated Chilean phones (2-1000).")
     parser.add_argument("--room", type=str, default="", help="Room name to reuse. If omitted, a fresh room is generated.")
     parser.add_argument("--browser", type=str, default="", help="Optional full path to Chrome or Edge.")
     parser.add_argument("--base-url", type=str, default=BASE_URL, help="Public site URL.")
@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    simulated_phones = min(12, max(2, int(args.simulate)))
+    simulated_phones = min(1000, max(2, int(args.simulate)))
     room = args.room.strip() or build_room_name()
     host_url, phone_url = build_urls(args.base_url, room, simulated_phones)
     assist_url = f"{args.base_url}?{urllib.parse.urlencode({'room': room, 'assistOnly': 1})}"
@@ -115,6 +115,7 @@ def main() -> int:
     print("2. Abre la URL 'Celular' desde tu Redmi 10C en Entel 4G o 5G.")
     print("3. Entra a la misma sala y hablale al Pudu.")
     print("4. Si pruebas desde otro navegador del PC, usa 'Cliente liviano' para enrutar sin shards locales.")
+    print("5. Para stress real, prueba --simulate 50, 100, 300, 500 o 1000.")
     print()
 
     if not args.no_open:

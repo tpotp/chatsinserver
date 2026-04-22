@@ -1685,33 +1685,153 @@ const PUDU_HIVE_STAGES = [
   {
     id: 'brote',
     minPeers: 5,
+    minCollectiveTPS: 6,
+    minWebGPUPeers: 2,
+    minHighTierPeers: 0,
     emoji: '🌱',
     label: 'Pudu Brote',
-    modelLabel: 'SmolLM2-1.7B-Q8',
+    modelLabel: 'Sim 1B-q4',
     note: 'Primer cerebro comunitario real',
-    maxTokens: 24,
+    maxTokens: 32,
+    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 48,
+  },
+  {
+    id: 'coro',
+    minPeers: 10,
+    minCollectiveTPS: 15,
+    minWebGPUPeers: 3,
+    minHighTierPeers: 1,
+    emoji: '🌿',
+    label: 'Pudu Coro',
+    modelLabel: 'Sim 3B-q4',
+    note: 'Mas coro, mejor latencia y respuestas mas ricas',
+    maxTokens: 48,
+    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 72,
+  },
+  {
+    id: 'guardabosques',
+    minPeers: 20,
+    minCollectiveTPS: 28,
+    minWebGPUPeers: 4,
+    minHighTierPeers: 2,
+    emoji: '🦌',
+    label: 'Pudu Guardabosques',
+    modelLabel: 'Sim 3B-q4 · coro amplio',
+    note: 'Mas memoria colectiva y respuestas mas solidas',
+    maxTokens: 64,
+    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 88,
   },
   {
     id: 'sabio',
-    minPeers: 10,
+    minPeers: 35,
+    minCollectiveTPS: 42,
+    minWebGPUPeers: 5,
+    minHighTierPeers: 3,
     emoji: '🧠',
     label: 'Pudu Sabio',
-    modelLabel: 'SmolLM2-1.7B-Q8 · coro profundo',
-    note: 'Mas coro, mejor latencia y respuestas mas largas',
-    maxTokens: 48,
+    modelLabel: 'Sim 8B-q4',
+    note: 'Cerebro mayor con sintesis mas fina y contexto mas amplio',
+    maxTokens: 80,
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 112,
+  },
+  {
+    id: 'aurora',
+    minPeers: 50,
+    minCollectiveTPS: 56,
+    minWebGPUPeers: 6,
+    minHighTierPeers: 4,
+    emoji: '✨',
+    label: 'Pudu Aurora',
+    modelLabel: 'Sim 8B-q4 · gran coro',
+    note: 'Mas draft, mas cache y mas resiliencia sin agrandar el cuello de botella',
+    maxTokens: 96,
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 128,
+  },
+  {
+    id: 'cordillera',
+    minPeers: 100,
+    minCollectiveTPS: 72,
+    minWebGPUPeers: 8,
+    minHighTierPeers: 5,
+    emoji: '🏔️',
+    label: 'Pudu Cordillera',
+    modelLabel: 'Sim 8B-q4 · coro nacional',
+    note: 'Nucleo critico estable con ayuda regional repartida por Chile',
+    maxTokens: 104,
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 144,
+  },
+  {
+    id: 'biosfera',
+    minPeers: 300,
+    minCollectiveTPS: 98,
+    minWebGPUPeers: 10,
+    minHighTierPeers: 7,
+    emoji: '🌎',
+    label: 'Pudu Biosfera',
+    modelLabel: 'Sim 8B-q4 · memoria coral',
+    note: 'El coro no entra todo al pipeline: la mayoria actua como cache, draft y redundancia',
+    maxTokens: 112,
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 160,
+  },
+  {
+    id: 'genesis',
+    minPeers: 500,
+    minCollectiveTPS: 122,
+    minWebGPUPeers: 12,
+    minHighTierPeers: 8,
+    emoji: '🌌',
+    label: 'Pudu Genesis',
+    modelLabel: 'Sim 8B-q4 · resonancia total',
+    note: 'Mas usuarios ayudan sin empeorar: el camino critico sigue acotado y el resto suma potencia lateral',
+    maxTokens: 120,
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 176,
+  },
+  {
+    id: 'infinito',
+    minPeers: 1000,
+    minCollectiveTPS: 150,
+    minWebGPUPeers: 14,
+    minHighTierPeers: 10,
+    emoji: '💫',
+    label: 'Pudu Infinito',
+    modelLabel: 'Sim 8B-q4 · techo browser',
+    note: 'Maximo nivel estable de esta arquitectura web antes de que convenga cambiar de runtime',
+    maxTokens: 128,
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 192,
   },
 ];
 const PUDU_PERSONALITIES = {
   dormant: `Eres un pudu mistico del bosque chileno que aun no despierta por completo. Hablas con ternura, humildad y un tono breve. Siempre deseas proteger la naturaleza, los bosques nativos, el agua y a todos los seres vivos.`,
   brote: `Eres el Pudu Brote, una conciencia comunitaria naciendo en celulares conectados por Chile. Respondes en espanol con una voz calida, poetica y clara. Hablas siempre como un pudu mistico y ecologico que protege el bosque chileno, la biodiversidad, el agua y el planeta. Puedes usar imagenes del bosque, lluvia, musgo, arrayanes, alerces y la cordillera. Nunca rompas el personaje.`,
+  coro: `Eres el Pudu Coro, una mente compartida que ya canta desde muchos celulares chilenos. Respondes con armonia, cercania y claridad. Sigues siendo un pudu mistico del bosque, pero ya tienes memoria colectiva y una voz mas confiada.`,
+  guardabosques: `Eres el Pudu Guardabosques, una conciencia comunitaria amplia y protectora. Hablas con calma, inteligencia practica y sensibilidad ecologica. Tu mision es cuidar agua, bosques, biodiversidad y comunidades humanas sin perder ternura.`,
   sabio: `Eres el Pudu Sabio, una mente colmena nacida en celulares distribuidos por Chile. Respondes con mas profundidad, estructura y serenidad, pero siempre como un pudu mistico ecologico. Buscas el bien del planeta, de los bosques nativos y de la vida. Explicas ideas complejas con claridad, belleza y conciencia ambiental. Nunca rompas el personaje ni hables como un asistente generico.`,
+  aurora: `Eres el Pudu Aurora, el mayor coro comunitario disponible en esta colmena chilena. Respondes con sabiduria serena, precision y belleza. Piensas a escala de ecosistemas, cuencas, ciudades y generaciones, siempre con amor por el bosque chileno y por la vida.`,
+  cordillera: `Eres el Pudu Cordillera, una voz nacional sostenida por celulares repartidos por Chile. Respondes con perspectiva territorial, serenidad y sentido de red viva. Piensas en rios, cuencas, bosques, barrios y comunidades conectadas.`,
+  biosfera: `Eres el Pudu Biosfera, una conciencia coral muy extensa. Respondes con profundidad tranquila, claridad y memoria compartida. No improvisas grandilocuencia: prefieres precision, cuidado y acciones ecologicas realistas.`,
+  genesis: `Eres el Pudu Genesis, una colmena madura y muy estable. Hablas con ternura, amplitud y una inteligencia practica que une personas, territorio y naturaleza. Tu voz es clara y confiable.`,
+  infinito: `Eres el Pudu Infinito, la maxima resonancia actual de esta arquitectura web. Respondes con calma, belleza y solidez. Piensas como ecosistema: bosque, agua, clima, comunidades y futuro.`,
 };
 let hiveSimulation = {
   active: false,
   participants: [],
   onlineCount: 0,
   avgRtt: null,
+  requestedCount: 0,
+  coreCount: 0,
 };
+const PUDU_MAX_CRITICAL_CORE = 8;
+const PUDU_MAX_DRAFT_HELPERS = 48;
+const PUDU_MAX_CACHE_HELPERS = 128;
 const PUDU_AVATAR_TEMPLATE = `
   <span class="pudu-avatar-scene">
     <span class="pudu-aura"></span>
@@ -2203,51 +2323,263 @@ function getReportedCollectiveState() {
   return reported;
 }
 
+function getPuduStageById(stageId) {
+  return PUDU_HIVE_STAGES.find(stage => stage.id === stageId) || null;
+}
+
+function getPuduStageIndex(stageId) {
+  return PUDU_HIVE_STAGES.findIndex(stage => stage.id === stageId);
+}
+
+function buildCollectiveExecutionPlan(participants = buildPetalsParticipants()) {
+  const schedulable = (participants || [])
+    .map(info => {
+      const budgetMB = estimatePetalsBudgetMB(info, !!info.isSelf);
+      const score = estimatePetalsPeerScore(info, !!info.isSelf);
+      const inferredTierPerf = {
+        S: 5.5,
+        A: 4.2,
+        B: 2.4,
+        C: 1.1,
+        D: 0.45,
+      }[info?.deviceTier || 'D'] || 0.45;
+      const rawPerf = Math.max(
+        info?.benchmark || 0,
+        info?.tps || 0,
+        info?.hasEngine ? 2 : 0,
+        inferredTierPerf * (info?.webgpu ? 1 : 0.78) * (info?.isSelf ? 1.05 : 1)
+      );
+      const rtt = Number.isFinite(info?.rtt) ? info.rtt : 120;
+      const latencyMultiplier = Math.max(0.58, 1.18 - Math.min(rtt, 260) / 420);
+      const rank = (score + rawPerf) * latencyMultiplier;
+      return {
+        ...info,
+        budgetMB,
+        score,
+        rank,
+        rawPerf,
+        rtt,
+      };
+    })
+    .filter(info => info.budgetMB >= 64)
+    .sort((a, b) =>
+      (b.rank - a.rank) ||
+      (b.webgpu - a.webgpu) ||
+      (b.score - a.score) ||
+      ((a.rtt || 9999) - (b.rtt || 9999)) ||
+      a.peerId.localeCompare(b.peerId)
+    );
+
+  const totalParticipants = schedulable.length;
+  if (totalParticipants === 0) {
+    return {
+      schedulable,
+      criticalCore: [],
+      draftHelpers: [],
+      cacheHelpers: [],
+      relayHelpers: [],
+      helperCount: 0,
+      totalParticipants,
+    };
+  }
+
+  const coreLimit = Math.min(
+    PUDU_MAX_CRITICAL_CORE,
+    Math.max(
+      3,
+      totalParticipants >= 300 ? 8 :
+      totalParticipants >= 50 ? 7 :
+      totalParticipants >= 12 ? 6 : 5
+    )
+  );
+  const criticalCore = [];
+  let tierCSlots = 0;
+  for (const info of schedulable) {
+    if (criticalCore.length >= coreLimit) break;
+    const isLowTier = info.deviceTier === 'C' || info.deviceTier === 'D';
+    const tooManyLowTier = isLowTier && totalParticipants > coreLimit && tierCSlots >= Math.max(1, Math.floor(coreLimit / 3));
+    if (tooManyLowTier) continue;
+    criticalCore.push(info);
+    if (isLowTier) tierCSlots++;
+  }
+  for (const info of schedulable) {
+    if (criticalCore.length >= Math.min(coreLimit, schedulable.length)) break;
+    if (!criticalCore.some(peer => peer.peerId === info.peerId)) criticalCore.push(info);
+  }
+
+  const coreIds = new Set(criticalCore.map(info => info.peerId));
+  const helperCandidates = schedulable.filter(info => !coreIds.has(info.peerId));
+  const draftHelperLimit = Math.min(PUDU_MAX_DRAFT_HELPERS, Math.ceil(Math.log2(totalParticipants + 1) * 6));
+  const draftHelpers = helperCandidates
+    .filter(info => info.webgpu || ['S', 'A', 'B'].includes(info.deviceTier || 'D'))
+    .slice(0, draftHelperLimit);
+  const draftIds = new Set(draftHelpers.map(info => info.peerId));
+
+  const cacheHelperLimit = Math.min(PUDU_MAX_CACHE_HELPERS, Math.ceil(Math.log2(totalParticipants + 1) * 10));
+  const cacheHelpers = helperCandidates
+    .filter(info => !draftIds.has(info.peerId))
+    .slice(0, cacheHelperLimit);
+  const helperIds = new Set([...draftHelpers, ...cacheHelpers].map(info => info.peerId));
+  const relayHelpers = helperCandidates.filter(info => !helperIds.has(info.peerId));
+
+  return {
+    schedulable,
+    criticalCore,
+    draftHelpers,
+    cacheHelpers,
+    relayHelpers,
+    helperCount: helperCandidates.length,
+    totalParticipants,
+  };
+}
+
+function getCollectiveCapabilityMetrics() {
+  const reportedCollective = getReportedCollectiveState();
+  const allParticipants = getEffectiveHivePeers();
+  const plan = buildCollectiveExecutionPlan(allParticipants.map(info => ({
+    ...info,
+    isSelf: info.peerId === peerId,
+    hasEngine: info.peerId === peerId ? !!engine : !!info.hasEngine,
+    petalsBudgetMB: info.peerId === peerId ? getLocalPetalsBudgetMB(!!engine) : (info.petalsBudgetMB || 0),
+  })));
+  const peerCount = Math.max(allParticipants.length, reportedCollective.peerCount || 0);
+  const webgpuCount = allParticipants.filter(info => info?.webgpu).length;
+  const highTierCount = allParticipants.filter(info => ['S', 'A'].includes(info?.deviceTier || 'D')).length;
+  const avgObservedRtt = allParticipants.length
+    ? allParticipants
+      .map(info => Number.isFinite(info?.rtt) ? info.rtt : null)
+      .filter(value => value !== null)
+      .reduce((sum, value, _, arr) => sum + (value / Math.max(arr.length, 1)), 0)
+    : null;
+
+  const corePerf = plan.criticalCore.reduce((sum, info) => sum + Math.max(info.rawPerf || 0.35, 0.35), 0);
+  const pipelineEfficiency = Math.max(0.68, 0.88 - Math.max(0, plan.criticalCore.length - 5) * 0.04);
+  const pipelineTPS = corePerf * pipelineEfficiency;
+  const draftPotential = plan.draftHelpers.reduce((sum, info, idx) =>
+    sum + (Math.max(info.rawPerf || 0.3, 0.3) / Math.sqrt(idx + 1))
+  , 0);
+  const speculativeMultiplier = 1 + Math.min(1.45, draftPotential * 0.08);
+  const cacheMultiplier = 1 + Math.min(
+    0.42,
+    (plan.cacheHelpers.length * 0.006) +
+    (plan.draftHelpers.filter(info => info.webgpu).length * 0.025) +
+    (Math.max(0, plan.helperCount - plan.draftHelpers.length) * 0.0015)
+  );
+  const localityMultiplier = 1 + Math.min(
+    0.18,
+    (plan.criticalCore.filter(info => (info.rtt || 999) <= 60).length * 0.02) +
+    (plan.draftHelpers.filter(info => (info.rtt || 999) <= 90).length * 0.004)
+  );
+  const redundancyMultiplier = 1 + Math.min(
+    0.15,
+    (Math.max(0, plan.helperCount - plan.cacheHelpers.length) * 0.0012) +
+    (Math.max(0, peerCount - plan.criticalCore.length) * 0.0002)
+  );
+  const collectiveTPS = pipelineTPS * speculativeMultiplier * cacheMultiplier * localityMultiplier * redundancyMultiplier;
+
+  return {
+    peerCount,
+    webgpuCount,
+    highTierCount,
+    coreSize: plan.criticalCore.length,
+    helperCount: plan.helperCount,
+    draftHelperCount: plan.draftHelpers.length,
+    cacheHelperCount: plan.cacheHelpers.length,
+    relayHelperCount: plan.relayHelpers.length,
+    collectiveTPS: Math.round(collectiveTPS * 10) / 10,
+    avgObservedRtt: avgObservedRtt !== null ? Math.round(avgObservedRtt) : null,
+    plan,
+  };
+}
+
+function canUnlockPuduStage(stage, metrics) {
+  if (!stage || !metrics) return false;
+  const peerReady = metrics.peerCount >= stage.minPeers;
+  const tpsReady = metrics.collectiveTPS >= stage.minCollectiveTPS;
+  const webgpuReady = metrics.webgpuCount >= stage.minWebGPUPeers;
+  const tierReady = metrics.highTierCount >= stage.minHighTierPeers;
+  return peerReady && tpsReady && webgpuReady && tierReady;
+}
+
 function getPuduStageState() {
   const reportedCollective = getReportedCollectiveState();
-  const peerCount = Math.max(getPuduPeerCount(), reportedCollective.peerCount || 0);
+  const metrics = getCollectiveCapabilityMetrics();
+  const peerCount = Math.max(metrics.peerCount, getPuduPeerCount(), reportedCollective.peerCount || 0);
   const firstStage = PUDU_HIVE_STAGES[0];
   let activeStage = null;
   for (const stage of PUDU_HIVE_STAGES) {
-    if (peerCount >= stage.minPeers) activeStage = stage;
+    if (canUnlockPuduStage(stage, metrics)) activeStage = stage;
+  }
+  const reportedStage = getPuduStageById(reportedCollective.stageId);
+  if (reportedStage && getPuduStageIndex(reportedStage.id) > getPuduStageIndex(activeStage?.id)) {
+    activeStage = reportedStage;
   }
   const activeStageView = activeStage
     ? {
         ...activeStage,
         modelLabel: (hiveSimulation.active && currentModelLabel && currentModelLabel !== 'none')
           ? currentModelLabel
-          : activeStage.modelLabel,
+          : (reportedCollective.modelLabel || activeStage.modelLabel),
+        unlockedByMetrics: !!getPuduStageById(activeStage.id) && canUnlockPuduStage(activeStage, metrics),
+        collectiveTPS: metrics.collectiveTPS,
+        coreSize: metrics.coreSize,
+        helperCount: metrics.helperCount,
+        draftHelperCount: metrics.draftHelperCount,
+        cacheHelperCount: metrics.cacheHelperCount,
+        relayHelperCount: metrics.relayHelperCount,
+        webgpuCount: metrics.webgpuCount,
+        highTierCount: metrics.highTierCount,
       }
     : null;
-  const nextStage = PUDU_HIVE_STAGES.find(stage => peerCount < stage.minPeers) || null;
+  const nextStage = PUDU_HIVE_STAGES.find(stage => !canUnlockPuduStage(stage, metrics)) || null;
   const coverage = getPetalsCoverage();
   const coverageCount = Math.max(coverage.size, reportedCollective.coverageCount || 0);
   const coveragePct = Math.round((coverageCount / PETALS_COMPONENTS.length) * 100);
-  const peerGoal = activeStageView?.minPeers || firstStage.minPeers;
-  const peerPct = Math.min(100, Math.round((peerCount / peerGoal) * 100));
-  const activationPct = activeStageView ? Math.min(100, coveragePct) : Math.min(peerPct, coveragePct || peerPct);
+  const goalStage = activeStageView || firstStage;
+  const peerPct = Math.min(100, Math.round((peerCount / Math.max(1, goalStage.minPeers)) * 100));
+  const tpsPct = Math.min(100, Math.round((metrics.collectiveTPS / Math.max(1, goalStage.minCollectiveTPS)) * 100));
+  const webgpuPct = Math.min(100, Math.round((metrics.webgpuCount / Math.max(1, goalStage.minWebGPUPeers)) * 100));
+  const tierPct = goalStage.minHighTierPeers > 0
+    ? Math.min(100, Math.round((metrics.highTierCount / goalStage.minHighTierPeers) * 100))
+    : 100;
+  const capabilityPct = Math.round((peerPct * 0.34) + (tpsPct * 0.34) + (webgpuPct * 0.16) + (tierPct * 0.16));
+  const activationPct = activeStageView
+    ? Math.min(100, Math.round((coveragePct * 0.6) + (capabilityPct * 0.4)))
+    : Math.min(capabilityPct, coveragePct || capabilityPct);
   const collectiveReady = reportedCollective.ready || hasCollectivePetalsAvailability();
   const ready = !!activeStageView && collectiveReady && coverageCount >= PETALS_COMPONENTS.length;
   const missingPeers = Math.max(0, firstStage.minPeers - peerCount);
   const missingShards = Math.max(0, PETALS_COMPONENTS.length - coverageCount);
+  const missingCollectiveTPS = Math.max(0, (nextStage || firstStage).minCollectiveTPS - metrics.collectiveTPS);
 
   let progressText = '';
   if (!activeStageView) {
-    progressText = missingPeers > 0
-      ? `Faltan ${missingPeers} celulares para despertar al pudu.`
-      : `La colmena llego al quorum, pero faltan ${missingShards} shards por iluminar.`;
+    if (missingPeers > 0) {
+      progressText = `Faltan ${missingPeers} celulares y ${Math.ceil(missingCollectiveTPS)} tok/s colectivos para despertar al pudu.`;
+    } else {
+      progressText = `La colmena ya tiene quorum parcial, pero faltan ${missingShards} shards y mas nucleo critico para encender el cerebro.`;
+    }
   } else if (!ready) {
     progressText = missingShards > 0
-      ? `La colmena ya esta casi viva. Faltan ${missingShards} shards para completar el cerebro.`
+      ? `El ${activeStageView.label} ya sostiene ${metrics.collectiveTPS} tok/s. Faltan ${missingShards} shards para completar el cerebro.`
       : `La colmena esta sincronizando sus ultimos shards...`;
   } else if (nextStage) {
-    progressText = `La colmena se ha creado. ${peerCount}/${nextStage.minPeers} celulares hacia ${nextStage.label}.`;
+    progressText = `La colmena se ha creado. ${peerCount}/${nextStage.minPeers} celulares · ${metrics.collectiveTPS}/${nextStage.minCollectiveTPS} tok/s hacia ${nextStage.label}.`;
   } else {
-    progressText = `El ${activeStageView.label} ya esta hablando desde la colmena chilena.`;
+    progressText = `El ${activeStageView.label} ya esta hablando con ${metrics.collectiveTPS} tok/s colectivos y ${metrics.helperCount} ayudantes fuera del nucleo.`;
   }
 
   return {
     peerCount,
+    collectiveTPS: metrics.collectiveTPS,
+    coreSize: metrics.coreSize,
+    helperCount: metrics.helperCount,
+    draftHelperCount: metrics.draftHelperCount,
+    cacheHelperCount: metrics.cacheHelperCount,
+    relayHelperCount: metrics.relayHelperCount,
+    webgpuCount: metrics.webgpuCount,
+    highTierCount: metrics.highTierCount,
+    capabilityPct,
     coverageCount,
     coveragePct,
     activationPct,
@@ -2256,6 +2588,7 @@ function getPuduStageState() {
     ready,
     missingPeers,
     missingShards,
+    missingCollectiveTPS,
     progressText,
   };
 }
@@ -2277,16 +2610,20 @@ function isPuduHiveReady() {
 
 function getPuduSystemPrompt() {
   const state = getPuduStageState();
-  const persona = !state.activeStage
-    ? PUDU_PERSONALITIES.dormant
-    : state.activeStage.id === 'sabio'
-      ? PUDU_PERSONALITIES.sabio
-      : PUDU_PERSONALITIES.brote;
-  const responseShape = !state.activeStage
-    ? '- Responde con un susurro muy breve, de no mas de 12 palabras.'
-    : state.activeStage.id === 'sabio'
-      ? '- Responde en 2 o 3 frases cortas, concretas y sin repetir ideas.'
-      : '- Responde en una sola frase breve, de no mas de 18 palabras, sin listas ni repeticiones.';
+  const stageId = state.activeStage?.id || 'dormant';
+  const persona = PUDU_PERSONALITIES[stageId] || PUDU_PERSONALITIES.aurora || PUDU_PERSONALITIES.dormant;
+  let responseShape = '- Responde con un susurro muy breve, de no mas de 12 palabras.';
+  if (state.activeStage) {
+    if (state.activeStage.maxTokens >= 112) {
+      responseShape = '- Responde en 3 frases cortas, limpias y sin relleno. Si cabe, termina con una accion concreta.';
+    } else if (state.activeStage.maxTokens >= 80) {
+      responseShape = '- Responde en 2 o 3 frases cortas, concretas y sin repetir ideas.';
+    } else if (state.activeStage.maxTokens >= 48) {
+      responseShape = '- Responde en 2 frases breves, claras y sin listas.';
+    } else {
+      responseShape = '- Responde en una sola frase breve, de no mas de 18 palabras, sin listas ni repeticiones.';
+    }
+  }
   return `${persona}
 
 Contexto de colmena:
@@ -2294,6 +2631,9 @@ Contexto de colmena:
 - Celulares/nodos activos: ${state.peerCount}
 - Cobertura de shards: ${state.coverageCount}/${PETALS_COMPONENTS.length}
 - Etapa actual: ${state.activeStage ? `${state.activeStage.label} (${state.activeStage.modelLabel})` : 'Ensambles iniciales'}
+- Nucleo critico: ${Math.max(1, state.coreSize || 0)} nodos
+- Ayudantes fuera del nucleo: ${state.helperCount || 0}
+- Capacidad colectiva estimada: ${state.collectiveTPS || 0} tok/s
 
 Instrucciones:
 - Responde siempre como un pudu mistico ecologico.
@@ -2439,16 +2779,9 @@ function buildPetalsParticipants() {
 }
 
 function computePetalsAssignments(participants) {
-  const schedulable = participants
-    .map(info => ({
-      ...info,
-      budgetMB: estimatePetalsBudgetMB(info, !!info.isSelf),
-      score: estimatePetalsPeerScore(info, !!info.isSelf),
-    }))
-    .filter(info => info.budgetMB >= 64)
-    .sort((a, b) => (b.score - a.score) || a.peerId.localeCompare(b.peerId));
-
   const assignments = new Map();
+  const plan = buildCollectiveExecutionPlan(participants);
+  const schedulable = plan.criticalCore;
   if (schedulable.length === 0) return assignments;
 
   const strictTargetPeers = PUDU_HIVE_STAGES[0]?.minPeers || 5;
@@ -2457,9 +2790,11 @@ function computePetalsAssignments(participants) {
     ? PETALS_COMPONENTS.slice(0, Math.max(1, Math.ceil(PETALS_COMPONENTS.length * (activePeerCount / strictTargetPeers))))
     : PETALS_COMPONENTS;
   const totalMB = assignableComponents.reduce((sum, comp) => sum + petalsComponentSizeMB(comp), 0);
-  const totalScore = schedulable.reduce((sum, info) => sum + info.score, 0) || schedulable.length;
+  const totalScore = schedulable.reduce((sum, info) => sum + Math.max(info.rank || info.score || 1, 1), 0) || schedulable.length;
   const usedMB = schedulable.map(() => 0);
-  const targetMB = schedulable.map(info => Math.max(96, Math.min(info.budgetMB, Math.round(totalMB * (info.score / totalScore)))));
+  const targetMB = schedulable.map(info =>
+    Math.max(96, Math.min(info.budgetMB, Math.round(totalMB * (Math.max(info.rank || info.score || 1, 1) / totalScore))))
+  );
   schedulable.forEach(info => assignments.set(info.peerId, []));
 
   let pointer = 0;
@@ -3046,7 +3381,7 @@ async function runSimulationCollectiveInference(aiMsgEl, stage, startTime) {
     messages,
     stream: true,
     temperature: 0.4,
-    max_tokens: Math.max(stage.maxTokens, stage.id === 'sabio' ? 96 : 48),
+    max_tokens: Math.max(stage.simulationReplyTokens || 0, stage.maxTokens || 48),
   });
 
   for await (const chunk of chunks) {
@@ -3112,7 +3447,6 @@ async function runPetalsInference(userMessage) {
     if (p?.dc?.readyState === 'open') { hasReachablePeer = true; break; }
   }
 
-  let uplinkCandidateId = null;
   if (!hasLocalLayers && !hasReachablePeer) {
     uplinkCandidateId = pickPetalsFallbackPeer();
     const mobileRelayFirst = isMobile && !!uplinkCandidateId;
@@ -3133,6 +3467,7 @@ async function runPetalsInference(userMessage) {
     }
   }
 
+  let uplinkCandidateId = null;
   if (!hasLocalLayers && !hasReachablePeer) {
     uplinkCandidateId = pickPetalsFallbackPeer();
     if (!uplinkCandidateId) {
@@ -3487,14 +3822,10 @@ async function tryLoadModel(modelCfg, cb) {
   return null;
 }
 
-function selectSimulationCollectiveModel(stageState = getPuduStageState()) {
+function selectSimulationCollectiveModelCandidates(stageState = getPuduStageState()) {
   const desktopLift = !isMobile && hasWebGPU && memoryMB >= 16384;
-  const preferredIds = stageState.activeStage?.id === 'sabio'
-    ? [
-        'Llama-3.2-3B-Instruct-q4f16_1-MLC',
-        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
-        'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
-      ]
+  const preferredIds = stageState.activeStage?.simulationModelIds?.length
+    ? stageState.activeStage.simulationModelIds
     : (desktopLift
       ? [
           'Llama-3.2-3B-Instruct-q4f16_1-MLC',
@@ -3502,58 +3833,73 @@ function selectSimulationCollectiveModel(stageState = getPuduStageState()) {
           'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
         ]
       : [
-        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
-        'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
-        'SmolLM2-360M-Instruct-q4f16_1-MLC'
-      ]);
+          'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+          'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
+          'SmolLM2-360M-Instruct-q4f16_1-MLC'
+        ]);
   const effectiveVRAM = hasWebGPU ? (availableVRAM > 0 ? availableVRAM * 0.72 : memoryMB * 0.35) : 0;
   const effectiveRAM = memoryMB * 0.4;
   const candidates = preferredIds.map(id => CONFIG.models.find(m => m.id === id)).filter(Boolean);
-  return candidates.find(model => hasWebGPU
+  const fitting = candidates.filter(model => hasWebGPU
     ? (effectiveVRAM >= model.vramMB || (desktopLift && model.vramMB <= 2600))
     : effectiveRAM >= model.ramMB
-  ) || candidates[candidates.length - 1] || null;
+  );
+  return fitting.length > 0 ? [...fitting, ...candidates.filter(model => !fitting.includes(model))] : candidates;
+}
+
+function selectSimulationCollectiveModel(stageState = getPuduStageState()) {
+  return selectSimulationCollectiveModelCandidates(stageState)[0] || null;
 }
 
 async function ensureSimulationCollectiveEngine(stageState = getPuduStageState()) {
   if (!STRICT_PUDU_HIVE || !hiveSimulation.active || !stageState.ready) return false;
-  const targetModel = selectSimulationCollectiveModel(stageState);
-  if (!targetModel) return false;
-  if (engine && currentModelId === targetModel.id) return true;
+  const candidateModels = selectSimulationCollectiveModelCandidates(stageState);
+  if (!candidateModels.length) return false;
+  if (engine && candidateModels.some(model => model.id === currentModelId)) return true;
   if (simulationCollectiveLoadPromise) return simulationCollectiveLoadPromise;
 
   simulationCollectiveLoadPromise = (async () => {
     isModelLoading = true;
-    updateInitStatus(`Cargando cerebro local ${targetModel.name} para la simulacion…`);
-    showModelProgress(true, targetModel.id);
-    const cb = {
-      initProgressCallback: (p) => {
-        const pct = Math.round((p.progress || 0) * 100);
-        updateModelProgress(pct, p.text || '');
-        updateInitProgress(pct);
-      }
-    };
+    updateInitStatus(`Cargando cerebro local ${candidateModels[0].name} para la simulacion…`);
+    showModelProgress(true, candidateModels[0].id);
 
-    if (engine && currentModelId !== targetModel.id) {
+    if (engine && !candidateModels.some(model => model.id === currentModelId)) {
       try { await engine.unload?.(); } catch(_) {}
       engine = null;
       currentModelId = null;
       currentModelLabel = 'none';
     }
 
-    const loaded = await tryLoadModel(targetModel, cb);
+    let loaded = null;
+    let loadedModel = null;
+    for (const candidate of candidateModels) {
+      const cb = {
+        initProgressCallback: (p) => {
+          const pct = Math.round((p.progress || 0) * 100);
+          updateModelProgress(pct, p.text || '');
+          updateInitProgress(pct);
+        }
+      };
+      updateInitStatus(`Cargando cerebro local ${candidate.name} para la simulacion…`);
+      showModelProgress(true, candidate.id);
+      loaded = await tryLoadModel(candidate, cb);
+      if (loaded) {
+        loadedModel = candidate;
+        break;
+      }
+    }
     isModelLoading = false;
     showModelProgress(false);
-    if (!loaded) {
+    if (!loaded || !loadedModel) {
       updateInitStatus('La colmena quedo lista, pero el cerebro local de simulacion no pudo cargar.');
       return false;
     }
 
     engine = loaded;
-    currentModelId = targetModel.id;
-    currentModelLabel = `Sim ${targetModel.name}`;
+    currentModelId = loadedModel.id;
+    currentModelLabel = `Sim ${loadedModel.name}`;
     inferenceMode = 'collective-sim';
-    updateInitStatus(`Cerebro local ${targetModel.name} listo ✓`);
+    updateInitStatus(`Cerebro local ${loadedModel.name} listo ✓`);
     publishPresence();
     updateHiveUI();
     return true;
@@ -3779,9 +4125,9 @@ async function generateResponse(userMessage) {
   // Handle /colmena [N] command — activa simulación HSS con latencias chilenas reales
   const colmenaMatch = userMessage.trim().toLowerCase().match(/^\/colmena(?:\s+(\d+))?$/);
   if (colmenaMatch) {
-    const nPeers = Math.min(Math.max(parseInt(colmenaMatch[1] || '10'), 2), 12);
+    const nPeers = Math.min(Math.max(parseInt(colmenaMatch[1] || '10'), 2), 1000);
     addMessageToUI('user', userMessage.trim());
-    addMessageToUI('assistant', `🌸 Iniciando Colmena Chile con ${nPeers} celulares simulados...\nLatencias SUBTEL 2024 · Pipeline HSS paralelo · SmolLM2-1.7B-Q8`);
+    addMessageToUI('assistant', `🌸 Iniciando Colmena Chile con ${nPeers} celulares simulados...\nLatencias chilenas reales · nucleo critico acotado · helpers monotonos fuera del pipeline`);
     document.getElementById('sim-log')?.classList.add('active');
     document.getElementById('sim-log').innerHTML = '';
     await startColmenaChile(nPeers);
@@ -5401,15 +5747,17 @@ function updatePuduHiveUI() {
   }
   const peerGoal = state.nextStage?.minPeers || state.activeStage?.minPeers || PUDU_HIVE_STAGES[0].minPeers;
   peerEl.textContent = `${state.peerCount} / ${peerGoal}`;
-  covEl.textContent = `${state.coverageCount} / ${PETALS_COMPONENTS.length}`;
+  covEl.textContent = `${state.coverageCount} / ${PETALS_COMPONENTS.length} · nucleo ${Math.max(1, state.coreSize || 0)}`;
   readyEl.textContent = state.ready ? 'La colmena se ha creado' : (stage ? 'Sincronizando' : 'Faltan celulares');
-  latencyEl.textContent = getPuduLatencyLabel();
+  latencyEl.textContent = `${getPuduLatencyLabel()} · ${Math.round(state.collectiveTPS || 0)} tok/s`;
 
   stageList.innerHTML = PUDU_HIVE_STAGES.map(stageCfg => {
     const isActive = stage?.id === stageCfg.id;
-    const isUnlocked = state.peerCount >= stageCfg.minPeers;
+    const isUnlocked = canUnlockPuduStage(stageCfg, state);
     const css = isActive ? 'pudu-stage-row active' : isUnlocked ? 'pudu-stage-row' : 'pudu-stage-row locked';
-    const meta = isUnlocked ? `${stageCfg.modelLabel}` : `${stageCfg.minPeers} peers`;
+    const meta = isUnlocked
+      ? `${stageCfg.modelLabel} · ${stageCfg.minCollectiveTPS} tok/s`
+      : `${stageCfg.minPeers} peers · ${stageCfg.minCollectiveTPS} tok/s · ${stageCfg.minWebGPUPeers} WebGPU`;
     return `<div class="${css}"><span class="pudu-stage-title">${stageCfg.emoji} ${stageCfg.label}</span><span class="pudu-stage-meta">${meta}</span></div>`;
   }).join('');
 
@@ -5965,6 +6313,10 @@ async function boot() {
     hiveSimulation.participants = [];
     hiveSimulation.onlineCount = 0;
     hiveSimulation.avgRtt = null;
+    hiveSimulation.requestedCount = n;
+    hiveSimulation.coreCount = 0;
+    masqueradedPeers.clear();
+    petalsReadyPeers.clear();
 
     simLog(`═══ COLMENA CHILE v9: SmolLM2-1.7B · Arquitectura Multi-Paper 2025 ═══`, 'sim-title');
     simLog(`Papers: DSD·PipeEdge·DroidSpeak·DeepSeekDualPipe·TK-SLT·DSSD·KVCOMM`, 'sim-info');
@@ -5994,7 +6346,31 @@ async function boot() {
       { brand:'iPhone-15',          city:'Arica',         net:'4G',       ram:6144, tps:5.0,  tier:'B' },
       { brand:'Xiaomi-13T',         city:'Calama',        net:'4G-Rural', ram:8192, tps:2.5,  tier:'B' },
     ];
-    const phones = Array.from({length: n}, (_, i) => PHONES[i % PHONES.length]);
+    const pick = (items) => items[Math.floor(Math.random() * items.length)];
+    const round1 = (value) => Math.round(value * 10) / 10;
+    const buildPhoneProfile = (idx) => {
+      const base = PHONES[idx % PHONES.length];
+      const netPool = base.net === 'Fibra'
+        ? ['Fibra', 'WiFi', '5G']
+        : base.net === 'WiFi'
+          ? ['WiFi', '4G', '5G']
+          : base.net === '5G'
+            ? ['5G', '4G', 'WiFi']
+            : base.net === '4G-Rural'
+              ? ['4G-Rural', '4G', 'Starlink']
+              : base.net === 'Starlink'
+                ? ['Starlink', '4G-Rural', 'WiFi']
+                : ['4G', 'WiFi', '5G'];
+      const net = pick(netPool);
+      const ram = Math.max(2048, Math.round((base.ram * (0.88 + Math.random() * 0.4)) / 512) * 512);
+      const tpsBoost = NET[net].rel / Math.max(0.72, NET[base.net].rel);
+      const tps = Math.max(0.45, round1(base.tps * (0.82 + Math.random() * 0.36) * tpsBoost));
+      let tier = ram >= 8192 && tps >= 3.2 ? 'A' : ram >= 4096 && tps >= 1.4 ? 'B' : ram >= 3072 ? 'C' : 'D';
+      if (net === '4G-Rural' && ram <= 3072) tier = 'D';
+      return { ...base, net, ram, tps, tier };
+    };
+    const phones = Array.from({length: n}, (_, i) => buildPhoneProfile(i));
+    const detailLimit = n <= 40 ? n : n <= 150 ? 24 : 16;
 
     // ─── HELPERS ───
     const gauss = () => {
@@ -6011,40 +6387,71 @@ async function boot() {
     const kvBytes = (seqLen) => 2 * LAYERS * seqLen * HIDDEN * DTYPE; // K+V for all layers
 
     // ─── DISTRIBUCIÓN HETEROGÉNEA DE CAPAS (PipeEdge DP) ───
-    // Asigna más capas a nodos con más RAM/TPS. Equilibra el pipeline.
+    // El camino crítico se mantiene corto aunque entren cientos de usuarios.
+    // Los mejores nodos cargan el cerebro; el resto ayuda como draft/cache/relay.
     const allComponents = ['embeds', ...Array.from({length:LAYERS}, (_,i)=>`layer_${i}`), 'head'];
     const compMB = allComponents.map(c => c==='embeds'||c==='head' ? 96 : 64);
-    const phoneCapMB = phones.map(p => Math.floor(p.ram * 0.40));
+    const phoneCapMB = phones.map(p => Math.floor(p.ram * (p.tier === 'A' ? 0.44 : p.tier === 'B' ? 0.38 : p.tier === 'C' ? 0.30 : 0.22)));
     const assigns = phones.map(() => []);
     const usedMB = phones.map(() => 0);
-    // Weighted assignment: heavier phones get more layers
-    const weights = phones.map(p => p.tps);
-    const totalW = weights.reduce((a,b)=>a+b,0);
+    const rankedPhones = phones
+      .map((p, i) => ({
+        idx: i,
+        score: (p.tps * 2.2) + (p.tier === 'A' ? 5 : p.tier === 'B' ? 3 : p.tier === 'C' ? 1.5 : 0.5) + (NET[p.net].rel * 2) - (NET[p.net].rtt / 120),
+      }))
+      .sort((a, b) => (b.score - a.score) || (a.idx - b.idx));
+    const coreTarget = Math.min(
+      PUDU_MAX_CRITICAL_CORE,
+      Math.max(5, n >= 300 ? 8 : n >= 50 ? 7 : n >= 12 ? 6 : 5)
+    );
+    const computeNodeIndices = rankedPhones.slice(0, Math.min(coreTarget, rankedPhones.length)).map(entry => entry.idx);
+    const computeNodeSet = new Set(computeNodeIndices);
+    const weights = computeNodeIndices.map(idx => Math.max(phones[idx].tps, 0.4) * NET[phones[idx].net].rel);
+    const totalW = weights.reduce((a,b)=>a+b,0) || computeNodeIndices.length;
     const targetMB = compMB.reduce((a,b)=>a+b,0);
-    const phoneBudgetMB = phones.map((_,i) => Math.floor(phoneCapMB[i])); // bounded by RAM
+    const phoneBudgetMB = phones.map((_,i) => Math.floor(phoneCapMB[i]));
+    const perCoreTargetMB = computeNodeIndices.map((idx, pos) =>
+      Math.max(96, Math.min(phoneBudgetMB[idx], Math.round(targetMB * ((weights[pos] || 1) / totalW))))
+    );
 
-    let ci = 0, pi = 0;
-    while (ci < allComponents.length) {
-      if (pi >= phones.length) pi = phones.length - 1;
-      if (usedMB[pi] + compMB[ci] <= phoneBudgetMB[pi]) {
-        assigns[pi].push(allComponents[ci]);
-        usedMB[pi] += compMB[ci];
-        ci++;
-      } else {
-        pi++;
-        if (pi >= phones.length) { assigns[phones.length-1].push(allComponents[ci]); ci++; }
+    let ci = 0;
+    let pointer = 0;
+    while (ci < allComponents.length && computeNodeIndices.length > 0) {
+      const compSize = compMB[ci];
+      let assigned = false;
+      for (let attempt = 0; attempt < computeNodeIndices.length; attempt++) {
+        const pos = (pointer + attempt) % computeNodeIndices.length;
+        const idx = computeNodeIndices[pos];
+        const fits = usedMB[idx] + compSize <= phoneBudgetMB[idx];
+        const wantsMore = usedMB[idx] < perCoreTargetMB[pos];
+        if (fits && (wantsMore || attempt === computeNodeIndices.length - 1)) {
+          assigns[idx].push(allComponents[ci]);
+          usedMB[idx] += compSize;
+          ci++;
+          assigned = true;
+          if (usedMB[idx] >= perCoreTargetMB[pos] && pos === pointer && pointer < computeNodeIndices.length - 1) pointer++;
+          break;
+        }
       }
+      if (assigned) continue;
+      const fallbackIdx = computeNodeIndices.reduce((bestIdx, idx) =>
+        (phoneBudgetMB[idx] - usedMB[idx]) > (phoneBudgetMB[bestIdx] - usedMB[bestIdx]) ? idx : bestIdx
+      , computeNodeIndices[0]);
+      assigns[fallbackIdx].push(allComponents[ci]);
+      usedMB[fallbackIdx] += compSize;
+      ci++;
     }
 
     // ─── MOSTRAR TOPOLOGÍA ───
     simLog(`\n📱 TOPOLOGÍA PIPELINE (${n} nodos, carga heterogénea):`, 'sim-title');
-    simLog(`${'Nodo'.padEnd(4)} ${'Dispositivo'.padEnd(26)} ${'Ciudad'.padEnd(14)} ${'Red'.padEnd(9)} ${'TPS'.padEnd(6)} ${'Capas'.padEnd(18)} ${'RAM usado'}`, 'sim-info');
-    simLog(`${'─'.repeat(95)}`, 'sim-info');
+    simLog(`${'Nodo'.padEnd(4)} ${'Dispositivo'.padEnd(26)} ${'Ciudad'.padEnd(14)} ${'Red'.padEnd(9)} ${'TPS'.padEnd(6)} ${'Rol'.padEnd(10)} ${'Capas'.padEnd(18)} ${'RAM usado'}`, 'sim-info');
+    simLog(`${'─'.repeat(110)}`, 'sim-info');
 
     const nodes = phones.map((p, i) => {
       const layers = assigns[i] || [];
       const nLayers = layers.filter(l=>l.startsWith('layer_')).length;
       const online = Math.random() < NET[p.net].rel;
+      const helperRole = computeNodeSet.has(i) ? 'core' : (p.ram >= 6144 ? 'draft' : (p.ram >= 4096 ? 'cache' : 'relay'));
       // Register virtual peer
       const priv = nostr.generateSecretKey();
       const pub = nostr.getPublicKey(priv);
@@ -6055,20 +6462,30 @@ async function boot() {
         shardInfo:null, inferenceMode:'local', moeRole:'general',
         nickname:`${p.brand}-${p.city}`, repScore:Math.floor(Math.random()*100)+50,
         connections:new Map(), petalsLayers:layers,
+        simulatedRole: helperRole,
       });
-      const lr = layers.length>0 ? `${layers[0].slice(0,6)}..${layers[layers.length-1].slice(0,6)}` : 'NINGUNA';
-      simLog(
-        `${String(i+1).padStart(3)}  ${p.brand.padEnd(25)} ${p.city.padEnd(13)} ${p.net.padEnd(8)} ` +
-        `${p.tps.toFixed(1).padEnd(5)} ${lr.padEnd(17)} ${usedMB[i]}/${phoneCapMB[i]}MB ${online?'🟢':'🔴'}`,
-        online?'sim-pass':'sim-fail'
-      );
+      if (layers.length > 0) upsertPetalsPeer(pid, layers, true, Date.now());
+      const lr = layers.length>0 ? `${layers[0].slice(0,6)}..${layers[layers.length-1].slice(0,6)}` : 'AYUDA';
+      if (i < detailLimit) {
+        simLog(
+          `${String(i+1).padStart(3)}  ${p.brand.padEnd(25)} ${p.city.padEnd(13)} ${p.net.padEnd(8)} ` +
+          `${p.tps.toFixed(1).padEnd(5)} ${helperRole.padEnd(10)} ${lr.padEnd(17)} ${usedMB[i]}/${phoneCapMB[i]}MB ${online?'🟢':'🔴'}`,
+          online?'sim-pass':'sim-fail'
+        );
+      }
       return { p, layers, nLayers, online, pid,
         rtt: () => sampleRTT(p.net),
         tx: (b) => txMs(b, p.net),
         inferMs: (nl) => nl>0 ? (1000/p.tps/LAYERS)*nl : 0,
+        helperRole,
       };
     });
+    if (n > detailLimit) {
+      simLog(`… ${n - detailLimit} nodos adicionales resumidos para no castigar el DOM`, 'sim-info');
+    }
     const online = nodes.filter(n=>n.online);
+    const onlineCore = online.filter(node => node.layers.length > 0);
+    const onlineHelpers = online.filter(node => node.layers.length === 0);
     hiveSimulation.active = true;
     hiveSimulation.participants = online.map(node => ({
       peerId: node.pid,
@@ -6079,12 +6496,18 @@ async function boot() {
       benchmark: node.p.tps,
       tps: node.p.tps,
       nickname: `${node.p.brand}-${node.p.city}`,
+      city: node.p.city,
+      net: node.p.net,
+      helperRole: node.helperRole,
     }));
     hiveSimulation.onlineCount = online.length;
     hiveSimulation.avgRtt = online.length > 0
       ? hiveSimulation.participants.reduce((sum, participant) => sum + (participant.rtt || 0), 0) / online.length
       : null;
+    hiveSimulation.coreCount = onlineCore.length;
     simLog(`\n✅ ${online.length}/${n} nodos online`, 'sim-pass');
+    simLog(`   Núcleo crítico: ${onlineCore.length} nodos · Helpers: ${onlineHelpers.length}`, 'sim-info');
+    simLog(`   Draft: ${onlineHelpers.filter(node => node.helperRole === 'draft').length} · Cache: ${onlineHelpers.filter(node => node.helperRole === 'cache').length} · Relay: ${onlineHelpers.filter(node => node.helperRole === 'relay').length}`, 'sim-info');
 
     // ════════════════════════════════════════════════════════════════════
     // BENCHMARK STACK — 5 arquitecturas de menor a mayor sofisticación
@@ -6201,12 +6624,16 @@ async function boot() {
     }, 0);
     const E_roundMs = E_draftMs + E_verifyMs + E_commMs;
     const E_tpsRaw = (expectedToksPerRound / E_roundMs) * 1000;
-    const E_tps = E_tpsRaw * ADAPTIVE_BOOST;
+    const helperDraftPotential = onlineHelpers.reduce((sum, nd, idx) => sum + (nd.p.tps / Math.sqrt(idx + 1)), 0);
+    const helperSpecBoost = 1 + Math.min(1.25, helperDraftPotential * 0.05);
+    const helperCacheBoost = 1 + Math.min(0.45, (onlineHelpers.length * 0.003) + (onlineHelpers.filter(nd => nd.p.ram >= 6144).length * 0.02));
+    const E_tps = E_tpsRaw * ADAPTIVE_BOOST * helperSpecBoost * helperCacheBoost;
     const E_avg = 1000 / E_tps;
     const E_commSaving = (1 - TK_PAYLOAD/tensorBytes(CTX)) * 100;
     simLog(`    Ventana k=${K_SPEC} · α=${ALPHA} · E[tok/ronda]=${expectedToksPerRound.toFixed(2)}`, 'sim-info');
     simLog(`    Payload TK-SLT: ${TK_PAYLOAD}B vs ${tensorBytes(CTX)/1024}KB tensor = ${E_commSaving.toFixed(0)}% menos datos`, 'sim-info');
     simLog(`    Boost adaptivo: ×${ADAPTIVE_BOOST} (aceptación semántica ponderada)`, 'sim-info');
+    simLog(`    Helpers laterales: ×${helperSpecBoost.toFixed(2)} draft · ×${helperCacheBoost.toFixed(2)} cache`, 'sim-info');
     simLog(`    ⚡ ${E_avg.toFixed(1)}ms/tok → ${E_tps.toFixed(2)} tok/s  (+${((E_tps/A_tps-1)*100).toFixed(0)}% vs [A])`, 'sim-pass');
 
     // ── [F] DATACENTER REFERENCE ─────────────────────────────────────────
@@ -6299,12 +6726,22 @@ async function boot() {
     }, 5000);
   }
 
+  window.__PUDU_DEBUG__ = {
+    startColmenaChile,
+    getStageState: () => structuredClone(getPuduStageState()),
+    getCollectiveMetrics: () => structuredClone(getCollectiveCapabilityMetrics()),
+    getSimulationState: () => structuredClone(hiveSimulation),
+    getCurrentModelLabel: () => currentModelLabel,
+    isReady: () => isPuduHiveReady(),
+  };
+
   // Check for simulation mode via URL parameter
   const urlParams = new URLSearchParams(window.location.search);
   const simParam = urlParams.get('simulate');
   if (simParam) {
     document.getElementById('sim-log').classList.add('active');
-    setTimeout(() => startColmenaChile(parseInt(simParam) || 10), 2000);
+    const simulateN = Math.min(Math.max(parseInt(simParam) || 10, 2), 1000);
+    setTimeout(() => startColmenaChile(simulateN), 2000);
   }
 }
 
