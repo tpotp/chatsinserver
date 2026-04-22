@@ -1079,6 +1079,120 @@ function decodeMsg(buf) {
   return { type, reqId, seq, payload };
 }
 
+const PETALS_DC_CHUNK_BYTES = 16 * 1024;
+const PETALS_DC_BUFFER_HIGH = 512 * 1024;
+const PETALS_DC_BUFFER_LOW = 128 * 1024;
+const petalsTensorChunkInflight = new Map();
+
+function encodeTensorChunk(reqId, chunkIndex, totalChunks, totalBytes, chunkBuf) {
+  const chunkBytes = chunkBuf.byteLength || 0;
+  const buf = new ArrayBuffer(13 + chunkBytes);
+  const dv = new DataView(buf);
+  dv.setUint8(0, MSG.FLOW_TENSOR_CHUNK);
+  dv.setUint32(1, reqId);
+  dv.setUint16(5, chunkIndex);
+  dv.setUint16(7, totalChunks);
+  dv.setUint32(9, totalBytes);
+  if (chunkBytes) new Uint8Array(buf, 13).set(new Uint8Array(chunkBuf));
+  return buf;
+}
+
+function receiveTensorChunk(fromId, buf) {
+  const now = Date.now();
+  for (const [key, entry] of petalsTensorChunkInflight) {
+    if ((entry.expiresAt || 0) < now) petalsTensorChunkInflight.delete(key);
+  }
+
+  const dv = new DataView(buf);
+  if (dv.byteLength < 13) return null;
+  const reqId = dv.getUint32(1);
+  const chunkIndex = dv.getUint16(5);
+  const totalChunks = dv.getUint16(7);
+  const totalBytes = dv.getUint32(9);
+  if (!totalChunks || totalBytes <= 0) return null;
+  const chunkData = buf.slice(13);
+  const key = `${fromId}:${reqId}`;
+  let entry = petalsTensorChunkInflight.get(key);
+  if (!entry || entry.totalChunks !== totalChunks || entry.totalBytes !== totalBytes) {
+    entry = { totalChunks, totalBytes, chunks: new Map(), expiresAt: now + 120000 };
+    petalsTensorChunkInflight.set(key, entry);
+  }
+  entry.expiresAt = now + 120000;
+  entry.chunks.set(chunkIndex, chunkData);
+  if (entry.chunks.size < totalChunks) return null;
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (let i = 0; i < totalChunks; i++) {
+    const part = entry.chunks.get(i);
+    if (!part) {
+      petalsTensorChunkInflight.delete(key);
+      return null;
+    }
+    const view = new Uint8Array(part);
+    merged.set(view, offset);
+    offset += view.byteLength;
+  }
+  petalsTensorChunkInflight.delete(key);
+  return merged.buffer;
+}
+
+function waitForDCBuffer(dc, lowWatermark = PETALS_DC_BUFFER_LOW) {
+  return new Promise((resolve) => {
+    if (!dc || dc.readyState !== 'open' || dc.bufferedAmount <= lowWatermark) {
+      resolve();
+      return;
+    }
+    const prev = dc.bufferedAmountLowThreshold;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { dc.bufferedAmountLowThreshold = prev; } catch(_) {}
+      try { dc.removeEventListener('bufferedamountlow', onLow); } catch(_) {}
+      resolve();
+    };
+    const onLow = () => finish();
+    try {
+      dc.bufferedAmountLowThreshold = lowWatermark;
+      dc.addEventListener('bufferedamountlow', onLow, { once: true });
+    } catch (_) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(finish, 150);
+  });
+}
+
+async function sendWireBuffer(dc, buf) {
+  if (!dc || dc.readyState !== 'open') throw new Error('DataChannel not open');
+  const wireBuf = buf instanceof ArrayBuffer
+    ? buf
+    : (ArrayBuffer.isView(buf)
+      ? buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+      : null);
+  if (!(wireBuf instanceof ArrayBuffer)) {
+    dc.send(buf);
+    return;
+  }
+  if (wireBuf.byteLength <= PETALS_DC_CHUNK_BYTES) {
+    dc.send(wireBuf);
+    return;
+  }
+
+  const reqId = wireBuf.byteLength >= 5 ? new DataView(wireBuf).getUint32(1) : 0;
+  const totalChunks = Math.ceil(wireBuf.byteLength / PETALS_DC_CHUNK_BYTES);
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * PETALS_DC_CHUNK_BYTES;
+    const end = Math.min(wireBuf.byteLength, start + PETALS_DC_CHUNK_BYTES);
+    dc.send(encodeTensorChunk(reqId, i, totalChunks, wireBuf.byteLength, wireBuf.slice(start, end)));
+    if (dc.bufferedAmount > PETALS_DC_BUFFER_HIGH) {
+      await waitForDCBuffer(dc);
+    }
+  }
+}
+
 // ── GLOBALS ──────────────────────────────────────────────────────────────
 let privKeyBytes = null, pubKeyHex = "", peerId = "";
 async function initIdentity() {
@@ -1137,6 +1251,7 @@ let petalsDesired = false;
 let petalsSyncPromise = null;
 let petalsSyncTimer = null;
 let petalsAutoTimer = null;
+const petalsTensorRoutes = new Map(); // reqId -> { upstreamPeerId, expiresAt }
 const PETALS_COMPONENTS = ['embeds', ...Array.from({ length: PETALS_TOTAL_LAYERS }, (_, i) => `layer_${i}`), 'head'];
 const PETALS_COMPONENT_MB = Object.fromEntries(PETALS_COMPONENTS.map(comp => [comp, (comp === 'embeds' || comp === 'head') ? 96 : 64]));
 
@@ -1153,13 +1268,34 @@ function petalsComponentSizeMB(comp) {
 }
 
 function estimatePetalsBudgetMB(info, isSelfNode = false) {
+  if (!isSelfNode && Number.isFinite(info?.petalsBudgetMB) && info.petalsBudgetMB > 0) {
+    return Math.round(info.petalsBudgetMB);
+  }
   const ram = Math.max(0, info?.memoryMB || 0);
   const mobileish = isSelfNode ? isMobile : (info?.deviceTier === 'C' || (info?.deviceTier === 'D' && ram <= 3072));
-  if (mobileish) return Math.max(96, Math.min(288, Math.floor(ram * 0.18)));
-  if (info?.deviceTier === 'B') return Math.max(256, Math.min(1024, Math.floor(ram * 0.32)));
-  if (info?.deviceTier === 'A') return Math.max(768, Math.floor(ram * 0.45));
-  if (info?.deviceTier === 'S') return Math.max(1024, Math.floor(ram * 0.5));
+  const engineLoaded = !!info?.hasEngine;
+  if (mobileish) {
+    const mobileCap = engineLoaded ? 288 : 512;
+    const mobileShare = engineLoaded ? 0.18 : 0.28;
+    return Math.max(128, Math.min(mobileCap, Math.floor(ram * mobileShare)));
+  }
+  if (info?.deviceTier === 'B') {
+    if (!engineLoaded) return Math.max(512, Math.min(1792, Math.floor(ram * 0.5)));
+    return Math.max(256, Math.min(1024, Math.floor(ram * 0.32)));
+  }
+  if (info?.deviceTier === 'A') {
+    if (!engineLoaded) return Math.max(1024, Math.min(2304, Math.floor(ram * 0.55)));
+    return Math.max(768, Math.floor(ram * 0.45));
+  }
+  if (info?.deviceTier === 'S') {
+    if (!engineLoaded) return Math.max(1536, Math.min(3072, Math.floor(ram * 0.65)));
+    return Math.max(1024, Math.floor(ram * 0.5));
+  }
   return Math.max(128, Math.min(512, Math.floor(ram * 0.25)));
+}
+
+function getLocalPetalsBudgetMB(engineLoaded = false) {
+  return estimatePetalsBudgetMB({ deviceTier, memoryMB, hasEngine: engineLoaded }, true);
 }
 
 function estimatePetalsPeerScore(info, isSelfNode = false) {
@@ -1170,46 +1306,123 @@ function estimatePetalsPeerScore(info, isSelfNode = false) {
   return tierScore + perfScore + ramScore + webgpuBonus + (isSelfNode ? 0.1 : 0);
 }
 
+async function maybeYieldLocalEngineToPetals(targetComponents = []) {
+  if (!engine || targetComponents.length === 0) return false;
+
+  const activeModel = CONFIG.models.find(m => m.id === currentModelId);
+  const activeModelVramMB = activeModel?.vramMB || 0;
+  const petalsLoadMB = targetComponents.reduce((sum, comp) => sum + petalsComponentSizeMB(comp), 0);
+  const effectiveVramMB = hasWebGPU ? (availableVRAM || Math.floor(memoryMB * 0.35)) : 0;
+  const shouldYield =
+    deviceTier === 'B' || deviceTier === 'C' || deviceTier === 'D' ||
+    (effectiveVramMB > 0 && (petalsLoadMB + activeModelVramMB) > Math.floor(effectiveVramMB * 0.85));
+
+  if (!shouldYield) return false;
+
+  try {
+    if (typeof engine.unload === 'function') {
+      await engine.unload();
+    }
+  } catch (err) {
+    console.warn('[Petals] engine unload failed:', err.message);
+    return false;
+  }
+
+  engine = null;
+  currentModelId = null;
+  currentModelLabel = 'none';
+  inferenceMode = 'federated';
+  myRole = 'relay';
+  showModelProgress(false);
+  updateInitStatus('Local engine cedido a Petals');
+  updateTierUI();
+  updateDeviceStats();
+  updateBenchmarkSidebar();
+  publishPresence();
+  return true;
+}
+
 function upsertPetalsPeer(pid, layers = [], active = false, stamp = Date.now()) {
   const uniqLayers = [...new Set((layers || []).filter(Boolean))];
   if (active || uniqLayers.length > 0) petalsReadyPeers.set(pid, { layers: uniqLayers, active: true, lastSeen: stamp });
   else petalsReadyPeers.delete(pid);
 }
 
+function rememberPetalsTensorRoute(reqId, upstreamPeerId) {
+  if (!upstreamPeerId) return;
+  petalsTensorRoutes.set(reqId, { upstreamPeerId, expiresAt: Date.now() + 90000 });
+}
+
+function getPetalsTensorRoute(reqId) {
+  const route = petalsTensorRoutes.get(reqId);
+  if (!route) return null;
+  if (route.expiresAt < Date.now()) {
+    petalsTensorRoutes.delete(reqId);
+    return null;
+  }
+  return route;
+}
+
+function forwardPetalsTensorRoute(reqId, rawMsg, finalize = false) {
+  const route = getPetalsTensorRoute(reqId);
+  if (!route) return false;
+  const upstreamPeer = peers.get(route.upstreamPeerId);
+  if (upstreamPeer?.dc?.readyState !== 'open') {
+    petalsTensorRoutes.delete(reqId);
+    return false;
+  }
+  try {
+    upstreamPeer.dc.send(rawMsg);
+    if (finalize) petalsTensorRoutes.delete(reqId);
+    return true;
+  } catch (_) {
+    petalsTensorRoutes.delete(reqId);
+    return false;
+  }
+}
+
 function buildPetalsParticipants() {
   const now = Date.now();
-  const participants = [];
-  if (petalsDesired || petalsActive || petalsMyLayers.length > 0) {
-    participants.push({
+  const includeRoomPeers = petalsDesired || petalsActive || petalsMyLayers.length > 0;
+  const participants = new Map();
+  if (includeRoomPeers) {
+    participants.set(peerId, {
       peerId,
       deviceTier,
       memoryMB,
       tps: localTPS,
       benchmark: localBenchmark,
       webgpu: hasWebGPU,
-      hasEngine: !!engine,
+      // Once a node enters Petals we plan as if the local engine is yielded.
+      hasEngine: false,
+      petalsBudgetMB: getLocalPetalsBudgetMB(false),
       isSelf: true,
       lastSeen: now,
     });
   }
-  for (const [pid, info] of petalsReadyPeers) {
-    const peer = peers.get(pid);
+  for (const [pid, peer] of peers) {
+    if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
     if (!peer) continue;
-    const lastSeen = info?.lastSeen || peer.lastSeen || now;
+    const readyInfo = petalsReadyPeers.get(pid);
+    const shouldInclude = includeRoomPeers || !!readyInfo;
+    if (!shouldInclude) continue;
+    const lastSeen = readyInfo?.lastSeen || peer.lastSeen || now;
     if (now - lastSeen > CONFIG.presenceTTLMs) continue;
-    participants.push({
+    participants.set(pid, {
       peerId: pid,
       deviceTier: peer.deviceTier || 'D',
       memoryMB: peer.memoryMB || 0,
       tps: peer.tps || 0,
       benchmark: peer.benchmark || 0,
       webgpu: !!peer.webgpu,
-      hasEngine: !!peer.hasEngine,
+      // Treat room peers as Petals candidates so every node derives the same shard plan.
+      hasEngine: false,
+      petalsBudgetMB: peer.petalsBudgetMB || 0,
       isSelf: false,
       lastSeen,
     });
   }
-  return participants;
+  return [...participants.values()];
 }
 
 function computePetalsAssignments(participants) {
@@ -1275,15 +1488,68 @@ async function ensurePetalsTokenizer() {
   return petalsTokenizer;
 }
 
+async function encodePetalsMessages(messages) {
+  const tokenizer = await ensurePetalsTokenizer();
+  const cleanMessages = (messages || [])
+    .filter(msg => msg && typeof msg.content === 'string' && msg.content.trim().length > 0)
+    .map(msg => ({ role: msg.role || 'user', content: msg.content }));
+
+  if (typeof tokenizer.apply_chat_template === 'function') {
+    try {
+      const formatted = await tokenizer.apply_chat_template(cleanMessages, {
+        tokenize: false,
+        add_generation_prompt: true,
+      });
+      const encoded = await tokenizer(formatted);
+      return Array.from(encoded.input_ids.data);
+    } catch (err) {
+      console.warn('[Petals] chat template failed:', err.message);
+    }
+  }
+
+  const fallbackPrompt = cleanMessages
+    .map(msg => `${msg.role === 'assistant' ? 'Assistant' : msg.role === 'system' ? 'System' : 'User'}: ${msg.content}`)
+    .join('\n') + '\nAssistant:';
+  const encoded = await tokenizer(fallbackPrompt);
+  return Array.from(encoded.input_ids.data);
+}
+
 function broadcastPetalsState() {
   const active = petalsMyLayers.length > 0;
   petalsActive = active;
   for (const [, p] of peers) {
     if (p.dc?.readyState === 'open') {
-      try { p.dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active })); } catch(_) {}
+      try { p.dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active, petalsBudgetMB: getLocalPetalsBudgetMB(false) })); } catch(_) {}
     }
   }
   publishPresence();
+}
+
+function getPetalsCoverage() {
+  const coverage = new Set(petalsMyLayers);
+  for (const [pid, info] of petalsReadyPeers) {
+    if (!info?.active) continue;
+    const peer = peers.get(pid);
+    if (pid !== peerId && peer?.dc?.readyState !== 'open') continue;
+    for (const comp of info.layers || []) coverage.add(comp);
+  }
+  return coverage;
+}
+
+function hasFullPetalsCoverage() {
+  const coverage = getPetalsCoverage();
+  return PETALS_COMPONENTS.every(comp => coverage.has(comp));
+}
+
+async function waitForPetalsCoverage(timeoutMs = 20000) {
+  if (hasFullPetalsCoverage()) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (petalsDesired || petalsActive) schedulePetalsSync('coverage', 0);
+    await new Promise(r => setTimeout(r, 500));
+    if (hasFullPetalsCoverage()) return true;
+  }
+  return hasFullPetalsCoverage();
 }
 
 function schedulePetalsSync(reason = 'update', delayMs = 800) {
@@ -1344,6 +1610,7 @@ async function syncPetalsShardPlan(reason = 'manual') {
         broadcastPetalsState();
         throw new Error('Sin shard asignable para este dispositivo.');
       }
+      await maybeYieldLocalEngineToPetals(targetComponents);
       await ensurePetalsTokenizer();
       const failedComponents = [];
 
@@ -1436,17 +1703,20 @@ async function petalsRunLayer(component, inputData, seqLen) {
   } else if (component === 'head') {
     const hiddenTensor = new ort.Tensor('float32', new Float32Array(inputData), [1, seqLen, PETALS_HIDDEN_SIZE]);
     const results = await session.run({ hidden_states: hiddenTensor });
-    const logits = results.logits.data;
+    const logitsTensor = results.logits;
+    const logits = logitsTensor.data;
     let maxIdx = 0, maxVal = -Infinity;
-    const vocabSize = 49152;
-    const startIndex = (seqLen - 1) * vocabSize;
+    const dims = Array.isArray(logitsTensor?.dims) ? logitsTensor.dims : [];
+    const vocabSize = Number(dims[dims.length - 1]) || 49152;
+    const startIndex = Math.max(0, logits.length - vocabSize);
     for (let i = 0; i < vocabSize; i++) { 
       const val = logits[startIndex + i];
       if (val > maxVal) { maxVal = val; maxIdx = i; } 
     }
-    return { tokenId: maxIdx, tokenStr: petalsTokenizer.decode([maxIdx]) };
+    const tokenStr = petalsTokenizer.decode([maxIdx]);
+    return { tokenId: maxIdx, tokenStr };
   } else {
-    // layer_N with causal mask
+    // layer_N with additive causal mask.
     const hiddenTensor = new ort.Tensor('float32', new Float32Array(inputData), [1, seqLen, PETALS_HIDDEN_SIZE]);
     const mask = new Float32Array(seqLen * seqLen);
     for (let i = 0; i < seqLen; i++) {
@@ -1574,16 +1844,26 @@ async function petalsForwardPass(tokenIds) {
       }
       const peer = peers.get(target);
       const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-      // On mobile, a 30s timeout per layer kills UX. Use 12s with one retry.
+      // First-token distributed passes can involve multiple local layers plus chunked transport.
       const isMobileCtx = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-      const layerTimeoutMs = isMobileCtx ? 12000 : 25000;
+      let remainingComps = 0;
+      for (let probe = currentComp; probe; probe = petalsGetNextComponent(probe)) {
+        remainingComps++;
+        if (remainingComps > 32) break;
+      }
+      const layerTimeoutMs = (isMobileCtx ? 20000 : 30000) + (Math.min(remainingComps, 16) * (isMobileCtx ? 2000 : 1500));
       let res = await new Promise((resolve) => {
         const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, layerTimeoutMs);
         fedPending.set(reqId, {
           resolve: (res) => { clearTimeout(timeout); resolve(res); },
           onChunk: () => {}
         });
-        peer.dc.send(encodeMsg(MSG.PETALS_TENSOR, reqId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
+        sendWireBuffer(peer.dc, encodeMsg(MSG.PETALS_TENSOR, reqId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }))
+          .catch(() => {
+            clearTimeout(timeout);
+            fedPending.delete(reqId);
+            resolve(null);
+          });
       });
       // One retry on timeout: try another peer that has this component
       if (!res) {
@@ -1605,7 +1885,12 @@ async function petalsForwardPass(tokenIds) {
               resolve: (r) => { clearTimeout(t2); resolve(r); },
               onChunk: () => {}
             });
-            altPeer.dc.send(encodeMsg(MSG.PETALS_TENSOR, retryId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }));
+            sendWireBuffer(altPeer.dc, encodeMsg(MSG.PETALS_TENSOR, retryId, 0, { component: currentComp, data: currentData, seqLen: currentSeqLen }))
+              .catch(() => {
+                clearTimeout(t2);
+                fedPending.delete(retryId);
+                resolve(null);
+              });
           });
         }
       }
@@ -1760,13 +2045,12 @@ async function runPetalsInference(userMessage) {
   }
 
   const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
-  const promptText = sysPrompt + "\nUser: " + userMessage + "\nAssistant:";
-  if (!petalsTokenizer) { 
-      const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
-      petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
-  }
-  const encoded = await petalsTokenizer(promptText);
-  let allTokenIds = Array.from(encoded.input_ids.data);
+  const promptMessages = [
+    { role: "system", content: sysPrompt },
+    ...chatHistory.slice(-10).filter(msg => msg.role === 'user' || msg.role === 'assistant'),
+  ];
+  let allTokenIds = await encodePetalsMessages(promptMessages);
+  const generatedTokenIds = [];
 
   aiMsgEl.querySelector('.typing-indicator')?.remove();
   const contentEl = aiMsgEl.querySelector('.msg-content');
@@ -1776,6 +2060,7 @@ async function runPetalsInference(userMessage) {
   aiMsgEl.querySelector('.msg-body').appendChild(pill);
 
   try {
+    await waitForPetalsCoverage(20000);
     while (tokenCount < 200) {
       const result = await petalsForwardPass(allTokenIds);
       if (!result || result.tokenId === undefined) { 
@@ -1785,12 +2070,20 @@ async function runPetalsInference(userMessage) {
 
       const { tokenId, tokenStr } = result;
       // Check for end-of-text tokens
-      if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) break;
+      if (tokenId === 0 || tokenStr.includes('endoftext') || tokenStr.includes('im_end')) {
+        if (!fullResponse && tokenStr && /\[|error|missing layer/i.test(tokenStr)) {
+          fullResponse = tokenStr;
+          contentEl.textContent = fullResponse;
+        }
+        break;
+      }
 
-      fullResponse += tokenStr;
+      generatedTokenIds.push(tokenId);
+      fullResponse = petalsTokenizer.decode(generatedTokenIds);
       contentEl.textContent = fullResponse;
       document.getElementById('messages').scrollTop = 99999;
-      tokenCount++;
+      tokenCount = generatedTokenIds.length;
+      if (fullResponse.trim().length >= 12 && /[.!?]\s*$/.test(fullResponse.trim())) break;
 
       // Append new token and recompute full context next iteration
       allTokenIds.push(tokenId);
@@ -1813,24 +2106,28 @@ async function runPetalsInference(userMessage) {
 // Handle incoming Petals tensor from peer
 async function handlePetalsTensor(fromId, m, dc = null) {
   const { component, data, seqLen } = m.payload;
-  if (!petalsONNXSessions[component]) return;
+  if (!petalsONNXSessions[component]) {
+    console.warn('[Petals] missing', component, 'for', fromId.slice(0, 6));
+    return;
+  }
+  rememberPetalsTensorRoute(m.reqId, fromId);
 
   try {
     const result = await petalsRunLayer(component, data, seqLen);
     const nextComp = petalsGetNextComponent(component);
     
     // Helper to send back either to specific DC or to global peer
-    const sendResponse = (msg) => {
+    const sendResponse = async (msg) => {
         if (dc && dc.readyState === 'open') {
-            dc.send(msg);
-        } else {
-            const peer = peers.get(fromId);
-            if (peer?.dc?.readyState === 'open') peer.dc.send(msg);
+            await sendWireBuffer(dc, msg);
+            return;
         }
+        const peer = peers.get(fromId);
+        if (peer?.dc?.readyState === 'open') await sendWireBuffer(peer.dc, msg);
     };
 
     if (component === 'head' || !nextComp) {
-      sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
+      await sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, result));
       return;
     }
 
@@ -1843,13 +2140,13 @@ async function handlePetalsTensor(fromId, m, dc = null) {
         chainData = await petalsRunLayer(comp, chainData.data, chainData.seqLen);
         // If this was the head, chainData is a token — send it back
         if (comp === 'head') {
-          sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
+          await sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
           return;
         }
         const nc = petalsGetNextComponent(comp);
         if (!nc) {
           // Unexpected end of chain — send what we have
-          sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
+          await sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, chainData));
           return;
         }
         if (!petalsONNXSessions[nc]) {
@@ -1857,10 +2154,10 @@ async function handlePetalsTensor(fromId, m, dc = null) {
           const target = petalsFindPeerForComponent(nc);
           if (target) {
             const tp = peers.get(target);
-            if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nc, data: chainData.data, seqLen: chainData.seqLen }));
+            if (tp?.dc?.readyState === 'open') await sendWireBuffer(tp.dc, encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nc, data: chainData.data, seqLen: chainData.seqLen }));
           } else {
             // No peer has it — inform requester so it doesn't time out 30s
-            sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, { tokenId: 0, tokenStr: '[missing layer]' }));
+            await sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, { tokenId: 0, tokenStr: '[missing layer]' }));
           }
           return;
         }
@@ -1870,7 +2167,9 @@ async function handlePetalsTensor(fromId, m, dc = null) {
       const target = petalsFindPeerForComponent(nextComp);
       if (target) {
         const tp = peers.get(target);
-        if (tp?.dc?.readyState === 'open') tp.dc.send(encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nextComp, data: result.data, seqLen: result.seqLen }));
+        if (tp?.dc?.readyState === 'open') await sendWireBuffer(tp.dc, encodeMsg(MSG.PETALS_TENSOR, m.reqId, 0, { component: nextComp, data: result.data, seqLen: result.seqLen }));
+      } else {
+        await sendResponse(encodeMsg(MSG.TOK_RES, m.reqId, 0, { tokenId: 0, tokenStr: '[missing layer]' }));
       }
     }
   } catch (err) {
@@ -3104,7 +3403,7 @@ function publishPresence() {
     currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: myRole,
     hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now(),
     nickname: myNickname, repScore: reputation.myScore, benchmark: localBenchmark,
-    petalsActive, petalsLayers: petalsMyLayers,
+    petalsActive, petalsLayers: petalsMyLayers, petalsBudgetMB: getLocalPetalsBudgetMB(false),
     // Flag so peers know this is a real node, not a simulator virtual peer
     isSimNode: false,
   });
@@ -3174,19 +3473,22 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
       text = res.choices[0]?.message?.content || "";
     } else if (petalsActive && petalsTokenizer) {
       // Petals ONNX path — build prompt from messages and run forward pass
-      const sysMsg = signal.messages.find(m => m.role === 'system')?.content || "You are a helpful AI assistant.";
-      const userMsg = signal.messages.filter(m => m.role !== 'system').map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
-      const promptText = sysMsg + "\n" + userMsg + "\nAssistant:";
-      const encoded = await petalsTokenizer(promptText);
-      let allTokenIds = Array.from(encoded.input_ids.data);
+      const promptMessages = Array.isArray(signal.messages) && signal.messages.length
+        ? signal.messages
+        : [{ role: 'system', content: "You are a helpful AI assistant." }];
+      let allTokenIds = await encodePetalsMessages(promptMessages);
+      const generatedTokenIds = [];
       let generated = "";
       const maxTok = Math.min(signal.max_tokens || 200, 200);
+      await waitForPetalsCoverage(20000);
       for (let i = 0; i < maxTok; i++) {
         const result = await petalsForwardPass(allTokenIds);
         if (!result || result.tokenId === undefined) break;
         if (result.tokenId === 0 || result.tokenStr?.includes('im_end') || result.tokenStr?.includes('endoftext')) break;
-        generated += result.tokenStr;
+        generatedTokenIds.push(result.tokenId);
+        generated = petalsTokenizer.decode(generatedTokenIds);
         allTokenIds.push(result.tokenId);
+        if (generated.trim().length >= 12 && /[.!?]\s*$/.test(generated.trim())) break;
         if (allTokenIds.length > 256) break;
       }
       text = generated || "[sin respuesta del enjambre]";
@@ -3228,7 +3530,7 @@ function handlePeerPresence(p) {
       deviceTier: p.deviceTier, webgpu: p.webgpu, memoryMB: p.memoryMB, modelSize: p.modelSize || 0, moeRole: p.moeRole || 'relay',
       tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null, inferenceMode: p.inferenceMode || 'relay',
       lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
-      nickname: p.nickname || null, repScore: p.repScore || 0, benchmark: p.benchmark || 0, petalsActive: !!p.petalsActive,
+      nickname: p.nickname || null, repScore: p.repScore || 0, benchmark: p.benchmark || 0, petalsActive: !!p.petalsActive, petalsBudgetMB: p.petalsBudgetMB || 0,
     });
     if (peerId < p.peerId) { if (getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }
     else { setTimeout(() => { const peer = peers.get(p.peerId); if (peer && (!peer.conn || peer.conn.connectionState === 'closed') && getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }, 3000 + Math.random() * 2000); }
@@ -3249,6 +3551,7 @@ function handlePeerPresence(p) {
       repScore: p.repScore || peer.repScore,
       benchmark: p.benchmark || peer.benchmark || 0,
       petalsActive: !!p.petalsActive,
+      petalsBudgetMB: p.petalsBudgetMB || peer.petalsBudgetMB || 0,
     });
   }
 
@@ -3376,9 +3679,9 @@ function setupDC(dc, remoteId, myVirtualId = null) {
         setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: vp.petalsLayers, active: true })); }, 100);
       }
     } else {
-      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore, petalsLayers: petalsMyLayers, petalsActive }));
+      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore, petalsLayers: petalsMyLayers, petalsActive, petalsBudgetMB: getLocalPetalsBudgetMB(false) }));
       if (petalsActive) {
-        setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active: true })); }, 100);
+        setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active: true, petalsBudgetMB: getLocalPetalsBudgetMB(false) })); }, 100);
       }
       const peer = peers.get(remoteId);
       if (peer) { peer.pingTimer = setInterval(() => { if (dc.readyState === "open") { peer.lastPingSent = performance.now(); dc.send(encodeMsg(MSG.PING, 0, 0, null)); } }, CONFIG.pingIntervalMs); }
@@ -3393,7 +3696,13 @@ function setupDC(dc, remoteId, myVirtualId = null) {
 }
 
 async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
-  const m = decodeMsg(buf); 
+  let wireBuf = buf;
+  if (wireBuf instanceof ArrayBuffer && wireBuf.byteLength > 0 && new DataView(wireBuf).getUint8(0) === MSG.FLOW_TENSOR_CHUNK) {
+    const rebuilt = receiveTensorChunk(fromId, wireBuf);
+    if (!rebuilt) return;
+    wireBuf = rebuilt;
+  }
+  const m = decodeMsg(wireBuf); 
 
   // Virtual Peer Inference Interception
   if (myVirtualId) {
@@ -3478,6 +3787,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         peer.benchmark = m.payload.benchmark || 0;
         peer.nickname = m.payload.nickname || peer.nickname;
         peer.repScore = m.payload.repScore || 0;
+        peer.petalsBudgetMB = m.payload.petalsBudgetMB || peer.petalsBudgetMB || 0;
         peer.petalsActive = !!m.payload.petalsActive || (m.payload.petalsLayers?.length > 0);
         if (peer.petalsActive) upsertPetalsPeer(fromId, m.payload.petalsLayers || [], true, Date.now());
         else petalsReadyPeers.delete(fromId);
@@ -3512,6 +3822,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
       if (m.payload) {
         const layers = Array.isArray(m.payload.layers) ? m.payload.layers : [];
         peer.petalsActive = !!m.payload.active || layers.length > 0;
+        peer.petalsBudgetMB = m.payload.petalsBudgetMB || peer.petalsBudgetMB || 0;
         if (peer.petalsActive) upsertPetalsPeer(fromId, layers, true, Date.now());
         else petalsReadyPeers.delete(fromId);
         if (petalsDesired || petalsActive) schedulePetalsSync('petals-ready', 300);
@@ -3523,6 +3834,9 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
     case MSG.TOK_RES:
     case MSG.TOK_END:
     case MSG.MOE_RES:
+      if (!fedPending.has(m.reqId) && forwardPetalsTensorRoute(m.reqId, wireBuf, true)) {
+        break;
+      }
       if (m.payload && fedPending.has(m.reqId)) { 
         const { resolve } = fedPending.get(m.reqId); 
         fedPending.delete(m.reqId); 
@@ -3604,6 +3918,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
       break;
     case MSG.TOK_CHUNK:
       if (m.payload && fedPending.has(m.reqId)) fedPending.get(m.reqId).onChunk?.(m.payload.token, m.payload.hopNode);
+      else forwardPetalsTensorRoute(m.reqId, wireBuf, false);
       break;
     case MSG.CONSENSUS_RES:
       if (m.payload && consensusPending.has(m.reqId)) { consensusPending.get(m.reqId).resolve(m.payload); }
@@ -3683,6 +3998,8 @@ function updateHiveUI() {
   document.getElementById('hive-d').textContent = counts.D;
   const total = counts.S + counts.A + counts.B + counts.C + counts.D;
   document.getElementById('chip-peers-text').textContent = `HIVE: ${total}`;
+  const petalsPeerCount = Array.from(petalsReadyPeers.entries()).filter(([pid, info]) => pid !== peerId && info?.active && (Date.now() - (info.lastSeen || 0) <= CONFIG.presenceTTLMs)).length;
+  document.getElementById('petals-peers').textContent = String(petalsPeerCount);
 
   const hint = document.getElementById('hive-missing-hint');
   if (counts.S === 0) {
