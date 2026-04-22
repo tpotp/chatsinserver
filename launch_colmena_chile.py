@@ -111,7 +111,7 @@ def main() -> int:
         print("Browser            : fallback del sistema")
     print()
     print("Pasos de manana:")
-    print("1. Espera a que el host termine de cargar la colmena y los shards.")
+    print("1. Espera a que el host muestre 'Cerebro local ... listo' y 'La colmena se ha creado'.")
     print("2. Abre la URL 'Celular' desde tu Redmi 10C en Entel 4G o 5G.")
     print("3. Entra a la misma sala y hablale al Pudu.")
     print("4. Si pruebas desde otro navegador del PC, usa 'Cliente liviano' para enrutar sin shards locales.")

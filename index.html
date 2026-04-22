@@ -2211,20 +2211,28 @@ function getPuduStageState() {
   for (const stage of PUDU_HIVE_STAGES) {
     if (peerCount >= stage.minPeers) activeStage = stage;
   }
+  const activeStageView = activeStage
+    ? {
+        ...activeStage,
+        modelLabel: (hiveSimulation.active && currentModelLabel && currentModelLabel !== 'none')
+          ? currentModelLabel
+          : activeStage.modelLabel,
+      }
+    : null;
   const nextStage = PUDU_HIVE_STAGES.find(stage => peerCount < stage.minPeers) || null;
   const coverage = getPetalsCoverage();
   const coverageCount = Math.max(coverage.size, reportedCollective.coverageCount || 0);
   const coveragePct = Math.round((coverageCount / PETALS_COMPONENTS.length) * 100);
-  const peerGoal = activeStage?.minPeers || firstStage.minPeers;
+  const peerGoal = activeStageView?.minPeers || firstStage.minPeers;
   const peerPct = Math.min(100, Math.round((peerCount / peerGoal) * 100));
-  const activationPct = activeStage ? Math.min(100, coveragePct) : Math.min(peerPct, coveragePct || peerPct);
+  const activationPct = activeStageView ? Math.min(100, coveragePct) : Math.min(peerPct, coveragePct || peerPct);
   const collectiveReady = reportedCollective.ready || hasCollectivePetalsAvailability();
-  const ready = !!activeStage && collectiveReady && coverageCount >= PETALS_COMPONENTS.length;
+  const ready = !!activeStageView && collectiveReady && coverageCount >= PETALS_COMPONENTS.length;
   const missingPeers = Math.max(0, firstStage.minPeers - peerCount);
   const missingShards = Math.max(0, PETALS_COMPONENTS.length - coverageCount);
 
   let progressText = '';
-  if (!activeStage) {
+  if (!activeStageView) {
     progressText = missingPeers > 0
       ? `Faltan ${missingPeers} celulares para despertar al pudu.`
       : `La colmena llego al quorum, pero faltan ${missingShards} shards por iluminar.`;
@@ -2235,7 +2243,7 @@ function getPuduStageState() {
   } else if (nextStage) {
     progressText = `La colmena se ha creado. ${peerCount}/${nextStage.minPeers} celulares hacia ${nextStage.label}.`;
   } else {
-    progressText = `El ${activeStage.label} ya esta hablando desde la colmena chilena.`;
+    progressText = `El ${activeStageView.label} ya esta hablando desde la colmena chilena.`;
   }
 
   return {
@@ -2243,7 +2251,7 @@ function getPuduStageState() {
     coverageCount,
     coveragePct,
     activationPct,
-    activeStage,
+    activeStage: activeStageView,
     nextStage,
     ready,
     missingPeers,
@@ -6256,41 +6264,22 @@ async function boot() {
     simLog(`     = ${(projected/DC_TPS_T4*100).toFixed(0)}% de un T4 · ${(projected/DC_TPS_A100*100).toFixed(0)}% de un A100`, 'sim-pass');
     simLog(`     Respuesta de 20 tokens en ~${(SEQ/projected).toFixed(1)}s (vs ${(SEQ/DC_TPS_T4).toFixed(1)}s en T4)`, 'sim-pass');
 
-    // ── ACTIVAR PETALS REAL ───────────────────────────────────────────────
-    if (!petalsActive) {
-      simLog(`\n${'═'.repeat(72)}`, 'sim-title');
-      simLog(`🔥 ACTIVANDO SmolLM2-1.7B REAL (WebGPU/WASM)`, 'sim-title');
-      simLog(`   Pipeline físico se ejecutará con la arquitectura [D+E] en el PC host`, 'sim-info');
-      try {
-        const { AutoTokenizer } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0');
-        petalsTokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-1.7B-Instruct');
-        ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
-        ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-        let loaded = 0;
-        for (const comp of allComponents) {
-          const file = comp==='head' ? 'lm_head.onnx' : `${comp}.onnx`;
-          const mb = comp==='embeds'||comp==='head' ? 96 : 64;
-          document.getElementById('petals-status').textContent = `${comp} (${loaded+1}/${allComponents.length})`;
-          simLog(`  ⬇️ ${file} (~${mb}MB) [${loaded+1}/${allComponents.length}]`, 'sim-info');
-          petalsONNXSessions[comp] = await ort.InferenceSession.create(
-            PETALS_CDN + file, { executionProviders: ['webgpu','wasm'] }
-          );
-          loaded++;
-          simLog(`     ✅ ${file}`, 'sim-pass');
-        }
-        petalsActive = true;
-        petalsMyLayers = [...allComponents];
-        document.getElementById('petals-status').textContent = 'Online (1.7B-Q8 · DSD)';
-        document.getElementById('petals-status').style.color = 'var(--peer-online)';
-        document.getElementById('petals-my-layers').textContent = allComponents.length + ' capas (DSD activo)';
-        simLog(`\n✅ SmolLM2-1.7B cargado · Arquitectura DSD+KVCache activa`, 'sim-pass');
-      } catch(e) {
-        simLog(`❌ Error: ${e.message}`, 'sim-fail');
-      }
-    }
+    // ── ACTIVAR COBERTURA VIRTUAL DE COLMENA ──────────────────────────────
+    simLog(`\n${'═'.repeat(72)}`, 'sim-title');
+    simLog(`🌀 ACTIVANDO COBERTURA VIRTUAL DE SHARDS`, 'sim-title');
+    simLog(`   La simulacion ya representa los 26 shards repartidos entre celulares virtuales`, 'sim-info');
+    simLog(`   El host cargara un cerebro local mejor para responder sin descargar ONNX reales`, 'sim-info');
+    petalsActive = true;
+    petalsDesired = true;
+    petalsMyLayers = [...allComponents];
+    petalsONNXSessions = {};
+    document.getElementById('petals-status').textContent = 'Online (colmena simulada)';
+    document.getElementById('petals-status').style.color = 'var(--peer-online)';
+    document.getElementById('petals-my-layers').textContent = allComponents.length + ' shards virtuales';
+    simLog(`\n✅ Cobertura virtual completa · 26/26 shards simulados`, 'sim-pass');
 
     simLog(`\n✅ ${n} nodos chilenos · Arquitectura v9 lista`, 'sim-pass');
-    simLog(`➡️ Conéctate desde un celular real — recibirá SmolLM2-1.7B vía pipeline DSD`, 'sim-pass');
+    simLog(`➡️ Conéctate desde un celular real — recibirá el cerebro local colectivo del host`, 'sim-pass');
     updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
     publishPresence();
     ensureSimulationCollectiveEngine(getPuduStageState()).catch(err => console.warn('[Pudu sim engine]', err.message));
