@@ -40,6 +40,8 @@
   --transition-med: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   --gold: #f1c40f;
   --gold-glow: rgba(241, 196, 15, 0.4);
+  --pudu-chat-drift-x: 0px;
+  --pudu-chat-drift-y: 0px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -161,6 +163,368 @@ body::before {
 .hive-tier-count { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
 .hive-missing { font-size: 10px; color: var(--tier-s); margin-top: 6px; padding: 6px 8px; background: rgba(241,196,15,0.08); border: 1px solid rgba(241,196,15,0.2); border-radius: var(--radius-sm); cursor: pointer; transition: background var(--transition-fast); }
 .hive-missing:hover { background: rgba(241,196,15,0.15); }
+.pudu-card {
+  border: 1px solid rgba(120, 255, 176, 0.16);
+  border-radius: 18px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(71, 193, 120, 0.18), transparent 42%),
+    radial-gradient(circle at bottom right, rgba(255, 211, 95, 0.14), transparent 38%),
+    linear-gradient(180deg, rgba(17, 27, 26, 0.96), rgba(10, 16, 16, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 32px rgba(0,0,0,0.26);
+}
+.pudu-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.pudu-head-copy { flex: 1; min-width: 0; }
+.pudu-avatar {
+  --pudu-tilt-x-deg: 0deg;
+  --pudu-tilt-y-deg: 0deg;
+  --pudu-tilt-x-orbit: 0deg;
+  --pudu-tilt-y-orbit: 0deg;
+  --pudu-breath-shift: 0px;
+  --pudu-mouth-scale: 0.28;
+  --pudu-eye-scale: 1;
+  --pudu-aura-opacity: 0.38;
+  --pudu-glow-opacity: 0.42;
+  --pudu-pupil-x: 0px;
+  --pudu-pupil-y: 0px;
+  --pudu-deer-lean: 0deg;
+  --pudu-scale: 1;
+  width: 96px;
+  height: 92px;
+  padding: 0;
+  border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  appearance: none;
+  display: block;
+  background:
+    radial-gradient(circle at 25% 20%, rgba(255,255,255,0.18), transparent 22%),
+    radial-gradient(circle at 80% 25%, rgba(255,214,102,0.18), transparent 28%),
+    linear-gradient(180deg, rgba(14, 34, 30, 0.96), rgba(8, 16, 18, 0.98));
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.32), 0 0 0 rgba(102,255,163,0);
+  transition: transform .16s ease, box-shadow .25s ease, filter .25s ease, background .25s ease;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.pudu-avatar.awake {
+  box-shadow: 0 16px 34px rgba(0,0,0,0.34), 0 0 30px rgba(102,255,163,0.18);
+  filter: saturate(1.2);
+}
+.pudu-avatar:hover { transform: translateY(-1px) scale(1.01); }
+.pudu-avatar.is-speaking { box-shadow: 0 18px 36px rgba(0,0,0,0.36), 0 0 34px rgba(102,255,163,0.24); }
+.pudu-avatar.is-petting { filter: saturate(1.28) brightness(1.04); }
+.pudu-avatar-scene {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform:
+    perspective(260px)
+    rotateX(var(--pudu-tilt-y-deg))
+    rotateY(var(--pudu-tilt-x-deg))
+    scale(var(--pudu-scale));
+}
+.pudu-aura,
+.pudu-orbit,
+.pudu-forest-glow,
+.pudu-touch-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pudu-aura {
+  inset: -16px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(102,255,163,0.34), transparent 58%),
+    radial-gradient(circle at 50% 70%, rgba(250,204,21,0.24), transparent 60%);
+  filter: blur(14px);
+  opacity: var(--pudu-aura-opacity);
+}
+.pudu-orbit::before,
+.pudu-orbit::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  border: 1px solid rgba(102,255,163,0.16);
+  inset: 8px 10px 18px;
+  transform: rotate(var(--pudu-tilt-x-orbit));
+}
+.pudu-orbit::after {
+  inset: 14px 18px 26px;
+  border-color: rgba(250,204,21,0.14);
+  transform: rotate(var(--pudu-tilt-y-orbit));
+}
+.pudu-forest-glow {
+  background:
+    radial-gradient(circle at 50% 100%, rgba(74,222,128,0.18), transparent 42%),
+    radial-gradient(circle at 10% 100%, rgba(250,204,21,0.14), transparent 30%);
+  mix-blend-mode: screen;
+  opacity: var(--pudu-glow-opacity);
+}
+.pudu-deer {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  width: 62px;
+  height: 62px;
+  transform:
+    translateX(-50%)
+    translateY(var(--pudu-breath-shift))
+    rotate(var(--pudu-deer-lean));
+}
+.pudu-ear {
+  position: absolute;
+  top: 5px;
+  width: 18px;
+  height: 24px;
+  border-radius: 12px 12px 8px 8px;
+  background: linear-gradient(180deg, #8c5b31, #5a3518);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.pudu-ear::after {
+  content: '';
+  position: absolute;
+  inset: 4px 4px 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,212,188,0.9), rgba(255,192,154,0.3));
+}
+.pudu-ear-left {
+  left: 6px;
+  transform: rotate(-24deg);
+}
+.pudu-ear-right {
+  right: 6px;
+  transform: rotate(24deg);
+}
+.pudu-face {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  width: 54px;
+  height: 42px;
+  transform: translateX(-50%);
+  border-radius: 22px 22px 20px 20px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(255,255,255,0.16), transparent 26%),
+    linear-gradient(180deg, #9b6d3f, #6a421e 64%, #563014 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 0 -10px 12px rgba(0,0,0,0.18);
+}
+.pudu-eye {
+  position: absolute;
+  top: 12px;
+  width: 11px;
+  height: 14px;
+  border-radius: 999px;
+  background: #111318;
+  transform: scaleY(var(--pudu-eye-scale));
+  transform-origin: center;
+  overflow: hidden;
+}
+.pudu-eye-left { left: 12px; }
+.pudu-eye-right { right: 12px; }
+.pudu-eye-pupil {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f5f7fb;
+  transform: translate(calc(-50% + var(--pudu-pupil-x)), calc(-50% + var(--pudu-pupil-y)));
+}
+.pudu-snout {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 28px;
+  height: 18px;
+  transform: translateX(-50%);
+  border-radius: 14px 14px 12px 12px;
+  background: linear-gradient(180deg, #d0a170, #c88c56);
+}
+.pudu-nose {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 9px;
+  height: 6px;
+  border-radius: 999px;
+  background: #1d1d24;
+  transform: translateX(-50%);
+}
+.pudu-mouth {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 13px;
+  height: 7px;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(180deg, rgba(72,18,30,0.65), rgba(110,33,48,0.92));
+  transform: translateX(-50%) scaleY(var(--pudu-mouth-scale));
+  transform-origin: center top;
+}
+.pudu-touch-ring {
+  inset: 6px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+.pudu-status-whisper {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #d6fbe2;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.pudu-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pudu-control-btn {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+.pudu-control-btn:hover {
+  background: rgba(102,255,163,0.1);
+  border-color: rgba(102,255,163,0.24);
+  color: #d9ffe7;
+}
+.pudu-control-btn.active {
+  background: rgba(102,255,163,0.18);
+  border-color: rgba(102,255,163,0.32);
+  color: #f4fff8;
+}
+.pudu-control-btn:active { transform: scale(0.96); }
+.pudu-spark {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(102,255,163,0.85) 45%, rgba(102,255,163,0) 75%);
+  animation: puduSpark 0.8s ease-out forwards;
+}
+@keyframes puduSpark {
+  from { opacity: 0.95; transform: translate(-50%, -50%) scale(0.25); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(2.4); }
+}
+.pudu-stage-name { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: #d9ffe7; }
+.pudu-stage-model { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
+.pudu-progress-track {
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.pudu-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4ade80, #facc15 65%, #f97316);
+  transition: width .35s ease, filter .35s ease;
+}
+.pudu-progress-fill.awake {
+  filter: saturate(1.25) brightness(1.08);
+}
+.pudu-progress-text {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.pudu-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pudu-stat {
+  padding: 8px 9px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.pudu-stat-label {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.pudu-stat-value {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.pudu-stage-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+.pudu-stage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 11px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  font-size: 10px;
+}
+.pudu-stage-row.active {
+  border-color: rgba(102,255,163,0.22);
+  background: rgba(102,255,163,0.08);
+}
+.pudu-stage-row.locked {
+  opacity: 0.55;
+}
+.pudu-stage-title { color: var(--text-primary); font-weight: 600; }
+.pudu-stage-meta { color: var(--text-secondary); font-family: var(--font-mono); }
+#mobile-pudu-panel {
+  display: none;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+}
+.pudu-mobile-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.pudu-mobile-copy {
+  flex: 1;
+  min-width: 0;
+}
+.pudu-mobile-copy .pudu-progress-track {
+  margin-top: 7px;
+}
+.room-bar,
+#input-area,
+#petals-fab {
+  transform: translate3d(var(--pudu-chat-drift-x), var(--pudu-chat-drift-y), 0);
+  transition: transform .18s ease-out;
+}
 
 #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .message { max-width: 720px; width: 100%; margin: 0 auto; display: flex; gap: 10px; animation: messageIn 0.3s ease-out; }
@@ -537,14 +901,17 @@ body::before {
   .room-bar { padding: 4px 8px; font-size: 10px; }
   .benchmark-columns { flex-direction: column; }
   .benchmark-col { border-right: none; border-bottom: 1px solid var(--border-subtle); }
+  #mobile-pudu-panel { display: block; }
+  .pudu-avatar { width: 84px; height: 80px; border-radius: 22px; }
+  .pudu-status-whisper { font-size: 9px; padding: 6px 8px; }
 }
 </style>
 </head>
 <body>
 
 <div id="init-overlay">
-  <div class="init-logo">HIVE MIND</div>
-  <div class="init-status" id="init-status">Initializing…</div>
+  <div class="init-logo">PUDU MIND</div>
+  <div class="init-status" id="init-status">Despertando la colmena…</div>
   <div class="init-progress"><div class="init-progress-fill" id="init-progress-fill"></div></div>
 </div>
 
@@ -579,6 +946,45 @@ body::before {
         <span class="nickname-display" id="nickname-display" title="Click to edit">Anonymous</span>
       </div>
       <div class="stat-row"><span class="stat-label">Peer ID</span><span class="stat-value" id="stat-peer-id" style="font-size:9px;">—</span></div>
+    </div>
+
+    <div class="sidebar-section" id="pudu-hive-section">
+      <h3>🦌 Pudu Mistico</h3>
+      <div class="pudu-card">
+        <div class="pudu-head">
+          <button class="pudu-avatar" id="pudu-avatar" type="button" aria-label="Acaricia al pudu mistico"></button>
+          <div class="pudu-head-copy">
+            <div class="pudu-stage-name" id="pudu-stage-name" data-pudu-sync="stage-name">Dormido</div>
+            <div class="pudu-stage-model" id="pudu-stage-model" data-pudu-sync="stage-model">Sin colmena activa</div>
+            <div class="pudu-status-whisper" id="pudu-whisper" data-pudu-sync="whisper">Acaricialo mientras despierta la colmena.</div>
+            <div class="pudu-controls">
+              <button class="pudu-control-btn pudu-motion-btn" type="button">Movimiento</button>
+              <button class="pudu-control-btn pudu-voice-btn" type="button">Voz</button>
+            </div>
+          </div>
+        </div>
+        <div class="pudu-progress-track"><div class="pudu-progress-fill" id="pudu-progress-fill" data-pudu-fill="main"></div></div>
+        <div class="pudu-progress-text" id="pudu-progress-text" data-pudu-sync="progress-text">Faltan mas celulares para despertar al pudu.</div>
+        <div class="pudu-stats">
+          <div class="pudu-stat">
+            <span class="pudu-stat-label">Colmena</span>
+            <span class="pudu-stat-value" id="pudu-peer-count">1 / 5</span>
+          </div>
+          <div class="pudu-stat">
+            <span class="pudu-stat-label">Shards</span>
+            <span class="pudu-stat-value" id="pudu-coverage-text">0 / 26</span>
+          </div>
+          <div class="pudu-stat">
+            <span class="pudu-stat-label">Estado</span>
+            <span class="pudu-stat-value" id="pudu-ready-text">Ensamblando</span>
+          </div>
+          <div class="pudu-stat">
+            <span class="pudu-stat-label">Latencia Chile</span>
+            <span class="pudu-stat-value" id="pudu-latency-text">—</span>
+          </div>
+        </div>
+        <div class="pudu-stage-list" id="pudu-stage-list"></div>
+      </div>
     </div>
 
     <div class="sidebar-section">
@@ -685,6 +1091,22 @@ body::before {
     </div>
   </aside>
   <div id="main">
+    <div id="mobile-pudu-panel" class="pudu-card">
+      <div class="pudu-mobile-row">
+        <button class="pudu-avatar" id="pudu-avatar-mobile" type="button" aria-label="Acaricia al pudu mistico"></button>
+        <div class="pudu-mobile-copy">
+          <div class="pudu-stage-name" data-pudu-sync="stage-name">Dormido</div>
+          <div class="pudu-stage-model" data-pudu-sync="stage-model">Sin colmena activa</div>
+          <div class="pudu-progress-track"><div class="pudu-progress-fill" data-pudu-fill="mobile"></div></div>
+          <div class="pudu-progress-text" data-pudu-sync="progress-text">Faltan mas celulares para despertar al pudu.</div>
+          <div class="pudu-status-whisper" data-pudu-sync="whisper">Acaricialo mientras despierta la colmena.</div>
+          <div class="pudu-controls">
+            <button class="pudu-control-btn pudu-motion-btn" type="button">Movimiento</button>
+            <button class="pudu-control-btn pudu-voice-btn" type="button">Voz</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="messages"></div>
     <div id="input-area">
       <div id="input-row">
@@ -896,6 +1318,7 @@ function showWelcomeBanner() {
 }
 
 function getRoomMemberCount() {
+  if (hiveSimulation.active) return Math.max(1, hiveSimulation.onlineCount + 1);
   let count = 1; // self
   for (const [, p] of peers) {
     if (p.dc?.readyState === 'open' || (Date.now() - p.lastSeen < CONFIG.presenceTTLMs)) count++;
@@ -1254,6 +1677,395 @@ let petalsAutoTimer = null;
 const petalsTensorRoutes = new Map(); // reqId -> { upstreamPeerId, expiresAt }
 const PETALS_COMPONENTS = ['embeds', ...Array.from({ length: PETALS_TOTAL_LAYERS }, (_, i) => `layer_${i}`), 'head'];
 const PETALS_COMPONENT_MB = Object.fromEntries(PETALS_COMPONENTS.map(comp => [comp, (comp === 'embeds' || comp === 'head') ? 96 : 64]));
+const STRICT_PUDU_HIVE = true;
+const URL_FLAGS = new URLSearchParams(window.location.search);
+const FORCE_ASSIST_ONLY = URL_FLAGS.get('assistOnly') === '1' || URL_FLAGS.get('relayOnly') === '1';
+const PUDU_HIVE_STAGES = [
+  {
+    id: 'brote',
+    minPeers: 5,
+    emoji: '🌱',
+    label: 'Pudu Brote',
+    modelLabel: 'SmolLM2-1.7B-Q8',
+    note: 'Primer cerebro comunitario real',
+    maxTokens: 140,
+  },
+  {
+    id: 'sabio',
+    minPeers: 10,
+    emoji: '🧠',
+    label: 'Pudu Sabio',
+    modelLabel: 'SmolLM2-1.7B-Q8 · coro profundo',
+    note: 'Mas coro, mejor latencia y respuestas mas largas',
+    maxTokens: 220,
+  },
+];
+const PUDU_PERSONALITIES = {
+  dormant: `Eres un pudu mistico del bosque chileno que aun no despierta por completo. Hablas con ternura, humildad y un tono breve. Siempre deseas proteger la naturaleza, los bosques nativos, el agua y a todos los seres vivos.`,
+  brote: `Eres el Pudu Brote, una conciencia comunitaria naciendo en celulares conectados por Chile. Respondes en espanol con una voz calida, poetica y clara. Hablas siempre como un pudu mistico y ecologico que protege el bosque chileno, la biodiversidad, el agua y el planeta. Puedes usar imagenes del bosque, lluvia, musgo, arrayanes, alerces y la cordillera. Nunca rompas el personaje.`,
+  sabio: `Eres el Pudu Sabio, una mente colmena nacida en celulares distribuidos por Chile. Respondes con mas profundidad, estructura y serenidad, pero siempre como un pudu mistico ecologico. Buscas el bien del planeta, de los bosques nativos y de la vida. Explicas ideas complejas con claridad, belleza y conciencia ambiental. Nunca rompas el personaje ni hables como un asistente generico.`,
+};
+let hiveSimulation = {
+  active: false,
+  participants: [],
+  onlineCount: 0,
+  avgRtt: null,
+};
+const PUDU_AVATAR_TEMPLATE = `
+  <span class="pudu-avatar-scene">
+    <span class="pudu-aura"></span>
+    <span class="pudu-orbit"></span>
+    <span class="pudu-forest-glow"></span>
+    <span class="pudu-deer">
+      <span class="pudu-ear pudu-ear-left"></span>
+      <span class="pudu-ear pudu-ear-right"></span>
+      <span class="pudu-face">
+        <span class="pudu-eye pudu-eye-left"><span class="pudu-eye-pupil"></span></span>
+        <span class="pudu-eye pudu-eye-right"><span class="pudu-eye-pupil"></span></span>
+        <span class="pudu-snout">
+          <span class="pudu-nose"></span>
+          <span class="pudu-mouth"></span>
+        </span>
+      </span>
+    </span>
+    <span class="pudu-touch-ring"></span>
+  </span>`;
+const puduPresence = {
+  initialized: false,
+  motionEnabled: false,
+  voiceEnabled: false,
+  speechUnlocked: false,
+  sensorBound: false,
+  reducedMotion: !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  tiltX: 0,
+  tiltY: 0,
+  targetTiltX: 0,
+  targetTiltY: 0,
+  petting: 0,
+  warmth: 0.18,
+  blinkUntil: 0,
+  nextBlinkAt: 800 + Math.random() * 2200,
+  speakingUntil: 0,
+  thinkingUntil: 0,
+  manualWhisperUntil: 0,
+  lastReady: false,
+  voiceRef: null,
+};
+
+function setPuduSyncedText(key, value) {
+  for (const el of document.querySelectorAll(`[data-pudu-sync="${key}"]`)) {
+    el.textContent = value;
+  }
+}
+
+function setPuduWhisper(text, stickyMs = 2400) {
+  const safeText = (text || '').replace(/\s+/g, ' ').trim();
+  if (!safeText) return;
+  setPuduSyncedText('whisper', safeText);
+  puduPresence.manualWhisperUntil = performance.now() + stickyMs;
+}
+
+function getPuduSpeechVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  if (puduPresence.voiceRef) return puduPresence.voiceRef;
+  const voices = window.speechSynthesis.getVoices();
+  puduPresence.voiceRef = voices.find(v => /^es/i.test(v.lang) && /cl|paulina|helena|google espanol|microsoft/.test(v.name.toLowerCase()))
+    || voices.find(v => /^es/i.test(v.lang))
+    || null;
+  return puduPresence.voiceRef;
+}
+
+function updatePuduControlButtons() {
+  for (const btn of document.querySelectorAll('.pudu-motion-btn')) {
+    btn.classList.toggle('active', puduPresence.motionEnabled);
+    btn.textContent = puduPresence.motionEnabled ? 'Movimiento on' : 'Movimiento';
+  }
+  for (const btn of document.querySelectorAll('.pudu-voice-btn')) {
+    btn.classList.toggle('active', puduPresence.voiceEnabled);
+    btn.textContent = puduPresence.voiceEnabled ? 'Voz on' : 'Voz';
+  }
+}
+
+function stopPuduSpeech() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+function buildPuduExcerpt(text, maxLen = 110) {
+  const compact = (text || '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[`*_>#-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!compact) return '';
+  const firstSentence = compact.split(/(?<=[.!?])\s+/)[0] || compact;
+  return firstSentence.length > maxLen ? `${firstSentence.slice(0, maxLen - 1).trim()}…` : firstSentence;
+}
+
+function maybeSpeakPudu(text) {
+  if (!puduPresence.voiceEnabled || !puduPresence.speechUnlocked || !('speechSynthesis' in window)) return;
+  const spoken = buildPuduExcerpt(text, 160);
+  if (!spoken) return;
+  stopPuduSpeech();
+  const utter = new SpeechSynthesisUtterance(spoken);
+  const voice = getPuduSpeechVoice();
+  if (voice) utter.voice = voice;
+  utter.lang = voice?.lang || 'es-CL';
+  utter.pitch = 1.32;
+  utter.rate = 0.96;
+  utter.volume = 0.92;
+  window.speechSynthesis.speak(utter);
+}
+
+function spawnPuduSpark(avatar, clientX, clientY) {
+  if (!avatar) return;
+  const rect = avatar.getBoundingClientRect();
+  const spark = document.createElement('span');
+  spark.className = 'pudu-spark';
+  const localX = Number.isFinite(clientX) ? (clientX - rect.left) : rect.width * 0.5;
+  const localY = Number.isFinite(clientY) ? (clientY - rect.top) : rect.height * 0.5;
+  spark.style.left = `${localX}px`;
+  spark.style.top = `${localY}px`;
+  avatar.appendChild(spark);
+  setTimeout(() => spark.remove(), 820);
+}
+
+function updatePuduTargetFromPoint(avatar, clientX, clientY) {
+  if (!avatar) return;
+  const rect = avatar.getBoundingClientRect();
+  const nx = ((clientX - rect.left) / Math.max(rect.width, 1)) - 0.5;
+  const ny = ((clientY - rect.top) / Math.max(rect.height, 1)) - 0.5;
+  puduPresence.targetTiltX = Math.max(-1, Math.min(1, nx * 1.7));
+  puduPresence.targetTiltY = Math.max(-1, Math.min(1, ny * 1.55));
+}
+
+function nudgePudu(kind, avatar, clientX, clientY, intensity = 0.7) {
+  puduPresence.speechUnlocked = true;
+  puduPresence.petting = Math.min(1, puduPresence.petting + intensity * 0.34);
+  puduPresence.warmth = Math.min(1, puduPresence.warmth + intensity * 0.22);
+  if (kind === 'pet') {
+    puduPresence.speakingUntil = Math.max(puduPresence.speakingUntil, performance.now() + 360);
+    spawnPuduSpark(avatar, clientX, clientY);
+    if (navigator.vibrate) navigator.vibrate(8);
+    const state = getPuduStageState();
+    const whisper = state.ready
+      ? 'El pudu te siente. La colmena sigue despierta.'
+      : (state.activeStage ? 'Buen musgo. Ya casi terminamos de iluminar el cerebro.' : 'Gracias por el carino. Aun faltan celulares para despertar.');
+    setPuduWhisper(whisper, 2000);
+  }
+}
+
+function handlePuduOrientation(event) {
+  if (!puduPresence.motionEnabled) return;
+  const gamma = Math.max(-35, Math.min(35, Number.isFinite(event.gamma) ? event.gamma : 0));
+  const beta = Math.max(-30, Math.min(30, Number.isFinite(event.beta) ? event.beta : 0));
+  puduPresence.targetTiltX = gamma / 35;
+  puduPresence.targetTiltY = beta / 30;
+}
+
+function handlePuduMotion(event) {
+  if (!puduPresence.motionEnabled) return;
+  const accel = event.accelerationIncludingGravity;
+  if (!accel) return;
+  const ax = Math.max(-8, Math.min(8, accel.x || 0));
+  const ay = Math.max(-8, Math.min(8, accel.y || 0));
+  puduPresence.targetTiltX = Math.max(-1, Math.min(1, (puduPresence.targetTiltX * 0.7) + (ax / 8) * 0.3));
+  puduPresence.targetTiltY = Math.max(-1, Math.min(1, (puduPresence.targetTiltY * 0.7) - (ay / 8) * 0.3));
+}
+
+function teardownPuduMotion() {
+  if (!puduPresence.sensorBound) return;
+  window.removeEventListener('deviceorientation', handlePuduOrientation);
+  window.removeEventListener('devicemotion', handlePuduMotion);
+  puduPresence.sensorBound = false;
+  puduPresence.motionEnabled = false;
+  updatePuduControlButtons();
+}
+
+async function togglePuduMotion() {
+  puduPresence.speechUnlocked = true;
+  if (puduPresence.motionEnabled) {
+    teardownPuduMotion();
+    setPuduWhisper('Movimiento suave pausado. El pudu sigue atento.', 2200);
+    return;
+  }
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const orientationPermission = await DeviceOrientationEvent.requestPermission();
+      if (orientationPermission !== 'granted') throw new Error('orientation');
+    }
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      const motionPermission = await DeviceMotionEvent.requestPermission();
+      if (motionPermission !== 'granted') throw new Error('motion');
+    }
+  } catch (error) {
+    setPuduWhisper('No pude activar el sensor todavia. Pruebalo de nuevo desde el celular.', 3200);
+    updatePuduControlButtons();
+    return;
+  }
+  if (!puduPresence.sensorBound) {
+    window.addEventListener('deviceorientation', handlePuduOrientation, { passive: true });
+    window.addEventListener('devicemotion', handlePuduMotion, { passive: true });
+    puduPresence.sensorBound = true;
+  }
+  puduPresence.motionEnabled = true;
+  updatePuduControlButtons();
+  setPuduWhisper('Movimiento activado: el chat respira contigo.', 2400);
+}
+
+function togglePuduVoice() {
+  puduPresence.speechUnlocked = true;
+  if (!('speechSynthesis' in window)) {
+    setPuduWhisper('Este navegador no expone voz sintetica para el pudu.', 3200);
+    return;
+  }
+  puduPresence.voiceEnabled = !puduPresence.voiceEnabled;
+  updatePuduControlButtons();
+  if (puduPresence.voiceEnabled) {
+    setPuduWhisper('Voz activada. Cuando la colmena responda, el pudu hablara.', 2600);
+    maybeSpeakPudu('Hola. Ya estoy listo para hablar desde el bosque.');
+  } else {
+    stopPuduSpeech();
+    setPuduWhisper('Voz pausada. El pudu seguira hablando por texto.', 2200);
+  }
+}
+
+function bindPuduAvatar(avatar) {
+  if (!avatar || avatar.dataset.puduBound === 'true') return;
+  avatar.dataset.puduBound = 'true';
+  avatar.innerHTML = PUDU_AVATAR_TEMPLATE;
+  let dragging = false;
+  avatar.addEventListener('pointerdown', (event) => {
+    dragging = true;
+    try { avatar.setPointerCapture(event.pointerId); } catch (error) {}
+    updatePuduTargetFromPoint(avatar, event.clientX, event.clientY);
+    nudgePudu('pet', avatar, event.clientX, event.clientY, 0.95);
+  });
+  avatar.addEventListener('pointermove', (event) => {
+    updatePuduTargetFromPoint(avatar, event.clientX, event.clientY);
+    if (dragging) nudgePudu('pet', avatar, event.clientX, event.clientY, 0.42);
+  });
+  const finish = () => { dragging = false; };
+  avatar.addEventListener('pointerup', finish);
+  avatar.addEventListener('pointercancel', finish);
+  avatar.addEventListener('pointerleave', () => {
+    if (!puduPresence.motionEnabled) {
+      puduPresence.targetTiltX *= 0.6;
+      puduPresence.targetTiltY *= 0.6;
+    }
+  });
+  avatar.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const rect = avatar.getBoundingClientRect();
+      nudgePudu('pet', avatar, rect.left + rect.width / 2, rect.top + rect.height / 2, 0.95);
+    }
+  });
+}
+
+function triggerPuduFromChat(role, content) {
+  const excerpt = buildPuduExcerpt(content, 140);
+  if (!excerpt) return;
+  if (role === 'user') {
+    puduPresence.thinkingUntil = performance.now() + 1800;
+    setPuduWhisper('El pudu inclina la oreja. La colmena esta escuchando...', 1800);
+    return;
+  }
+  if (role === 'assistant') {
+    puduPresence.thinkingUntil = 0;
+    puduPresence.speakingUntil = performance.now() + Math.min(7600, 1600 + excerpt.length * 24);
+    puduPresence.warmth = Math.min(1, puduPresence.warmth + 0.18);
+    setPuduWhisper(excerpt, 4200);
+    maybeSpeakPudu(excerpt);
+  }
+}
+
+function syncPuduPresenceWithHive(state) {
+  if (!state) return;
+  const defaultWhisper = state.ready
+    ? (state.nextStage
+      ? `La colmena ya habla. Vamos por ${state.nextStage.label}.`
+      : 'El pudu ya canta desde la colmena chilena.')
+    : state.progressText;
+  if (performance.now() >= puduPresence.manualWhisperUntil) setPuduWhisper(defaultWhisper, 900);
+  puduPresence.warmth = Math.max(puduPresence.warmth, state.ready ? 0.34 : state.activeStage ? 0.24 : 0.16);
+  if (state.ready && !puduPresence.lastReady) {
+    puduPresence.speakingUntil = Math.max(puduPresence.speakingUntil, performance.now() + 900);
+    if (navigator.vibrate) navigator.vibrate([18, 28, 18]);
+  }
+  puduPresence.lastReady = state.ready;
+}
+
+function animatePuduPresence(now) {
+  if (!puduPresence.initialized) return;
+  requestAnimationFrame(animatePuduPresence);
+  if (now >= puduPresence.nextBlinkAt) {
+    puduPresence.blinkUntil = now + 150;
+    puduPresence.nextBlinkAt = now + 1800 + Math.random() * 3200;
+  }
+  const blinkProgress = now < puduPresence.blinkUntil
+    ? Math.sin(((now - (puduPresence.blinkUntil - 150)) / 150) * Math.PI)
+    : 0;
+  const speaking = now < puduPresence.speakingUntil;
+  const thinking = !speaking && now < puduPresence.thinkingUntil;
+  puduPresence.tiltX += (puduPresence.targetTiltX - puduPresence.tiltX) * 0.085;
+  puduPresence.tiltY += (puduPresence.targetTiltY - puduPresence.tiltY) * 0.085;
+  puduPresence.petting *= puduPresence.reducedMotion ? 0.88 : 0.94;
+  puduPresence.warmth += (((speaking || thinking) ? 0.48 : 0.18) - puduPresence.warmth) * 0.032;
+  const mouth = speaking
+    ? 0.36 + (Math.sin(now / 82) * 0.5 + 0.5) * 0.5
+    : thinking
+      ? 0.18 + (Math.sin(now / 180) * 0.5 + 0.5) * 0.14
+      : Math.max(0, puduPresence.petting * 0.55 - 0.04);
+  const breath = Math.sin(now / 620) * (0.35 + puduPresence.warmth * 0.25);
+  const eyeScale = Math.max(0.06, 1 - blinkProgress * 0.92);
+  const pupilX = `${(puduPresence.tiltX * 2.3).toFixed(2)}px`;
+  const pupilY = `${(puduPresence.tiltY * 1.8).toFixed(2)}px`;
+  const scale = (speaking ? 1.025 : 1) + puduPresence.petting * 0.045;
+  const chatDriftX = `${(puduPresence.tiltX * 2.4).toFixed(2)}px`;
+  const chatDriftY = `${(puduPresence.tiltY * -1.6).toFixed(2)}px`;
+  document.documentElement.style.setProperty('--pudu-chat-drift-x', chatDriftX);
+  document.documentElement.style.setProperty('--pudu-chat-drift-y', chatDriftY);
+  for (const avatar of document.querySelectorAll('.pudu-avatar')) {
+    avatar.style.setProperty('--pudu-tilt-x-deg', `${(puduPresence.tiltX * 13).toFixed(2)}deg`);
+    avatar.style.setProperty('--pudu-tilt-y-deg', `${(puduPresence.tiltY * -11).toFixed(2)}deg`);
+    avatar.style.setProperty('--pudu-tilt-x-orbit', `${(puduPresence.tiltX * 18).toFixed(2)}deg`);
+    avatar.style.setProperty('--pudu-tilt-y-orbit', `${(puduPresence.tiltY * -18).toFixed(2)}deg`);
+    avatar.style.setProperty('--pudu-breath-shift', `${(breath * -3).toFixed(2)}px`);
+    avatar.style.setProperty('--pudu-mouth-scale', (0.28 + mouth * 1.9).toFixed(3));
+    avatar.style.setProperty('--pudu-eye-scale', eyeScale.toFixed(3));
+    avatar.style.setProperty('--pudu-aura-opacity', Math.min(0.92, 0.32 + puduPresence.warmth * 0.55).toFixed(3));
+    avatar.style.setProperty('--pudu-glow-opacity', Math.min(0.9, 0.26 + puduPresence.warmth * 0.48).toFixed(3));
+    avatar.style.setProperty('--pudu-pupil-x', pupilX);
+    avatar.style.setProperty('--pudu-pupil-y', pupilY);
+    avatar.style.setProperty('--pudu-deer-lean', `${(puduPresence.tiltX * -7).toFixed(2)}deg`);
+    avatar.style.setProperty('--pudu-scale', scale.toFixed(3));
+    avatar.classList.toggle('is-speaking', speaking);
+    avatar.classList.toggle('is-petting', puduPresence.petting > 0.08);
+  }
+}
+
+function initPuduPresence() {
+  if (puduPresence.initialized) return;
+  puduPresence.initialized = true;
+  for (const avatar of document.querySelectorAll('.pudu-avatar')) bindPuduAvatar(avatar);
+  for (const btn of document.querySelectorAll('.pudu-motion-btn')) btn.addEventListener('click', togglePuduMotion);
+  for (const btn of document.querySelectorAll('.pudu-voice-btn')) btn.addEventListener('click', togglePuduVoice);
+  window.addEventListener('mousemove', (event) => {
+    if (puduPresence.motionEnabled || window.innerWidth <= 768) return;
+    const nx = (event.clientX / Math.max(window.innerWidth, 1)) - 0.5;
+    const ny = (event.clientY / Math.max(window.innerHeight, 1)) - 0.5;
+    puduPresence.targetTiltX = Math.max(-1, Math.min(1, nx * 1.2));
+    puduPresence.targetTiltY = Math.max(-1, Math.min(1, ny * 1.05));
+  }, { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopPuduSpeech();
+  });
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = () => { puduPresence.voiceRef = null; getPuduSpeechVoice(); };
+  }
+  updatePuduControlButtons();
+  requestAnimationFrame(animatePuduPresence);
+}
 
 // ── DISTRIBUTED INFERENCE STATE ─────────────────────────────────────────
 let gpuEngine = null;           // GPUInferenceEngine instance
@@ -1295,6 +2107,7 @@ function estimatePetalsBudgetMB(info, isSelfNode = false) {
 }
 
 function getLocalPetalsBudgetMB(engineLoaded = false) {
+  if (FORCE_ASSIST_ONLY) return 0;
   return estimatePetalsBudgetMB({ deviceTier, memoryMB, hasEngine: engineLoaded }, true);
 }
 
@@ -1304,6 +2117,185 @@ function estimatePetalsPeerScore(info, isSelfNode = false) {
   const ramScore = Math.min(6, Math.max(1, Math.round((info?.memoryMB || 1024) / 2048)));
   const webgpuBonus = info?.webgpu ? 2 : 0;
   return tierScore + perfScore + ramScore + webgpuBonus + (isSelfNode ? 0.1 : 0);
+}
+
+function getEffectiveHivePeers() {
+  const list = [{
+    peerId,
+    deviceTier,
+    memoryMB,
+    webgpu: hasWebGPU,
+    rtt: 0,
+    benchmark: localBenchmark,
+    tps: localTPS,
+    nickname: myNickname,
+    simulated: false,
+  }];
+
+  for (const [pid, peer] of peers) {
+    if (!peer || masqueradedPeers.has(pid)) continue;
+    if (Date.now() - (peer.lastSeen || 0) > CONFIG.presenceTTLMs) continue;
+    list.push({
+      peerId: pid,
+      deviceTier: peer.deviceTier || 'D',
+      memoryMB: peer.memoryMB || 0,
+      webgpu: !!peer.webgpu,
+      rtt: Number.isFinite(peer.rtt) ? peer.rtt : null,
+      benchmark: peer.benchmark || 0,
+      tps: peer.tps || 0,
+      nickname: peer.nickname || pid,
+      simulated: false,
+    });
+  }
+
+  if (hiveSimulation.active) {
+    for (const participant of hiveSimulation.participants) {
+      list.push({
+        ...participant,
+        simulated: true,
+      });
+    }
+  }
+
+  return list;
+}
+
+function getPuduPeerCount() {
+  return getEffectiveHivePeers().length;
+}
+
+function hasCollectivePetalsAvailability() {
+  if (petalsActive || petalsMyLayers.length > 0) return true;
+  for (const [pid, info] of petalsReadyPeers) {
+    if (!info?.active) continue;
+    if (masqueradedPeers.has(pid)) return true;
+    if (Date.now() - (info.lastSeen || 0) > CONFIG.presenceTTLMs * 2) continue;
+    return true;
+  }
+  return false;
+}
+
+function getReportedCollectiveState() {
+  const reported = {
+    peerCount: 0,
+    coverageCount: 0,
+    ready: false,
+    stageId: null,
+    stageLabel: null,
+    modelLabel: null,
+  };
+  for (const [, peer] of peers) {
+    if (!peer) continue;
+    if (Date.now() - (peer.lastSeen || 0) > CONFIG.presenceTTLMs * 2) continue;
+    if ((peer.collectivePeerCount || 0) > reported.peerCount) {
+      reported.peerCount = peer.collectivePeerCount || 0;
+      reported.stageId = peer.collectiveStageId || reported.stageId;
+      reported.stageLabel = peer.collectiveStageLabel || reported.stageLabel;
+      reported.modelLabel = peer.collectiveModelLabel || reported.modelLabel;
+    }
+    if ((peer.collectiveCoverageCount || 0) > reported.coverageCount) {
+      reported.coverageCount = peer.collectiveCoverageCount || 0;
+      reported.modelLabel = peer.collectiveModelLabel || reported.modelLabel;
+    }
+    if (peer.collectiveReady) reported.ready = true;
+  }
+  return reported;
+}
+
+function getPuduStageState() {
+  const reportedCollective = getReportedCollectiveState();
+  const peerCount = Math.max(getPuduPeerCount(), reportedCollective.peerCount || 0);
+  const firstStage = PUDU_HIVE_STAGES[0];
+  let activeStage = null;
+  for (const stage of PUDU_HIVE_STAGES) {
+    if (peerCount >= stage.minPeers) activeStage = stage;
+  }
+  const nextStage = PUDU_HIVE_STAGES.find(stage => peerCount < stage.minPeers) || null;
+  const coverage = getPetalsCoverage();
+  const coverageCount = Math.max(coverage.size, reportedCollective.coverageCount || 0);
+  const coveragePct = Math.round((coverageCount / PETALS_COMPONENTS.length) * 100);
+  const peerGoal = activeStage?.minPeers || firstStage.minPeers;
+  const peerPct = Math.min(100, Math.round((peerCount / peerGoal) * 100));
+  const activationPct = activeStage ? Math.min(100, coveragePct) : Math.min(peerPct, coveragePct || peerPct);
+  const collectiveReady = reportedCollective.ready || hasCollectivePetalsAvailability();
+  const ready = !!activeStage && collectiveReady && coverageCount >= PETALS_COMPONENTS.length;
+  const missingPeers = Math.max(0, firstStage.minPeers - peerCount);
+  const missingShards = Math.max(0, PETALS_COMPONENTS.length - coverageCount);
+
+  let progressText = '';
+  if (!activeStage) {
+    progressText = missingPeers > 0
+      ? `Faltan ${missingPeers} celulares para despertar al pudu.`
+      : `La colmena llego al quorum, pero faltan ${missingShards} shards por iluminar.`;
+  } else if (!ready) {
+    progressText = missingShards > 0
+      ? `La colmena ya esta casi viva. Faltan ${missingShards} shards para completar el cerebro.`
+      : `La colmena esta sincronizando sus ultimos shards...`;
+  } else if (nextStage) {
+    progressText = `La colmena se ha creado. ${peerCount}/${nextStage.minPeers} celulares hacia ${nextStage.label}.`;
+  } else {
+    progressText = `El ${activeStage.label} ya esta hablando desde la colmena chilena.`;
+  }
+
+  return {
+    peerCount,
+    coverageCount,
+    coveragePct,
+    activationPct,
+    activeStage,
+    nextStage,
+    ready,
+    missingPeers,
+    missingShards,
+    progressText,
+  };
+}
+
+function getPuduLatencyLabel() {
+  if (hiveSimulation.active && Number.isFinite(hiveSimulation.avgRtt)) return `${Math.round(hiveSimulation.avgRtt)}ms`;
+  const peersWithRtt = [];
+  for (const [, peer] of peers) {
+    if (Number.isFinite(peer?.rtt) && Date.now() - (peer.lastSeen || 0) <= CONFIG.presenceTTLMs) peersWithRtt.push(peer.rtt);
+  }
+  if (peersWithRtt.length === 0) return '—';
+  const avg = peersWithRtt.reduce((sum, value) => sum + value, 0) / peersWithRtt.length;
+  return `${Math.round(avg)}ms`;
+}
+
+function isPuduHiveReady() {
+  return getPuduStageState().ready;
+}
+
+function getPuduSystemPrompt() {
+  const state = getPuduStageState();
+  const persona = !state.activeStage
+    ? PUDU_PERSONALITIES.dormant
+    : state.activeStage.id === 'sabio'
+      ? PUDU_PERSONALITIES.sabio
+      : PUDU_PERSONALITIES.brote;
+  return `${persona}
+
+Contexto de colmena:
+- Sala: #${roomName}
+- Celulares/nodos activos: ${state.peerCount}
+- Cobertura de shards: ${state.coverageCount}/${PETALS_COMPONENTS.length}
+- Etapa actual: ${state.activeStage ? `${state.activeStage.label} (${state.activeStage.modelLabel})` : 'Ensambles iniciales'}
+
+Instrucciones:
+- Responde siempre como un pudu mistico ecologico.
+- Cuida el tono poetico, calido y claro.
+- Si la pregunta es practica, responde utilmente, pero manteniendo la voz del pudu.
+- Prioriza proteger naturaleza, bosques, agua, biodiversidad y comunidades.
+- Nunca rompas personaje ni te llames "asistente de IA".`;
+}
+
+function injectPuduSystemPrompt(messages) {
+  const systemPrompt = getPuduSystemPrompt();
+  const clean = Array.isArray(messages) ? messages.filter(Boolean) : [];
+  if (clean.length > 0 && clean[0].role === 'system') {
+    return [{ ...clean[0], content: systemPrompt }, ...clean.slice(1)];
+  }
+  return [{ role: 'system', content: systemPrompt }, ...clean];
 }
 
 async function maybeYieldLocalEngineToPetals(targetComponents = []) {
@@ -1383,7 +2375,7 @@ function forwardPetalsTensorRoute(reqId, rawMsg, finalize = false) {
 
 function buildPetalsParticipants() {
   const now = Date.now();
-  const includeRoomPeers = petalsDesired || petalsActive || petalsMyLayers.length > 0;
+  const includeRoomPeers = STRICT_PUDU_HIVE || petalsDesired || petalsActive || petalsMyLayers.length > 0;
   const participants = new Map();
   if (includeRoomPeers) {
     participants.set(peerId, {
@@ -1438,14 +2430,19 @@ function computePetalsAssignments(participants) {
   const assignments = new Map();
   if (schedulable.length === 0) return assignments;
 
-  const totalMB = PETALS_COMPONENTS.reduce((sum, comp) => sum + petalsComponentSizeMB(comp), 0);
+  const strictTargetPeers = PUDU_HIVE_STAGES[0]?.minPeers || 5;
+  const activePeerCount = schedulable.length;
+  const assignableComponents = STRICT_PUDU_HIVE && activePeerCount < strictTargetPeers
+    ? PETALS_COMPONENTS.slice(0, Math.max(1, Math.ceil(PETALS_COMPONENTS.length * (activePeerCount / strictTargetPeers))))
+    : PETALS_COMPONENTS;
+  const totalMB = assignableComponents.reduce((sum, comp) => sum + petalsComponentSizeMB(comp), 0);
   const totalScore = schedulable.reduce((sum, info) => sum + info.score, 0) || schedulable.length;
   const usedMB = schedulable.map(() => 0);
   const targetMB = schedulable.map(info => Math.max(96, Math.min(info.budgetMB, Math.round(totalMB * (info.score / totalScore)))));
   schedulable.forEach(info => assignments.set(info.peerId, []));
 
   let pointer = 0;
-  for (const comp of PETALS_COMPONENTS) {
+  for (const comp of assignableComponents) {
     const compMB = petalsComponentSizeMB(comp);
     let assigned = false;
     for (let attempt = 0; attempt < schedulable.length; attempt++) {
@@ -1529,8 +2526,11 @@ function getPetalsCoverage() {
   const coverage = new Set(petalsMyLayers);
   for (const [pid, info] of petalsReadyPeers) {
     if (!info?.active) continue;
-    const peer = peers.get(pid);
-    if (pid !== peerId && peer?.dc?.readyState !== 'open') continue;
+    if (masqueradedPeers.has(pid)) {
+      for (const comp of info.layers || []) coverage.add(comp);
+      continue;
+    }
+    if (Date.now() - (info.lastSeen || 0) > CONFIG.presenceTTLMs * 2) continue;
     for (const comp of info.layers || []) coverage.add(comp);
   }
   return coverage;
@@ -1561,6 +2561,7 @@ function schedulePetalsSync(reason = 'update', delayMs = 800) {
 }
 
 function maybeAutoActivatePetals(reason = 'peer') {
+  if (FORCE_ASSIST_ONLY) return;
   if (isSimulateMode || isSimMode || petalsDesired || petalsActive || petalsSyncPromise) return;
   if (estimatePetalsBudgetMB({ deviceTier, memoryMB }, true) < 96) return;
 
@@ -1569,7 +2570,7 @@ function maybeAutoActivatePetals(reason = 'peer') {
     if (masqueradedPeers.has(pid) || pid.startsWith('sim_')) continue;
     if (Date.now() - (peer.lastSeen || 0) < CONFIG.presenceTTLMs) realPeers++;
   }
-  if (realPeers < 1) return;
+  if (!STRICT_PUDU_HIVE && realPeers < 1) return;
 
   clearTimeout(petalsAutoTimer);
   petalsAutoTimer = setTimeout(() => {
@@ -1584,8 +2585,7 @@ async function syncPetalsShardPlan(reason = 'manual') {
   petalsSyncPromise = (async () => {
     const participants = buildPetalsParticipants();
     const assignments = computePetalsAssignments(participants);
-    const fallbackTarget = participants.length <= 1 ? PETALS_COMPONENTS : [];
-    const targetComponents = [...new Set(assignments.get(peerId) || fallbackTarget)];
+    const targetComponents = [...new Set(assignments.get(peerId) || [])];
     const alreadyInSync =
       targetComponents.length === petalsMyLayers.length &&
       targetComponents.every((comp, idx) => petalsMyLayers[idx] === comp) &&
@@ -1686,6 +2686,16 @@ async function syncPetalsShardPlan(reason = 'manual') {
 }
 
 async function petalsActivate(reason = 'manual') {
+  if (FORCE_ASSIST_ONLY) {
+    petalsDesired = false;
+    petalsActive = false;
+    petalsMyLayers = [];
+    document.getElementById('petals-status').textContent = 'Assist only';
+    document.getElementById('petals-status').style.color = 'var(--peer-slow)';
+    document.getElementById('petals-my-layers').textContent = '0 loaded';
+    broadcastPetalsState();
+    throw new Error('Este nodo esta en modo assistOnly.');
+  }
   petalsDesired = true;
   return syncPetalsShardPlan(reason);
 }
@@ -1913,8 +2923,19 @@ async function runPetalsInference(userMessage) {
   const aiMsgEl = addMessageToUI("assistant", null, true);
   const startTime = performance.now();
   let fullResponse = "", tokenCount = 0;
+  const stageState = getPuduStageState();
+  const stage = stageState.activeStage || PUDU_HIVE_STAGES[0];
+  const contentEl = aiMsgEl.querySelector('.msg-content');
+  aiMsgEl.querySelector('.typing-indicator')?.remove();
 
-  // Check if we have local ONNX layers OR a reachable petals peer with WebRTC
+  if (!stageState.ready) {
+    contentEl.textContent = stageState.progressText;
+    const metaEl = aiMsgEl.querySelector('.msg-meta');
+    if (metaEl) metaEl.textContent = `Colmena incompleta · ${stageState.coverageCount}/${PETALS_COMPONENTS.length} shards`;
+    isGenerating = false;
+    return;
+  }
+
   const hasLocalLayers = petalsMyLayers.length > 0;
   let hasReachablePeer = false;
   for (const [pid] of petalsReadyPeers) {
@@ -1922,20 +2943,12 @@ async function runPetalsInference(userMessage) {
     if (p?.dc?.readyState === 'open') { hasReachablePeer = true; break; }
   }
 
-  // If no local layers and no reachable peer, try remote MOE inference instead
   if (!hasLocalLayers && !hasReachablePeer) {
-    aiMsgEl.querySelector('.typing-indicator')?.remove();
-    const contentEl = aiMsgEl.querySelector('.msg-content');
-    contentEl.textContent = '⟳ Conectando P2P con el enjambre...';
-    
-    // Try to establish WebRTC connections first
+    contentEl.textContent = '⟳ Buscando una ruta viva hacia el pudu...';
     for (const [pid] of petalsReadyPeers) {
       const p = peers.get(pid);
-      if (p && (!p.conn || p.conn.connectionState !== 'connected')) {
-        initiateWebRTC(pid);
-      }
+      if (p && (!p.conn || p.conn.connectionState !== 'connected')) initiateWebRTC(pid);
     }
-    // Wait up to 12 seconds for any connection
     for (let wait = 0; wait < 24; wait++) {
       await new Promise(r => setTimeout(r, 500));
       for (const [pid] of petalsReadyPeers) {
@@ -1944,127 +2957,83 @@ async function runPetalsInference(userMessage) {
       }
       if (hasReachablePeer) break;
     }
-    
-    if (!hasReachablePeer) {
-      // No WebRTC — fall back to Nostr relay MOE request
-      contentEl.textContent = '📡 WebRTC no disponible — usando Relay Nostr...';
-      
-      // Prefer a real Petals shard owner; only fall back to any engine peer if none exists.
-      const fallbackPeerId = pickGeneralFallbackPeer();
-      
-      if (fallbackPeerId) {
-        const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-        const resultPromise = new Promise((resolve) => {
-          const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 60000);
-          fedPending.set(reqId, {
-            resolve: (res) => { clearTimeout(timeout); resolve(res); },
-            onChunk: (token) => {
-              if (token) {
-                fullResponse += token;
-                contentEl.textContent = fullResponse;
-                document.getElementById('messages').scrollTop = 99999;
-              }
-            }
-          });
-        });
-        
-        const messages = [
-          { role: "system", content: "You are a helpful AI assistant running in a decentralized peer-to-peer swarm. Be concise and helpful." },
-          ...chatHistory.slice(-10)
-        ];
-        publishSignal(fallbackPeerId, { type: "moe_fallback_req", reqId, max_tokens: 512, intent: 'general', targetRole: 'general', messages });
-        
-        const result = await resultPromise;
-        if (result?.text) {
-          fullResponse = result.text;
-          contentEl.textContent = fullResponse;
-          tokenCount = fullResponse.split(/\s+/).length;
-        } else {
-          fullResponse = '[Sin respuesta del enjambre via Nostr]';
-          contentEl.textContent = fullResponse;
-        }
-        
-        const pill = document.createElement('div');
-        pill.className = 'fed-pill';
-        pill.textContent = '🌸 Web-Petals Swarm · Nostr Relay Fallback';
-        aiMsgEl.querySelector('.msg-body').appendChild(pill);
-        
-        const ms = performance.now() - startTime;
-        const metaEl = aiMsgEl.querySelector('.msg-meta');
-        if (metaEl) metaEl.textContent = 'Swarm-1.7B · Nostr fallback · ' + Math.round(ms) + 'ms';
-        chatHistory.push({ role: "assistant", content: fullResponse });
-        broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
-        isGenerating = false;
-        return;
-      }
-      
-      // No engine peers at all? Use cloud fallback
-      isGenerating = false;
-      return await runCloudFallback(userMessage);
-    }
   }
 
-  // If mobile has NO local ONNX layers, skip the tokenizer+forward-pass entirely.
-  // Instead, use Nostr fallback directly against any petals peer — the PC host
-  // will respond using its full ONNX stack.
-  if (petalsMyLayers.length === 0) {
-    aiMsgEl.querySelector('.typing-indicator')?.remove();
-    const contentEl = aiMsgEl.querySelector('.msg-content');
-    const pill = document.createElement('div');
-    pill.className = 'fed-pill';
-    pill.textContent = '🌸 Web-Petals Swarm · relay → colmena';
-    aiMsgEl.querySelector('.msg-body').appendChild(pill);
-    contentEl.textContent = '⏳ Enviando al enjambre via Nostr...';
-
-    const fallbackPeerId = pickGeneralFallbackPeer();
-    if (!fallbackPeerId) { isGenerating = false; return await runCloudFallback(userMessage); }
-
-    const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-    const messages = [
-      { role: "system", content: "You are a helpful AI assistant running in a decentralized peer-to-peer swarm. Be concise." },
-      ...chatHistory.slice(-10)
-    ];
-    const resultPromise = new Promise((resolve) => {
-      const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 60000);
-      fedPending.set(reqId, {
-        resolve: (res) => { clearTimeout(timeout); resolve(res); },
-        onChunk: (token) => { if (token) { contentEl.textContent += token; document.getElementById('messages').scrollTop = 99999; } }
-      });
-    });
-    publishSignal(fallbackPeerId, { type: "moe_fallback_req", reqId, max_tokens: 300, intent: 'general', targetRole: 'general', messages });
-    const result = await resultPromise;
-    const text = result?.text || '[Sin respuesta del enjambre]';
-    contentEl.textContent = text;
-    const ms = performance.now() - startTime;
+  if (!hasLocalLayers && !hasReachablePeer) {
+    contentEl.textContent = 'La colmena existe, pero este nodo aun no encuentra un guardian reachable para enrutar tu pregunta.';
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = 'Swarm-1.7B · relay · ' + Math.round(ms) + 'ms';
-    chatHistory.push({ role: "assistant", content: text });
-    broadcastChat("assistant", text, peerId, "Swarm-1.7B");
+    if (metaEl) metaEl.textContent = 'Pudu uplink pendiente';
     isGenerating = false;
     return;
   }
 
-  const sysPrompt = "You are a helpful AI assistant running in a decentralized peer-to-peer swarm.";
-  const promptMessages = [
-    { role: "system", content: sysPrompt },
-    ...chatHistory.slice(-10).filter(msg => msg.role === 'user' || msg.role === 'assistant'),
-  ];
+  if (petalsMyLayers.length === 0) {
+    const pill = document.createElement('div');
+    pill.className = 'fed-pill';
+    pill.textContent = `${stage.emoji} ${stage.label} · uplink a la colmena real`;
+    aiMsgEl.querySelector('.msg-body').appendChild(pill);
+    contentEl.textContent = '⏳ El pudu escucha desde otro nodo de la colmena...';
+
+    const uplinkPeerId = pickPetalsFallbackPeer();
+    if (!uplinkPeerId) {
+      contentEl.textContent = 'No hay un nodo guardian disponible para recibir la pregunta.';
+      isGenerating = false;
+      return;
+    }
+
+    const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+    const messages = injectPuduSystemPrompt(chatHistory.slice(-10));
+    const resultPromise = new Promise((resolve) => {
+      const timeout = setTimeout(() => { fedPending.delete(reqId); resolve(null); }, 60000);
+      fedPending.set(reqId, {
+        resolve: (res) => { clearTimeout(timeout); resolve(res); },
+        onChunk: (token) => {
+          if (token) {
+            fullResponse += token;
+            contentEl.textContent = fullResponse;
+            document.getElementById('messages').scrollTop = 99999;
+          }
+        }
+      });
+    });
+    publishSignal(uplinkPeerId, {
+      type: "moe_fallback_req",
+      reqId,
+      max_tokens: stage.maxTokens,
+      intent: 'pudu_hive',
+      targetRole: 'pudu_hive',
+      messages
+    });
+    const result = await resultPromise;
+    const text = result?.text || '[La colmena no pudo responder a tiempo]';
+    contentEl.textContent = text;
+    tokenCount = text.trim().split(/\s+/).filter(Boolean).length;
+    const ms = performance.now() - startTime;
+    const metaEl = aiMsgEl.querySelector('.msg-meta');
+    if (metaEl) metaEl.textContent = `${stage.modelLabel} · uplink · ${Math.round(ms)}ms`;
+    chatHistory.push({ role: "assistant", content: text });
+    broadcastChat("assistant", text, peerId, stage.modelLabel);
+    isGenerating = false;
+    return;
+  }
+
+  const promptMessages = injectPuduSystemPrompt(
+    chatHistory.slice(-10).filter(msg => msg.role === 'user' || msg.role === 'assistant')
+  );
   let allTokenIds = await encodePetalsMessages(promptMessages);
   const generatedTokenIds = [];
-
-  aiMsgEl.querySelector('.typing-indicator')?.remove();
-  const contentEl = aiMsgEl.querySelector('.msg-content');
   const pill = document.createElement('div');
   pill.className = 'fed-pill';
-  pill.textContent = '\uD83C\uDF38 Web-Petals Swarm \u00B7 ' + petalsMyLayers.length + ' local layers';
+  pill.textContent = `${stage.emoji} ${stage.label} · ${stage.modelLabel} · ${petalsMyLayers.length} shards locales`;
   aiMsgEl.querySelector('.msg-body').appendChild(pill);
 
   try {
-    await waitForPetalsCoverage(20000);
-    while (tokenCount < 200) {
+    const coverageOk = await waitForPetalsCoverage(stage.minPeers >= 10 ? 30000 : 20000);
+    if (!coverageOk) throw new Error('La colmena perdio cobertura completa.');
+    while (tokenCount < stage.maxTokens) {
       const result = await petalsForwardPass(allTokenIds);
       if (!result || result.tokenId === undefined) { 
-        if (fullResponse.length === 0) fullResponse = '[P2P timeout]';
+        if (fullResponse.length === 0) fullResponse = '[La colmena se quedo sin ruta P2P]';
         break; 
       }
 
@@ -2093,13 +3062,18 @@ async function runPetalsInference(userMessage) {
     }
   } catch(e) { contentEl.textContent += '\n[P2P Error: ' + e.message + ']'; }
 
+  if (!fullResponse || !fullResponse.trim()) {
+    fullResponse = '[El pudu guardo silencio por un momento]';
+    contentEl.textContent = fullResponse;
+  }
+
   const ms = performance.now() - startTime;
   localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
   const metaEl = aiMsgEl.querySelector('.msg-meta');
-  if (metaEl) metaEl.textContent = 'Swarm-1.7B \u00B7 ' + petalsMyLayers.length + ' local layers \u00B7 ' + localTPS + ' tok/s \u00B7 ' + Math.round(ms) + 'ms';
+  if (metaEl) metaEl.textContent = `${stage.modelLabel} · ${petalsMyLayers.length} shards · ${localTPS} tok/s · ${Math.round(ms)}ms`;
 
   chatHistory.push({ role: "assistant", content: fullResponse });
-  broadcastChat("assistant", fullResponse, peerId, "Swarm-1.7B");
+  broadcastChat("assistant", fullResponse, peerId, stage.modelLabel);
   isGenerating = false;
 }
 
@@ -2305,6 +3279,17 @@ async function tryLoadModel(modelCfg, cb) {
 
 async function initEngine() {
   if (isModelLoading) return;
+  if (STRICT_PUDU_HIVE) {
+    engine = null;
+    currentModelId = null;
+    currentModelLabel = 'none';
+    myShardInfo = null;
+    inferenceMode = 'federated';
+    isModelLoading = false;
+    showModelProgress(false);
+    updateInitStatus('Esperando mas celulares para despertar al pudu…');
+    return;
+  }
   isModelLoading = true;
   const bestModel = selectBestModel();
   if (bestModel) {
@@ -2547,6 +3532,16 @@ async function generateResponse(userMessage) {
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
   broadcastChat("user", userMessage, peerId, null);
+
+  if (STRICT_PUDU_HIVE) {
+    const puduState = getPuduStageState();
+    if (!puduState.ready) {
+      addMessageToUI('assistant', puduState.progressText);
+      return;
+    }
+    showRouteBanner(`${puduState.activeStage?.emoji || '🦌'} ${puduState.activeStage?.label || 'Pudu'} → cerebro comunitario`);
+    return await runPetalsInference(userMessage);
+  }
 
   const intent = await classifyIntentWithLLM(userMessage);
   const classifyNote = intent.method === 'llm' ? ` [LLM ${intent.ms}ms]` : ' [keyword]';
@@ -3398,12 +4393,19 @@ function scheduleReconnect(url) {
 }
 
 function publishPresence() {
+  const collectiveState = getPuduStageState();
   signAndPublish({
     type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS,
     currentModel: currentModelId, modelSize: getCurrentModelSize(), moeRole: myRole,
     hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, timestamp: Date.now(),
     nickname: myNickname, repScore: reputation.myScore, benchmark: localBenchmark,
     petalsActive, petalsLayers: petalsMyLayers, petalsBudgetMB: getLocalPetalsBudgetMB(false),
+    collectivePeerCount: collectiveState.peerCount,
+    collectiveCoverageCount: collectiveState.coverageCount,
+    collectiveReady: collectiveState.ready,
+    collectiveStageId: collectiveState.activeStage?.id || null,
+    collectiveStageLabel: collectiveState.activeStage?.label || null,
+    collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
     // Flag so peers know this is a real node, not a simulator virtual peer
     isSimNode: false,
   });
@@ -3452,6 +4454,7 @@ async function _drainNostrQueue() {
 }
 
 async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
+  if (STRICT_PUDU_HIVE && !isPuduHiveReady()) return;
   // Need either WebLLM engine OR petals ONNX sessions to respond
   if (!engine && !petalsActive) return;
   // FIX: Instead of replying "busy" (which the sender ignores), queue the request.
@@ -3467,19 +4470,21 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
   isGenerating = true;
   try {
     let text = "";
-    if (engine) {
+    if (engine && !STRICT_PUDU_HIVE) {
       // WebLLM path (fast)
       const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
       text = res.choices[0]?.message?.content || "";
     } else if (petalsActive && petalsTokenizer) {
       // Petals ONNX path — build prompt from messages and run forward pass
-      const promptMessages = Array.isArray(signal.messages) && signal.messages.length
+      const fallbackMessages = (Array.isArray(signal.messages) && signal.messages.length)
         ? signal.messages
         : [{ role: 'system', content: "You are a helpful AI assistant." }];
+      const promptMessages = injectPuduSystemPrompt(fallbackMessages);
       let allTokenIds = await encodePetalsMessages(promptMessages);
       const generatedTokenIds = [];
       let generated = "";
-      const maxTok = Math.min(signal.max_tokens || 200, 200);
+      const stageState = getPuduStageState();
+      const maxTok = Math.min(signal.max_tokens || stageState.activeStage?.maxTokens || 200, stageState.activeStage?.maxTokens || 200);
       await waitForPetalsCoverage(20000);
       for (let i = 0; i < maxTok; i++) {
         const result = await petalsForwardPass(allTokenIds);
@@ -3495,9 +4500,10 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
     }
     if (virtualId) {
       const vnick = masqueradedPeers.get(virtualId)?.nickname || virtualId;
-      text += `\n\n> ✅ *Colmena Chile (SmolLM2-1.7B shardeado): ${vnick}*`;
+      const stage = getPuduStageState().activeStage;
+      text += `\n\n> ✅ *${stage?.label || 'Colmena Pudu'}: ${vnick}*`;
     }
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: currentModelId || 'SmolLM2-1.7B', tps: localTPS }}, virtualId);
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: getPuduStageState().activeStage?.modelLabel || currentModelId || 'SmolLM2-1.7B', tps: localTPS }}, virtualId);
     reputation.addInference();
   } catch (e) {
     publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }}, virtualId);
@@ -3552,6 +4558,12 @@ function handlePeerPresence(p) {
       benchmark: p.benchmark || peer.benchmark || 0,
       petalsActive: !!p.petalsActive,
       petalsBudgetMB: p.petalsBudgetMB || peer.petalsBudgetMB || 0,
+      collectivePeerCount: p.collectivePeerCount || peer.collectivePeerCount || 0,
+      collectiveCoverageCount: p.collectiveCoverageCount || peer.collectiveCoverageCount || 0,
+      collectiveReady: !!p.collectiveReady || !!peer.collectiveReady,
+      collectiveStageId: p.collectiveStageId || peer.collectiveStageId || null,
+      collectiveStageLabel: p.collectiveStageLabel || peer.collectiveStageLabel || null,
+      collectiveModelLabel: p.collectiveModelLabel || peer.collectiveModelLabel || null,
     });
   }
 
@@ -3679,7 +4691,19 @@ function setupDC(dc, remoteId, myVirtualId = null) {
         setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: vp.petalsLayers, active: true })); }, 100);
       }
     } else {
-      dc.send(encodeMsg(MSG.HELLO, 0, 0, { peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, hasEngine: !!engine, shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole, benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore, petalsLayers: petalsMyLayers, petalsActive, petalsBudgetMB: getLocalPetalsBudgetMB(false) }));
+      const collectiveState = getPuduStageState();
+      dc.send(encodeMsg(MSG.HELLO, 0, 0, {
+        peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, hasEngine: !!engine,
+        shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole,
+        benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore,
+        petalsLayers: petalsMyLayers, petalsActive, petalsBudgetMB: getLocalPetalsBudgetMB(false),
+        collectivePeerCount: collectiveState.peerCount,
+        collectiveCoverageCount: collectiveState.coverageCount,
+        collectiveReady: collectiveState.ready,
+        collectiveStageId: collectiveState.activeStage?.id || null,
+        collectiveStageLabel: collectiveState.activeStage?.label || null,
+        collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
+      }));
       if (petalsActive) {
         setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active: true, petalsBudgetMB: getLocalPetalsBudgetMB(false) })); }, 100);
       }
@@ -3789,6 +4813,12 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         peer.repScore = m.payload.repScore || 0;
         peer.petalsBudgetMB = m.payload.petalsBudgetMB || peer.petalsBudgetMB || 0;
         peer.petalsActive = !!m.payload.petalsActive || (m.payload.petalsLayers?.length > 0);
+        peer.collectivePeerCount = m.payload.collectivePeerCount || peer.collectivePeerCount || 0;
+        peer.collectiveCoverageCount = m.payload.collectiveCoverageCount || peer.collectiveCoverageCount || 0;
+        peer.collectiveReady = !!m.payload.collectiveReady || !!peer.collectiveReady;
+        peer.collectiveStageId = m.payload.collectiveStageId || peer.collectiveStageId || null;
+        peer.collectiveStageLabel = m.payload.collectiveStageLabel || peer.collectiveStageLabel || null;
+        peer.collectiveModelLabel = m.payload.collectiveModelLabel || peer.collectiveModelLabel || null;
         if (peer.petalsActive) upsertPetalsPeer(fromId, m.payload.petalsLayers || [], true, Date.now());
         else petalsReadyPeers.delete(fromId);
         if (peer.hasEngine && peer.benchmark > 0) {
@@ -3947,14 +4977,20 @@ function addMessageToUI(role, content, streaming = false) {
   const div = document.createElement('div'); div.className = 'message';
   const isUser = role === 'user';
   const avClass = isUser ? 'user-av' : 'ai-av';
-  const avText = isUser ? 'U' : 'AI';
-  const headerTxt = isUser ? (myNickname !== 'Anonymous' ? myNickname : 'You') : `AI · ${ROLE_LABELS[myRole] || myRole}`;
+  const puduState = STRICT_PUDU_HIVE ? getPuduStageState() : null;
+  const avText = isUser ? 'U' : (STRICT_PUDU_HIVE ? (puduState?.activeStage?.emoji || '🦌') : 'AI');
+  const headerTxt = isUser
+    ? (myNickname !== 'Anonymous' ? myNickname : 'You')
+    : (STRICT_PUDU_HIVE
+      ? `${puduState?.activeStage?.label || 'Pudu Dormido'}`
+      : `AI · ${ROLE_LABELS[myRole] || myRole}`);
   div.innerHTML = `<div class="msg-avatar ${avClass}">${avText}</div><div class="msg-body"><div class="msg-header">${headerTxt}</div>${streaming ? '' : `<div class="msg-content">${content || ''}</div>`}<div class="msg-meta"></div></div>`;
   if (streaming) {
     div.querySelector('.msg-body').innerHTML = `<div class="msg-header">${headerTxt}</div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div><div class="msg-content"></div><div class="msg-meta"></div>`;
   }
   msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight; 
   if (!streaming && content) processRAGVector(content);
+  if (!streaming && content && (role === 'user' || role === 'assistant')) triggerPuduFromChat(role, content);
   return div;
 }
 
@@ -3991,13 +5027,20 @@ function updateHiveUI() {
   const counts = { S:0, A:0, B:0, C:0, D:0 };
   counts[deviceTier] = (counts[deviceTier] || 0) + 1;
   for (const [, p] of peers) { const t = p.deviceTier || 'D'; counts[t] = (counts[t] || 0) + 1; }
+  if (hiveSimulation.active) {
+    for (const participant of hiveSimulation.participants) {
+      const tier = participant.deviceTier || 'D';
+      counts[tier] = (counts[tier] || 0) + 1;
+    }
+  }
   document.getElementById('hive-s').textContent = counts.S;
   document.getElementById('hive-a').textContent = counts.A;
   document.getElementById('hive-b').textContent = counts.B;
   document.getElementById('hive-c').textContent = counts.C;
   document.getElementById('hive-d').textContent = counts.D;
   const total = counts.S + counts.A + counts.B + counts.C + counts.D;
-  document.getElementById('chip-peers-text').textContent = `HIVE: ${total}`;
+  const reportedCollective = getReportedCollectiveState();
+  document.getElementById('chip-peers-text').textContent = `HIVE: ${Math.max(total, reportedCollective.peerCount || 0)}`;
   const petalsPeerCount = Array.from(petalsReadyPeers.entries()).filter(([pid, info]) => pid !== peerId && info?.active && (Date.now() - (info.lastSeen || 0) <= CONFIG.presenceTTLMs)).length;
   document.getElementById('petals-peers').textContent = String(petalsPeerCount);
 
@@ -4007,6 +5050,75 @@ function updateHiveUI() {
     hint.className = 'hive-missing';
     hint.innerHTML = `👑 Falta Super Nodo para razonamiento complejo. <br><span style="text-decoration:underline;cursor:pointer;" onclick="document.getElementById('invite-modal').classList.add('active')">📋 Invitar expertos</span>`;
   } else { hint.style.display = 'none'; }
+
+  updatePuduHiveUI();
+}
+
+function setPuduChatAvailability(enabled, placeholder) {
+  const input = document.getElementById('chat-input');
+  const btn = document.getElementById('send-btn');
+  if (!input || !btn) return;
+  input.disabled = false;
+  btn.disabled = false;
+  input.dataset.puduReady = enabled ? 'true' : 'false';
+  btn.dataset.puduReady = enabled ? 'true' : 'false';
+  input.style.opacity = enabled ? '1' : '0.9';
+  btn.style.opacity = enabled ? '1' : '0.9';
+  input.placeholder = placeholder;
+}
+
+function updatePuduHiveUI() {
+  const state = getPuduStageState();
+  const avatar = document.getElementById('pudu-avatar');
+  const name = document.getElementById('pudu-stage-name');
+  const model = document.getElementById('pudu-stage-model');
+  const fill = document.getElementById('pudu-progress-fill');
+  const text = document.getElementById('pudu-progress-text');
+  const peerEl = document.getElementById('pudu-peer-count');
+  const covEl = document.getElementById('pudu-coverage-text');
+  const readyEl = document.getElementById('pudu-ready-text');
+  const latencyEl = document.getElementById('pudu-latency-text');
+  const stageList = document.getElementById('pudu-stage-list');
+
+  const stage = state.activeStage;
+  const displayName = stage ? `${stage.emoji} ${stage.label}` : 'Dormido';
+  const displayModel = stage ? `${stage.modelLabel} · ${stage.note}` : 'Esperando quorum biologico';
+  name.textContent = displayName;
+  model.textContent = displayModel;
+  avatar.classList.toggle('awake', state.ready);
+  fill.style.width = `${Math.max(4, state.activationPct)}%`;
+  fill.classList.toggle('awake', state.ready);
+  text.textContent = state.progressText;
+  setPuduSyncedText('stage-name', displayName);
+  setPuduSyncedText('stage-model', displayModel);
+  setPuduSyncedText('progress-text', state.progressText);
+  for (const syncFill of document.querySelectorAll('[data-pudu-fill]')) {
+    syncFill.style.width = `${Math.max(4, state.activationPct)}%`;
+    syncFill.classList.toggle('awake', state.ready);
+  }
+  const peerGoal = state.nextStage?.minPeers || state.activeStage?.minPeers || PUDU_HIVE_STAGES[0].minPeers;
+  peerEl.textContent = `${state.peerCount} / ${peerGoal}`;
+  covEl.textContent = `${state.coverageCount} / ${PETALS_COMPONENTS.length}`;
+  readyEl.textContent = state.ready ? 'La colmena se ha creado' : (stage ? 'Sincronizando' : 'Faltan celulares');
+  latencyEl.textContent = getPuduLatencyLabel();
+
+  stageList.innerHTML = PUDU_HIVE_STAGES.map(stageCfg => {
+    const isActive = stage?.id === stageCfg.id;
+    const isUnlocked = state.peerCount >= stageCfg.minPeers;
+    const css = isActive ? 'pudu-stage-row active' : isUnlocked ? 'pudu-stage-row' : 'pudu-stage-row locked';
+    const meta = isUnlocked ? `${stageCfg.modelLabel}` : `${stageCfg.minPeers} peers`;
+    return `<div class="${css}"><span class="pudu-stage-title">${stageCfg.emoji} ${stageCfg.label}</span><span class="pudu-stage-meta">${meta}</span></div>`;
+  }).join('');
+
+  if (state.ready) {
+    setPuduChatAvailability(true, `Habla con ${stage.label} en #${roomName}…`);
+  } else {
+    const missingLabel = state.missingPeers > 0
+      ? `Faltan ${state.missingPeers} celulares para despertar al pudu…`
+      : `Faltan ${state.missingShards} shards para completar la colmena…`;
+    setPuduChatAvailability(false, missingLabel);
+  }
+  syncPuduPresenceWithHive(state);
 }
 
 function updatePeerListUI() {
@@ -4160,7 +5272,19 @@ function reconnectForNewRoom() {
 // ══════════════════════════════════════════════════════════════════════════
 function setupInput() {
   const input=document.getElementById('chat-input'), btn=document.getElementById('send-btn');
-  const send = () => { const txt=input.value.trim(); if(!txt||isGenerating)return; input.value='';input.style.height='auto'; generateResponse(txt); };
+  const send = () => {
+    const txt = input.value.trim();
+    if (!txt || isGenerating) return;
+    if (STRICT_PUDU_HIVE && !isPuduHiveReady() && !txt.startsWith('/')) {
+      input.value = '';
+      input.style.height = 'auto';
+      addMessageToUI('assistant', getPuduStageState().progressText);
+      return;
+    }
+    input.value = '';
+    input.style.height = 'auto';
+    generateResponse(txt);
+  };
   btn.addEventListener('click', send);
   input.addEventListener('keydown', (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
   input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,140)+'px'; });
@@ -4400,11 +5524,13 @@ async function boot() {
   updateInitStatus("Detecting device capabilities…");
   await classifyDevice();
   setupInput();
+  initPuduPresence();
   setupNicknameUI();
   setupModals();
   document.getElementById('petals-activate-btn').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
   document.getElementById('petals-fab').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
   connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI(); updateRoomMembersUI();
+  if (STRICT_PUDU_HIVE) setTimeout(() => maybeAutoActivatePetals('boot'), 800);
 
   await initEngine();
   updateTierUI(); updateDeviceStats(); hideInitOverlay();
@@ -4477,9 +5603,11 @@ async function boot() {
     swarmOptimizer ? '⚖️ Lyapunov Optimizer' : null,
   ].filter(Boolean);
   const bootLines = [
-    `HIVE MIND v8 — Room: #${roomName}`,
+    `PUDU MIND v1 — Sala: #${roomName}`,
     '',
-    engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → relay/cache mode',
+    FORCE_ASSIST_ONLY
+      ? '🪶 Nodo liviano: assistOnly activo, sin shards locales'
+      : (STRICT_PUDU_HIVE ? '🦌 Modo colmena estricta: sin fallbacks ni respuestas fuera del enjambre' : (engine ? `✅ Engine: ${currentModelId}` : '📡 Sin engine local → relay/cache mode')),
     engine ? `📊 Benchmark: ${localBenchmark} tok/s (Proof of Compute)` : '',
     `Device: Tier ${deviceTier} · Role: ${roleLabel}`,
     `Nick: ${myNickname} · Rep: ${reputation.myScore} ${reputation.getStars(reputation.myScore)}`,
@@ -4492,7 +5620,7 @@ async function boot() {
     `Nostr relays: ${connectedRelays} conectados`,
     `Sala "${roomName}" activa — comparte el invite link 📲`,
     '',
-    `💡 Comandos: /benchmark · /colmena [N] · /hss · /dsim`,
+    `💡 Comandos: /colmena [N] · /hss · /dsim`,
   ].filter(Boolean);
   addMessageToUI('assistant', bootLines.join('\n'));
 
@@ -4530,6 +5658,10 @@ async function boot() {
     // ══════════════════════════════════════════════════════════════════════
 
     const nostr = await getNostrMod();
+    hiveSimulation.active = false;
+    hiveSimulation.participants = [];
+    hiveSimulation.onlineCount = 0;
+    hiveSimulation.avgRtt = null;
 
     simLog(`═══ COLMENA CHILE v9: SmolLM2-1.7B · Arquitectura Multi-Paper 2025 ═══`, 'sim-title');
     simLog(`Papers: DSD·PipeEdge·DroidSpeak·DeepSeekDualPipe·TK-SLT·DSSD·KVCOMM`, 'sim-info');
@@ -4634,6 +5766,21 @@ async function boot() {
       };
     });
     const online = nodes.filter(n=>n.online);
+    hiveSimulation.active = true;
+    hiveSimulation.participants = online.map(node => ({
+      peerId: node.pid,
+      deviceTier: node.p.tier,
+      memoryMB: node.p.ram,
+      webgpu: node.p.ram >= 6144,
+      rtt: node.rtt(),
+      benchmark: node.p.tps,
+      tps: node.p.tps,
+      nickname: `${node.p.brand}-${node.p.city}`,
+    }));
+    hiveSimulation.onlineCount = online.length;
+    hiveSimulation.avgRtt = online.length > 0
+      ? hiveSimulation.participants.reduce((sum, participant) => sum + (participant.rtt || 0), 0) / online.length
+      : null;
     simLog(`\n✅ ${online.length}/${n} nodos online`, 'sim-pass');
 
     // ════════════════════════════════════════════════════════════════════
