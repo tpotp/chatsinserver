@@ -1735,7 +1735,7 @@ const PUDU_HIVE_STAGES = [
     modelLabel: 'Sim 8B-q4',
     note: 'Cerebro mayor con sintesis mas fina y contexto mas amplio',
     maxTokens: 80,
-    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 112,
   },
   {
@@ -1749,7 +1749,7 @@ const PUDU_HIVE_STAGES = [
     modelLabel: 'Sim 8B-q4 · gran coro',
     note: 'Mas draft, mas cache y mas resiliencia sin agrandar el cuello de botella',
     maxTokens: 96,
-    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 128,
   },
   {
@@ -1763,7 +1763,7 @@ const PUDU_HIVE_STAGES = [
     modelLabel: 'Sim 8B-q4 · coro nacional',
     note: 'Nucleo critico estable con ayuda regional repartida por Chile',
     maxTokens: 104,
-    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 144,
   },
   {
@@ -1777,7 +1777,7 @@ const PUDU_HIVE_STAGES = [
     modelLabel: 'Sim 8B-q4 · memoria coral',
     note: 'El coro no entra todo al pipeline: la mayoria actua como cache, draft y redundancia',
     maxTokens: 112,
-    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 160,
   },
   {
@@ -1791,7 +1791,7 @@ const PUDU_HIVE_STAGES = [
     modelLabel: 'Sim 8B-q4 · resonancia total',
     note: 'Mas usuarios ayudan sin empeorar: el camino critico sigue acotado y el resto suma potencia lateral',
     maxTokens: 120,
-    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 176,
   },
   {
@@ -1805,7 +1805,7 @@ const PUDU_HIVE_STAGES = [
     modelLabel: 'Sim 8B-q4 · techo browser',
     note: 'Maximo nivel estable de esta arquitectura web antes de que convenga cambiar de runtime',
     maxTokens: 128,
-    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'],
+    simulationModelIds: ['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 192,
   },
 ];
@@ -3853,17 +3853,21 @@ function selectSimulationCollectiveModel(stageState = getPuduStageState()) {
 
 async function ensureSimulationCollectiveEngine(stageState = getPuduStageState()) {
   if (!STRICT_PUDU_HIVE || !hiveSimulation.active || !stageState.ready) return false;
-  const candidateModels = selectSimulationCollectiveModelCandidates(stageState);
-  if (!candidateModels.length) return false;
-  if (engine && candidateModels.some(model => model.id === currentModelId)) return true;
+  const preferredModels = selectSimulationCollectiveModelCandidates(stageState);
+  if (!preferredModels.length) return false;
+  const currentModelCfg = currentModelId ? CONFIG.models.find(model => model.id === currentModelId) : null;
+  const candidateModels = currentModelCfg && !preferredModels.some(model => model.id === currentModelCfg.id)
+    ? [...preferredModels, currentModelCfg]
+    : preferredModels;
+  if (engine && currentModelId === preferredModels[0]?.id) return true;
   if (simulationCollectiveLoadPromise) return simulationCollectiveLoadPromise;
 
   simulationCollectiveLoadPromise = (async () => {
     isModelLoading = true;
-    updateInitStatus(`Cargando cerebro local ${candidateModels[0].name} para la simulacion…`);
-    showModelProgress(true, candidateModels[0].id);
+    updateInitStatus(`Cargando cerebro local ${preferredModels[0].name} para la simulacion…`);
+    showModelProgress(true, preferredModels[0].id);
 
-    if (engine && !candidateModels.some(model => model.id === currentModelId)) {
+    if (engine && currentModelId !== preferredModels[0]?.id) {
       try { await engine.unload?.(); } catch(_) {}
       engine = null;
       currentModelId = null;
