@@ -3861,7 +3861,8 @@ function selectSimulationCollectiveModel(stageState = getPuduStageState()) {
 }
 
 async function ensureSimulationCollectiveEngine(stageState = getPuduStageState()) {
-  if (!STRICT_PUDU_HIVE || !hiveSimulation.active || !stageState.ready) return false;
+  const hasCollectiveCoverage = (stageState?.coverageCount || 0) >= PETALS_COMPONENTS.length;
+  if (!STRICT_PUDU_HIVE || !hiveSimulation.active || !stageState?.activeStage || !hasCollectiveCoverage) return false;
   const preferredModels = selectSimulationCollectiveModelCandidates(stageState);
   if (!preferredModels.length) return false;
   const currentModelCfg = currentModelId ? CONFIG.models.find(model => model.id === currentModelId) : null;
