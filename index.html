@@ -4396,11 +4396,11 @@ function pickPetalsFallbackPeer() {
     });
   }
   candidates.sort((a, b) =>
-    (Number(b.open) - Number(a.open)) ||
     (Number(b.hostEmbed) - Number(a.hostEmbed)) ||
     (Number(b.hasEngine) - Number(a.hasEngine)) ||
     (Number(b.collectiveReady) - Number(a.collectiveReady)) ||
     ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
+    (Number(b.open) - Number(a.open)) ||
     ((b.collectiveCoverage || 0) - (a.collectiveCoverage || 0)) ||
     ((b.collectivePeers || 0) - (a.collectivePeers || 0)) ||
     ((b.layers?.length || 0) - (a.layers?.length || 0)) ||
