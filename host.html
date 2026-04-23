@@ -344,10 +344,17 @@
     const ROOM_BASE_PREFIX = 'sala-';
     const URL_FLAGS = new URLSearchParams(location.search);
     const DEFAULT_SIMULATE = Math.min(15, Math.max(3, parseInt(URL_FLAGS.get('simulate') || '12', 10) || 12));
-    const LOCAL_RELAYS = ['localhost', '127.0.0.1'].includes(location.hostname)
-      ? [`ws://${location.hostname}:7777`]
-      : [];
-    const RELAYS = [...LOCAL_RELAYS, 'wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://offchain.pub', 'wss://nostr.mom'];
+const LOCAL_RELAYS = ['localhost', '127.0.0.1'].includes(location.hostname)
+  ? [`ws://${location.hostname}:7777`]
+  : [];
+const RELAYS = [
+  ...LOCAL_RELAYS,
+  'wss://relay.damus.io',
+  'wss://relay.primal.net',
+  'wss://nos.lol',
+  'wss://offchain.pub',
+  'wss://nostr.mom',
+];
     const lobbyPeers = new Map();
     const relayMap = new Map();
     const roomControllers = new Map();
@@ -574,13 +581,14 @@
       const controller = ensureRoomController(roomName);
       controller.status = status;
       const humanCount = getRoomDirectory().find(room => room.roomName === roomName)?.count || 0;
+      const reallyReady = !!status.ready && !!status.engineReady;
       controller.wrapper.querySelector('[data-room-humans]').textContent = `${humanCount} / ${ROOM_CAPACITY}`;
       controller.wrapper.querySelector('[data-room-stage]').textContent = status.stageLabel || 'Pudu Dormido';
       controller.wrapper.querySelector('[data-room-model]').textContent = status.engineReady ? `${status.modelLabel || 'colectivo'} · listo` : `${status.modelLabel || 'colectivo'} · esperando warm`;
-      controller.wrapper.querySelector('[data-room-progress]').textContent = status.progressText || (status.ready ? 'La colmena de esta sala ya está despierta.' : 'Esperando que el bosque termine de calentarse.');
+      controller.wrapper.querySelector('[data-room-progress]').textContent = status.progressText || (reallyReady ? 'La colmena de esta sala ya está despierta.' : 'Esperando que el bosque termine de calentarse.');
       const badge = controller.wrapper.querySelector('[data-room-badge]');
-      badge.className = `room-badge ${status.ready ? 'ready' : controller.warmed ? 'warming' : 'idle'}`;
-      badge.textContent = status.ready
+      badge.className = `room-badge ${reallyReady ? 'ready' : controller.warmed ? 'warming' : 'idle'}`;
+      badge.textContent = reallyReady
         ? `lista · ${Math.round(status.collectiveTPS || 0)} tok/s`
         : controller.warmed
           ? 'calentando cerebro'

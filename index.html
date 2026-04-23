@@ -629,8 +629,8 @@ body::before {
 .init-progress { width: 240px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
 .init-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
 
-#sim-log { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 999; max-height: 45vh; overflow-y: auto; background: rgba(10,10,15,0.95); border-top: 2px solid var(--accent-primary); padding: 12px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
-#sim-log.active { display: block; }
+#sim-log { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 999; max-height: 45vh; overflow-y: auto; background: rgba(10,10,15,0.95); border-top: 2px solid var(--accent-primary); padding: 12px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); pointer-events: none; }
+#sim-log.active { display: block; pointer-events: none; }
 #sim-log .sim-pass { color: #00b894; }
 #sim-log .sim-fail { color: #e17055; }
 #sim-log .sim-info { color: var(--accent-secondary); }
@@ -1724,6 +1724,13 @@ const ROLE_LABELS = {
 const LOCALHOST_RELAY = ['localhost', '127.0.0.1'].includes(location.hostname)
   ? [`ws://${location.hostname}:7777`]
   : [];
+const STABLE_NOSTR_RELAYS = [
+  "wss://relay.damus.io",
+  "wss://relay.primal.net",
+  "wss://nos.lol",
+  "wss://offchain.pub",
+  "wss://nostr.mom",
+];
 
 const CONFIG = {
   models: [
@@ -1734,15 +1741,9 @@ const CONFIG = {
     { id: "Llama-3.1-8B-Instruct-q4f16_1-MLC",  name: "8B-q4",   label: "large",  vramMB: 5500, ramMB: 8000, modelSize: 8000, tier: "A", roles: ["coder", "scientist"] },
   ],
   maxPeers: 12,
-  nostrCoreRelays: [ ...LOCALHOST_RELAY, "wss://relay.damus.io", "wss://relay.primal.net" ],
-  nostrPoolRelays: [
-    "wss://nos.lol","wss://offchain.pub","wss://nostr.mom","wss://nostr.wine",
-    "wss://nostr.bitcoiner.social","wss://nostr-pub.wellorder.net","wss://relay.nostr.info",
-    "wss://nostr.oxtr.dev","wss://purplepag.es","wss://relay.nostr.wirednet.jp",
-    "wss://relay.nostr.com.au","wss://relay.snort.social","wss://relay.nostr.bg",
-    "wss://nostr.zebedee.cloud","wss://eden.nostr.land","wss://relay.noswhere.com"
-  ],
-  maxActiveRelays: 6,
+  nostrCoreRelays: [ ...LOCALHOST_RELAY, ...STABLE_NOSTR_RELAYS ],
+  nostrPoolRelays: [],
+  maxActiveRelays: LOCALHOST_RELAY.length + STABLE_NOSTR_RELAYS.length,
   relayReconnectMs: 8000, relayMaxRetries: 999,
   appNamespace: "p2p-hive-public",
   presenceIntervalMs: 15000, presenceTTLMs: 45000,
@@ -3713,7 +3714,13 @@ function getPuduStageState() {
   const activationPct = activeStageView
     ? Math.min(100, Math.round((coveragePct * 0.6) + (capabilityPct * 0.4)))
     : Math.min(capabilityPct, coveragePct || capabilityPct);
-  const collectiveReady = reportedCollective.ready || hasCollectivePetalsAvailability();
+  const remoteHostControlledRoom = !hiveSimulation.active && [...peers.values()].some(peer =>
+    peer &&
+    (peer.hostEmbed || peer.collectiveSimulated) &&
+    (Date.now() - (peer.lastSeen || 0) <= CONFIG.presenceTTLMs * 2)
+  );
+  const remoteSimulatedGuardianPending = (!!reportedCollective.simulated || remoteHostControlledRoom) && !hiveSimulation.active;
+  const collectiveReady = reportedCollective.ready || (!remoteSimulatedGuardianPending && hasCollectivePetalsAvailability());
   const collectiveBrainReady = hiveSimulation.active
     ? (!!engine && currentModelLabel && currentModelLabel !== 'none')
     : (!!reportedCollective.ready && !!reportedCollective.modelLabel && reportedCollective.modelLabel !== 'none')
@@ -4366,7 +4373,7 @@ function petalsFindPeerForComponent(comp) {
   return null;
 }
 
-function pickPetalsFallbackPeer() {
+function listPetalsFallbackCandidates(limit = Infinity) {
   const now = Date.now();
   const candidates = [];
   for (const [pid, info] of petalsReadyPeers) {
@@ -4383,6 +4390,7 @@ function pickPetalsFallbackPeer() {
       hostEmbed: !!peer?.hostEmbed,
       hasEngine: !!peer?.hasEngine,
       collectiveReady: !!peer?.collectiveReady,
+      canServe: !!peer?.hasEngine || !!peer?.collectiveReady || !!peer?.petalsActive || (info.layers?.length || 0) > 0,
       collectiveCoverage: peer?.collectiveCoverageCount || 0,
       collectivePeers: peer?.collectivePeerCount || 0,
       score: estimatePetalsPeerScore({
@@ -4396,18 +4404,26 @@ function pickPetalsFallbackPeer() {
     });
   }
   candidates.sort((a, b) =>
+    (Number(b.canServe) - Number(a.canServe)) ||
     (Number(b.hostEmbed) - Number(a.hostEmbed)) ||
-    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
-    (Number(b.hasEngine) - Number(a.hasEngine)) ||
     (Number(b.collectiveReady) - Number(a.collectiveReady)) ||
+    (Number(b.hasEngine) - Number(a.hasEngine)) ||
     (Number(b.open) - Number(a.open)) ||
+    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
     ((b.collectiveCoverage || 0) - (a.collectiveCoverage || 0)) ||
     ((b.collectivePeers || 0) - (a.collectivePeers || 0)) ||
     ((b.layers?.length || 0) - (a.layers?.length || 0)) ||
     ((b.score || 0) - (a.score || 0)) ||
     a.peerId.localeCompare(b.peerId)
   );
-  return candidates[0]?.peerId || null;
+  const usable = candidates.some(candidate => candidate.canServe)
+    ? candidates.filter(candidate => candidate.canServe)
+    : candidates;
+  return usable.slice(0, limit);
+}
+
+function pickPetalsFallbackPeer() {
+  return listPetalsFallbackCandidates(1)[0]?.peerId || null;
 }
 
 function pickGeneralFallbackPeer() {
@@ -4688,7 +4704,11 @@ async function runPetalsInference(userMessage, options = {}) {
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
     contentEl.textContent = '⏳ El pudu escucha desde otro nodo de la colmena...';
 
-    const uplinkPeerId = uplinkCandidateId || pickPetalsFallbackPeer();
+    const uplinkCandidates = Array.from(new Set([
+      ...(uplinkCandidateId ? [uplinkCandidateId] : []),
+      ...listPetalsFallbackCandidates(3).map(candidate => candidate.peerId),
+    ])).filter(Boolean);
+    const uplinkPeerId = uplinkCandidates[0];
     if (!uplinkPeerId) {
       contentEl.textContent = 'No hay un nodo guardian disponible para recibir la pregunta.';
       isGenerating = false;
@@ -4708,6 +4728,29 @@ async function runPetalsInference(userMessage, options = {}) {
     const uplinkPayloadSize = JSON.stringify(uplinkPayload).length;
     const canUseDirectGuardian = uplinkPeer?.dc?.readyState === 'open';
     const preferRelayUplink = STRICT_PUDU_HIVE || isMobile || uplinkPayloadSize > 4096;
+    const attemptedGuardians = new Set();
+    let lastTransport = (canUseDirectGuardian && !preferRelayUplink) ? 'direct' : 'relay';
+    const dispatchGuardianRequest = (targetPeerId) => {
+      if (!targetPeerId || attemptedGuardians.has(targetPeerId)) return false;
+      attemptedGuardians.add(targetPeerId);
+      const targetPeer = peers.get(targetPeerId);
+      const canSendDirect = targetPeer?.dc?.readyState === 'open' && !preferRelayUplink;
+      lastTransport = canSendDirect ? 'direct' : 'relay';
+      if (canSendDirect) {
+        try {
+          targetPeer.dc.send(encodeMsg(MSG.TOK_REQ, reqId, 0, uplinkPayload));
+          return true;
+        } catch (err) {
+          console.warn('[Pudu uplink] direct guardian send failed, retrying over Nostr:', err.message);
+        }
+      }
+      publishSignal(targetPeerId, {
+        type: "moe_fallback_req",
+        reqId,
+        ...uplinkPayload
+      });
+      return true;
+    };
     const resultPromise = new Promise((resolve) => {
       const timeout = setTimeout(() => {
         fedPending.delete(reqId);
@@ -4729,23 +4772,12 @@ async function runPetalsInference(userMessage, options = {}) {
         }
       });
     });
-    if (canUseDirectGuardian && !preferRelayUplink) {
-      try {
-        uplinkPeer.dc.send(encodeMsg(MSG.TOK_REQ, reqId, 0, uplinkPayload));
-      } catch (err) {
-        console.warn('[Pudu uplink] direct guardian send failed, retrying over Nostr:', err.message);
-        publishSignal(uplinkPeerId, {
-          type: "moe_fallback_req",
-          reqId,
-          ...uplinkPayload
-        });
-      }
-    } else {
-      publishSignal(uplinkPeerId, {
-        type: "moe_fallback_req",
-        reqId,
-        ...uplinkPayload
-      });
+    dispatchGuardianRequest(uplinkPeerId);
+    for (const [retryIndex, retryPeerId] of uplinkCandidates.slice(1).entries()) {
+      setTimeout(() => {
+        if (!fedPending.has(reqId)) return;
+        dispatchGuardianRequest(retryPeerId);
+      }, 2500 * (retryIndex + 1));
     }
     const result = await resultPromise;
     const text = result?.text || '[La colmena no pudo responder a tiempo]';
@@ -4753,7 +4785,8 @@ async function runPetalsInference(userMessage, options = {}) {
     tokenCount = text.trim().split(/\s+/).filter(Boolean).length;
     const ms = performance.now() - startTime;
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    const metaText = `${result?.model || stage.modelLabel} · ${(canUseDirectGuardian && !preferRelayUplink) ? 'uplink directo' : 'uplink relay'}${result?.partial ? ' · parcial' : ''} · ${Math.round(ms)}ms`;
+    const metaTransport = result?.viaTransport || lastTransport;
+    const metaText = `${result?.model || stage.modelLabel} · ${metaTransport === 'direct' ? 'uplink directo' : 'uplink relay'}${result?.partial ? ' · parcial' : ''} · ${Math.round(ms)}ms`;
     if (metaEl) metaEl.textContent = metaText;
     if (!options.specialEvent) {
       chatHistory.push({ role: "assistant", content: text });
@@ -6227,9 +6260,10 @@ async function signAndPublishToNamespace(namespace, content, asPrivKeyBytes = nu
 }
 
 function connectToRelays() {
-  const selectedRelays = [...CONFIG.nostrCoreRelays];
-  const shuffledPool = [...CONFIG.nostrPoolRelays].sort(() => 0.5 - Math.random());
-  for (let i = 0; i < (CONFIG.maxActiveRelays - CONFIG.nostrCoreRelays.length); i++) { if (shuffledPool[i]) selectedRelays.push(shuffledPool[i]); }
+  const selectedRelays = [...new Set([
+    ...CONFIG.nostrCoreRelays,
+    ...CONFIG.nostrPoolRelays.slice(0, Math.max(0, CONFIG.maxActiveRelays - CONFIG.nostrCoreRelays.length)),
+  ])];
   for (const url of selectedRelays) connectRelay(url);
 }
 function connectRelay(url) {
@@ -6433,7 +6467,7 @@ function handleNostrFallbackRes(fromId, signal) {
     fedPending.delete(reqId);
     const peer = peers.get(fromId);
     if (peer) peer.tps = payload.tps || peer.tps;
-    resolve(payload);
+    resolve({ ...payload, viaTransport: 'relay', viaPeerId: fromId });
   }
 }
 
@@ -6451,6 +6485,14 @@ function handlePeerPresence(p) {
       tps: p.tps || 0, hasEngine: p.hasEngine || false, shardInfo: p.shardInfo || null, inferenceMode: p.inferenceMode || 'relay',
       lastSeen: Date.now(), rtt: Infinity, conn: null, dc: null, pingTimer: null, lastPingSent: 0, reconnectAttempts: 0, reconnectTimer: null,
       nickname: p.nickname || null, repScore: p.repScore || 0, benchmark: p.benchmark || 0, petalsActive: !!p.petalsActive, petalsBudgetMB: p.petalsBudgetMB || 0,
+      hostEmbed: !!p.hostEmbed,
+      collectivePeerCount: p.collectivePeerCount || 0,
+      collectiveCoverageCount: p.collectiveCoverageCount || 0,
+      collectiveReady: !!p.collectiveReady,
+      collectiveStageId: p.collectiveStageId || null,
+      collectiveStageLabel: p.collectiveStageLabel || null,
+      collectiveModelLabel: p.collectiveModelLabel || null,
+      collectiveSimulated: !!p.collectiveSimulated,
     });
     if (peerId < p.peerId) { if (getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }
     else { setTimeout(() => { const peer = peers.get(p.peerId); if (peer && (!peer.conn || peer.conn.connectionState === 'closed') && getActiveConnections() < CONFIG.maxPeers) initiateWebRTC(p.peerId); }, 3000 + Math.random() * 2000); }
@@ -6612,15 +6654,16 @@ function setupDC(dc, remoteId, myVirtualId = null) {
         peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS, hasEngine: !!engine,
         shardInfo: myShardInfo, inferenceMode, modelSize: getCurrentModelSize(), moeRole: myRole,
         benchmark: localBenchmark, nickname: myNickname, repScore: reputation.myScore,
-        petalsLayers: petalsMyLayers, petalsActive, petalsBudgetMB: getLocalPetalsBudgetMB(false),
-        collectivePeerCount: collectiveState.peerCount,
-        collectiveCoverageCount: collectiveState.coverageCount,
-        collectiveReady: collectiveState.ready,
-        collectiveStageId: collectiveState.activeStage?.id || null,
-        collectiveStageLabel: collectiveState.activeStage?.label || null,
-        collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
-        collectiveSimulated: hiveSimulation.active,
-      }));
+      petalsLayers: petalsMyLayers, petalsActive, petalsBudgetMB: getLocalPetalsBudgetMB(false),
+      collectivePeerCount: collectiveState.peerCount,
+      collectiveCoverageCount: collectiveState.coverageCount,
+      collectiveReady: collectiveState.ready,
+      collectiveStageId: collectiveState.activeStage?.id || null,
+      collectiveStageLabel: collectiveState.activeStage?.label || null,
+      collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
+      collectiveSimulated: hiveSimulation.active,
+      hostEmbed: IS_HOST_EMBED,
+    }));
       if (petalsActive) {
         setTimeout(() => { if (dc.readyState === "open") dc.send(encodeMsg(MSG.PETALS_READY, 0, 0, { layers: petalsMyLayers, active: true, petalsBudgetMB: getLocalPetalsBudgetMB(false) })); }, 100);
       }
@@ -6741,6 +6784,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         peer.collectiveStageLabel = m.payload.collectiveStageLabel || peer.collectiveStageLabel || null;
         peer.collectiveModelLabel = m.payload.collectiveModelLabel || peer.collectiveModelLabel || null;
         peer.collectiveSimulated = !!m.payload.collectiveSimulated || !!peer.collectiveSimulated;
+        peer.hostEmbed = !!m.payload.hostEmbed || !!peer.hostEmbed;
         if (peer.petalsActive) upsertPetalsPeer(fromId, m.payload.petalsLayers || [], true, Date.now());
         else petalsReadyPeers.delete(fromId);
         if (peer.hasEngine && peer.benchmark > 0) {
@@ -6800,7 +6844,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
             resolve({ bounced: true, nextComp: resultData.nextComp, data: resultData.resultData, seqLen: resultData.seqLen });
             return;
         }
-        resolve(m.payload); 
+        resolve({ ...m.payload, viaTransport: 'direct', viaPeerId: fromId }); 
       }
       break;
     
