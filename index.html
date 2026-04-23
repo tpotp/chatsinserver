@@ -4380,6 +4380,8 @@ function pickPetalsFallbackPeer() {
       layers: info.layers || [],
       lastSeen,
       open: peer?.dc?.readyState === 'open',
+      hostEmbed: !!peer?.hostEmbed,
+      hasEngine: !!peer?.hasEngine,
       collectiveReady: !!peer?.collectiveReady,
       collectiveCoverage: peer?.collectiveCoverageCount || 0,
       collectivePeers: peer?.collectivePeerCount || 0,
@@ -4395,12 +4397,14 @@ function pickPetalsFallbackPeer() {
   }
   candidates.sort((a, b) =>
     (Number(b.open) - Number(a.open)) ||
+    (Number(b.hostEmbed) - Number(a.hostEmbed)) ||
+    (Number(b.hasEngine) - Number(a.hasEngine)) ||
     (Number(b.collectiveReady) - Number(a.collectiveReady)) ||
+    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
     ((b.collectiveCoverage || 0) - (a.collectiveCoverage || 0)) ||
     ((b.collectivePeers || 0) - (a.collectivePeers || 0)) ||
     ((b.layers?.length || 0) - (a.layers?.length || 0)) ||
     ((b.score || 0) - (a.score || 0)) ||
-    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
     a.peerId.localeCompare(b.peerId)
   );
   return candidates[0]?.peerId || null;
@@ -6468,6 +6472,7 @@ function handlePeerPresence(p) {
       benchmark: p.benchmark || peer.benchmark || 0,
       petalsActive: !!p.petalsActive,
       petalsBudgetMB: p.petalsBudgetMB || peer.petalsBudgetMB || 0,
+      hostEmbed: !!p.hostEmbed || !!peer.hostEmbed,
       collectivePeerCount: p.collectivePeerCount || peer.collectivePeerCount || 0,
       collectiveCoverageCount: p.collectiveCoverageCount || peer.collectiveCoverageCount || 0,
       collectiveReady: !!p.collectiveReady || !!peer.collectiveReady,
