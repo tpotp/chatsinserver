@@ -4374,7 +4374,7 @@ function pickPetalsFallbackPeer() {
     const peer = peers.get(pid);
     if (!peer) continue;
     const lastSeen = info?.lastSeen || peer.lastSeen || 0;
-    if (lastSeen && now - lastSeen > CONFIG.presenceTTLMs * 2) continue;
+    if (lastSeen && now - lastSeen > CONFIG.presenceTTLMs) continue;
     candidates.push({
       peerId: pid,
       layers: info.layers || [],
@@ -4397,9 +4397,9 @@ function pickPetalsFallbackPeer() {
   }
   candidates.sort((a, b) =>
     (Number(b.hostEmbed) - Number(a.hostEmbed)) ||
+    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
     (Number(b.hasEngine) - Number(a.hasEngine)) ||
     (Number(b.collectiveReady) - Number(a.collectiveReady)) ||
-    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
     (Number(b.open) - Number(a.open)) ||
     ((b.collectiveCoverage || 0) - (a.collectiveCoverage || 0)) ||
     ((b.collectivePeers || 0) - (a.collectivePeers || 0)) ||
