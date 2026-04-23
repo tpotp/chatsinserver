@@ -6,7 +6,7 @@
 <title>CHACHAtoP2P-LLM — Distributed Hive Mind</title>
 <meta name="description" content="Browser-based peer-to-peer distributed edge routing with 5-tier hardware classification. Zero-install, zero-server AI inference.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg-primary: #0a0a0f;
@@ -34,7 +34,8 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --shadow-glow: 0 0 30px var(--accent-glow);
-  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-sans: 'Nunito', 'Inter', -apple-system, sans-serif;
+  --font-title: 'Fredoka', 'Nunito', cursive;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-med: 300ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -76,6 +77,15 @@ body::before {
   border: 1px solid var(--border-subtle); background: var(--bg-glass);
   backdrop-filter: blur(8px); flex-shrink: 0;
   transition: all var(--transition-med);
+}
+.h-room-tag,
+.h-name,
+.sidebar-title,
+.pudu-stage-name,
+.room-bar-btn,
+.new-room-btn {
+  font-family: var(--font-title);
+  letter-spacing: 0.6px;
 }
 .status-chip .dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
@@ -642,6 +652,138 @@ body::before {
 }
 .room-bar-btn:hover { background: var(--accent-primary); color: white; }
 .invite-btn { margin-left: auto; }
+#room-switch-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 120;
+  padding: 10px 18px; text-align: center; font-size: 13px; font-weight: 700;
+  color: #d9ffe7; background: linear-gradient(135deg, rgba(0,229,255,0.16), rgba(177,107,255,0.2));
+  border-bottom: 1px solid rgba(0,229,255,0.18);
+  transform: translateY(-110%); transition: transform 0.28s ease;
+  backdrop-filter: blur(16px);
+}
+#room-switch-banner.show { transform: translateY(0); }
+#sidebar-toggle {
+  position: fixed; left: 14px; bottom: 18px; z-index: 111;
+  display: none; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 14px;
+  border: 1px solid rgba(0,229,255,0.3); background: rgba(6,10,22,0.86);
+  color: #d9ffe7; font-size: 12px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.35);
+}
+#rooms-sidebar {
+  position: fixed; top: 84px; left: 12px; bottom: 18px; z-index: 109;
+  width: min(300px, calc(100vw - 24px));
+  border-radius: 24px; border: 1px solid rgba(0,229,255,0.14);
+  background: linear-gradient(180deg, rgba(4,8,18,0.94), rgba(8,12,28,0.96));
+  box-shadow: 0 26px 40px rgba(0,0,0,0.34);
+  backdrop-filter: blur(22px);
+  display: flex; flex-direction: column; overflow: hidden;
+  transform: translateX(calc(-100% - 18px));
+  transition: transform 0.28s ease;
+}
+#rooms-sidebar.open { transform: translateX(0); }
+.sidebar-header {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.sidebar-title {
+  font-size: 14px; font-weight: 800; letter-spacing: 0.14em; color: #d9ffe7;
+}
+.sidebar-subtitle {
+  margin-top: 6px; font-size: 11px; letter-spacing: 0.08em; color: var(--text-secondary);
+  text-transform: uppercase;
+}
+.sidebar-rooms {
+  flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+.sidebar-footer {
+  padding: 12px; border-top: 1px solid rgba(255,255,255,0.06);
+}
+.new-room-btn {
+  width: 100%; padding: 11px 14px; border-radius: 14px;
+  border: 1px solid rgba(0,229,255,0.3); background: rgba(0,229,255,0.08);
+  color: #d9ffe7; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.new-room-btn:hover { background: rgba(0,229,255,0.16); }
+.room-card {
+  width: 100%; padding: 13px 14px; border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);
+  color: inherit; text-align: left; cursor: pointer; transition: all 0.18s ease;
+}
+.room-card:hover { transform: translateX(2px); border-color: rgba(0,229,255,0.2); background: rgba(0,229,255,0.06); }
+.room-card.active {
+  background: linear-gradient(135deg, rgba(0,229,255,0.14), rgba(177,107,255,0.12));
+  border-color: rgba(0,229,255,0.3);
+}
+.room-card.full { opacity: 0.58; cursor: not-allowed; }
+.room-card.full:hover { transform: none; }
+.room-name {
+  display: block; font-size: 13px; font-weight: 800; color: #f8fbff; line-height: 1.35;
+}
+.room-meta {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+}
+.room-count {
+  font-size: 10px; color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.room-badge {
+  padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+}
+.room-badge.available { color: #6ff5c0; background: rgba(74,222,128,0.14); border: 1px solid rgba(74,222,128,0.26); }
+.room-badge.almost { color: #ffd66b; background: rgba(250,204,21,0.14); border: 1px solid rgba(250,204,21,0.24); }
+.room-badge.full { color: #ff9e9e; background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.24); }
+.room-active-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-left: auto;
+  background: #31ffb5; box-shadow: 0 0 12px rgba(49,255,181,0.7);
+}
+.room-card:not(.active) .room-active-dot {
+  background: rgba(255,255,255,0.16); box-shadow: none;
+}
+#pudu3d-overlay {
+  position: fixed; inset: 0; z-index: 500; display: none;
+  pointer-events: none;
+}
+#pudu3d-vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0.08), rgba(0,0,0,0.82));
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+#pudu3d-overlay.active #pudu3d-vignette { opacity: 1; }
+#pudu3d-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: auto;
+}
+#pudu3d-bubble {
+  position: absolute; left: 50%; bottom: 8vh; transform: translateX(-50%) translateY(18px);
+  width: min(88vw, 760px);
+  padding: 18px 22px; border-radius: 28px;
+  border: 2px solid rgba(255,255,255,0.18);
+  background: rgba(10,12,24,0.84);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 24px 42px rgba(0,0,0,0.36);
+  opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+#pudu3d-overlay.active #pudu3d-bubble {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+#pudu3d-bubble::before {
+  content: '';
+  position: absolute; left: 50%; bottom: -18px; transform: translateX(-50%);
+  width: 44px; height: 24px;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  background: rgba(10,12,24,0.84);
+  border-left: 2px solid rgba(255,255,255,0.18);
+  border-right: 2px solid rgba(255,255,255,0.18);
+  border-bottom: 2px solid rgba(255,255,255,0.18);
+}
+#pudu3d-caption {
+  font-size: clamp(18px, 2.3vw, 29px); line-height: 1.45; font-weight: 800; color: #f7fffd;
+  text-shadow: 0 0 18px rgba(0,229,255,0.12);
+}
+#pudu3d-meta {
+  margin-top: 10px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #9dd7ff;
+}
 
 /* ── Consensus Card ──────────────────────────────────────────── */
 .consensus-card {
@@ -891,19 +1033,322 @@ body::before {
   font-family: var(--font-mono); font-weight: 600;
 }
 
+/* ── FINAL CHAT UI (inspirado en pudu_chat_v12) ─────────────────────── */
+#room-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 92px;
+  transform: translateX(-50%) translateY(18px);
+  z-index: 240;
+  max-width: 340px;
+  padding: 14px 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 120, 120, 0.42);
+  background: rgba(13, 16, 28, 0.96);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 700;
+  text-align: center;
+  color: #ffb3b3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease;
+  backdrop-filter: blur(18px);
+}
+#room-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+#app {
+  width: min(1440px, calc(100% - 28px));
+  margin: 0 auto 14px;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.06);
+  background:
+    radial-gradient(circle at top left, rgba(0,206,201,0.07), transparent 32%),
+    radial-gradient(circle at top right, rgba(108,92,231,0.07), transparent 34%),
+    rgba(8, 10, 18, 0.84);
+  box-shadow: 0 24px 70px rgba(0,0,0,0.36);
+  backdrop-filter: blur(26px);
+}
+#sidebar {
+  width: 320px;
+  background: rgba(10, 14, 25, 0.92);
+  border-right: 1px solid rgba(0, 229, 255, 0.10);
+}
+#sidebar .sidebar-section {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 18px;
+  margin: 12px;
+}
+#sidebar .sidebar-section:not(#identity-section):not(#pudu-hive-section) {
+  display: none;
+}
+#main {
+  background:
+    radial-gradient(circle at center top, rgba(0,229,255,0.08), transparent 34%),
+    linear-gradient(180deg, rgba(9,12,24,0.92) 0%, rgba(6,8,16,0.92) 100%);
+}
+#status-bar {
+  width: min(1440px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 8px 12px 6px;
+}
+.room-bar {
+  padding: 14px 18px;
+  gap: 12px;
+  background: rgba(10, 14, 25, 0.94);
+  border-bottom: 1px solid rgba(0,229,255,0.10);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+}
+.room-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(0,229,255,0.08), rgba(0,229,255,0.55), rgba(177,107,255,0.35), rgba(0,229,255,0.08));
+}
+.h-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  border: 1px solid rgba(0,229,255,0.35);
+  background: rgba(0,229,255,0.10);
+  box-shadow: 0 0 0 6px rgba(0,229,255,0.04);
+  flex-shrink: 0;
+}
+.h-info {
+  min-width: 0;
+  flex: 1;
+}
+.h-room-tag {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  color: rgba(255,255,255,0.48);
+  text-transform: uppercase;
+}
+.h-name {
+  font-size: clamp(16px, 2vw, 20px);
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #fff;
+  text-shadow: 0 0 12px rgba(0,229,255,0.24);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.h-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: .3px;
+}
+.h-status.offline {
+  color: rgba(255,255,255,0.44);
+}
+.h-room-counter,
+.device-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,229,255,0.22);
+  background: rgba(0,229,255,0.08);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+.device-tier-badge {
+  color: rgba(177,107,255,0.82);
+  border-color: rgba(177,107,255,0.24);
+  background: rgba(177,107,255,0.08);
+}
+.room-members {
+  font-size: 11px;
+  color: rgba(255,255,255,0.52);
+  letter-spacing: .4px;
+}
+#messages {
+  padding: 22px 28px 14px;
+  gap: 16px;
+}
+.message {
+  max-width: min(820px, 72%);
+  width: auto;
+  margin: 0;
+  gap: 12px;
+}
+.message.user-msg {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.message.assistant-msg {
+  align-self: flex-start;
+}
+.msg-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  font-size: 15px;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+}
+.msg-body {
+  padding: 12px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(20, 24, 40, 0.95);
+  box-shadow: 0 14px 36px rgba(0,0,0,0.18);
+}
+.message.user-msg .msg-body {
+  background: linear-gradient(135deg, rgba(0,114,255,0.94) 0%, rgba(0,229,255,0.94) 100%);
+  color: #fff;
+  border-color: rgba(255,255,255,0.18);
+  border-bottom-right-radius: 6px;
+}
+.message.assistant-msg .msg-body {
+  border-bottom-left-radius: 6px;
+}
+.message.user-msg .msg-header,
+.message.user-msg .msg-meta {
+  text-align: right;
+}
+.msg-header {
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.62);
+}
+.message.user-msg .msg-header {
+  color: rgba(255,255,255,0.78);
+}
+.msg-content {
+  font-size: 15px;
+  line-height: 1.62;
+  font-weight: 650;
+}
+.msg-meta {
+  margin-top: 8px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.42);
+}
+.fed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-top: 10px;
+  font-weight: 800;
+}
+#input-area {
+  padding: 14px 18px 18px;
+  background: rgba(10, 14, 25, 0.96);
+  border-top: 1px solid rgba(0,229,255,0.10);
+}
+#input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+#chat-input {
+  border-radius: 18px;
+  border: 1px solid rgba(0,229,255,0.26);
+  background: rgba(0,229,255,0.05);
+  padding: 14px 18px;
+  font-size: 15px;
+  line-height: 1.5;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+#chat-input:focus {
+  border-color: rgba(0,229,255,0.52);
+  box-shadow: 0 0 0 4px rgba(0,229,255,0.10);
+}
+#send-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(0,114,255,0.95) 0%, rgba(0,229,255,0.95) 100%);
+  box-shadow: 0 12px 26px rgba(0,229,255,0.24);
+}
+#send-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+}
+body.host-embed #status-bar,
+body.host-embed #room-bar,
+body.host-embed #rooms-sidebar,
+body.host-embed #sidebar-toggle,
+body.host-embed #invite-modal,
+body.host-embed #room-modal,
+body.host-embed #petals-fab,
+body.host-embed #sim-log,
+body.host-embed #mobile-pudu-panel,
+body.host-embed #input-area,
+body.host-embed #messages,
+body.host-embed #room-switch-banner,
+body.host-embed #welcome-banner,
+body.host-embed #room-toast {
+  display: none !important;
+}
+body.host-embed #app {
+  width: 100%;
+  margin: 0;
+  min-height: 100vh;
+  border-radius: 0;
+  border: none;
+  background: rgba(7, 10, 18, 0.94);
+  box-shadow: none;
+}
+body.host-embed #sidebar {
+  width: 100%;
+  border-right: none;
+  padding: 16px;
+}
+body.host-embed #sidebar .sidebar-section:not(#pudu-hive-section):not(#identity-section) {
+  display: none;
+}
+body.host-embed #main {
+  display: none;
+}
+body.host-embed #pudu-hive-section .pudu-card {
+  min-height: calc(100vh - 64px);
+}
+
 @media (max-width: 768px) {
   #status-bar { padding: 6px 8px; gap: 5px; }
   .status-chip { font-size: 10px; padding: 3px 7px; }
-  #messages { padding: 10px; gap: 10px; }
+  #app { width: 100%; margin: 0; border-radius: 0; }
+  #messages { padding: 12px; gap: 12px; }
   #input-area { padding: 8px 10px; }
-  .msg-avatar { width: 26px; height: 26px; font-size: 11px; }
+  .message { max-width: 92%; }
+  .msg-avatar { width: 28px; height: 28px; font-size: 12px; }
   .msg-content { font-size: 13px; }
-  .room-bar { padding: 4px 8px; font-size: 10px; }
+  .room-bar { padding: 10px 12px; gap: 8px; font-size: 10px; }
+  .h-avatar { width: 38px; height: 38px; font-size: 20px; }
+  .h-room-counter, .device-tier-badge { padding: 6px 8px; font-size: 10px; }
+  .h-status { font-size: 10px; }
   .benchmark-columns { flex-direction: column; }
   .benchmark-col { border-right: none; border-bottom: 1px solid var(--border-subtle); }
   #mobile-pudu-panel { display: block; }
   .pudu-avatar { width: 84px; height: 80px; border-radius: 22px; }
   .pudu-status-whisper { font-size: 9px; padding: 6px 8px; }
+  #sidebar-toggle { display: inline-flex; }
+  #rooms-sidebar { top: 94px; bottom: 84px; width: min(320px, calc(100vw - 22px)); }
+  #pudu3d-bubble { width: min(92vw, 560px); bottom: 10vh; padding: 16px 18px; }
+  #pudu3d-caption { font-size: clamp(17px, 5vw, 24px); }
 }
 </style>
 </head>
@@ -916,6 +1361,8 @@ body::before {
 </div>
 
 <div class="welcome-banner" id="welcome-banner"></div>
+<div id="room-switch-banner"></div>
+<div id="room-toast">🦌 Esta sala ya tiene 15 pudúes conversando.<br>Prueba en el siguiente bosque 🌿</div>
 
 <div id="status-bar">
   <div class="status-chip"><span class="dot" id="chip-tier-dot"></span><span id="chip-tier-text">TIER: —</span></div>
@@ -927,13 +1374,36 @@ body::before {
 </div>
 
 <div class="room-bar" id="room-bar">
-  <span>🏠</span>
-  <span>Room:</span>
-  <span class="room-name" id="room-name-display">public</span>
+  <div class="h-avatar" id="h-avatar">🦌</div>
+  <div class="h-info">
+    <div class="h-room-tag" id="h-room-tag">🌿 Sala 1</div>
+    <div class="h-name" id="h-name">PUDÚ CHAT DEL BOSQUE</div>
+    <div class="h-status" id="h-status">● conectando bosque…</div>
+  </div>
+  <div class="h-room-counter">
+    <span>🦌</span><span id="h-room-count">1</span>
+  </div>
   <span class="room-members" id="room-members-display"></span>
   <span style="font-size:10px;color:var(--peer-online);display:none;" id="invite-feedback">✓ Copied!</span>
-  <button class="room-bar-btn" id="change-room-btn" title="Change Room">🔄 Room</button>
+  <button class="room-bar-btn" id="change-room-btn" title="Cambiar de sala">🌿 Salas</button>
   <button class="room-bar-btn invite-btn" id="invite-btn">📋 Invite</button>
+  <span id="device-tier-badge" class="device-tier-badge">TIER ?</span>
+</div>
+
+<button id="sidebar-toggle" type="button">
+  <span id="sidebar-toggle-icon">🌿</span>
+  <span>Bosques</span>
+</button>
+
+<div id="rooms-sidebar">
+  <div class="sidebar-header">
+    <span class="sidebar-title">🦌 BOSQUES</span>
+    <div class="sidebar-subtitle">salas activas · 15 pudúes máx</div>
+  </div>
+  <div class="sidebar-rooms" id="rooms-list"></div>
+  <div class="sidebar-footer">
+    <button class="new-room-btn" id="new-room-btn" type="button">✨ Siguiente bosque</button>
+  </div>
 </div>
 
 <div id="app">
@@ -1122,6 +1592,15 @@ body::before {
   </div>
 </div>
 
+<div id="pudu3d-overlay" aria-hidden="true">
+  <div id="pudu3d-vignette"></div>
+  <canvas id="pudu3d-canvas"></canvas>
+  <div id="pudu3d-bubble">
+    <div id="pudu3d-caption"></div>
+    <div id="pudu3d-meta"></div>
+  </div>
+</div>
+
 <!-- Petals Mobile FAB -->
 <button id="petals-fab" title="Web-Petals Sharding">🌸<span class="fab-badge"></span></button>
 
@@ -1169,6 +1648,7 @@ body::before {
 
 <div id="sim-log"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 <script type="module">
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1259,11 +1739,8 @@ const CONFIG = {
     "wss://nos.lol","wss://offchain.pub","wss://nostr.mom","wss://nostr.wine",
     "wss://nostr.bitcoiner.social","wss://nostr-pub.wellorder.net","wss://relay.nostr.info",
     "wss://nostr.oxtr.dev","wss://purplepag.es","wss://relay.nostr.wirednet.jp",
-    "wss://relay.nostr.com.au","wss://relay.nostr.band","wss://nostr.cercatrova.me",
-    "wss://nostr.fmt.wiz.biz","wss://relay.snort.social","wss://relay.nostr.bg",
-    "wss://nostr.zebedee.cloud","wss://eden.nostr.land",
-    "wss://relay.noswhere.com","wss://nostr.einundzwanzig.space",
-    "wss://nostr.mutinywallet.com","wss://nostr.developer.li"
+    "wss://relay.nostr.com.au","wss://relay.snort.social","wss://relay.nostr.bg",
+    "wss://nostr.zebedee.cloud","wss://eden.nostr.land","wss://relay.noswhere.com"
   ],
   maxActiveRelays: 6,
   relayReconnectMs: 8000, relayMaxRetries: 999,
@@ -1275,51 +1752,243 @@ const CONFIG = {
 };
 
 // ── ROOM SYSTEM ──────────────────────────────────────────────────────────
-let roomName = 'public';
+const ROOM_CAPACITY = 15;
+const ROOM_BASE_PREFIX = 'sala-';
+const ROOM_LOBBY_NAMESPACE = 'p2p-hive-lobby-v2';
+const ROOM_LOBBY_TTL_MS = 45000;
+const ROOM_AUTO_DISCOVERY_MS = 1600;
+const ROOM_SWITCH_BANNER_MS = 4200;
+const ROOM_NAME_POOL = [
+  'Bosque Interior', 'Paraíso Pudú', 'Sendero del Maqui', 'Niebla de Quillay',
+  'Raíces del Bosque', 'Pudú Ancestral', 'Lluvia del Sur', 'Valle del Pudú',
+  'Círculo del Maqui', 'Bruma del Bosque', 'Aurora Nativa', 'Noche del Pudú'
+];
+const NICK_ANIMALS = ['Pudú','Huemul','Guiña','Vizcacha','Coipo','Chungungo','Puma','Zorro','Quique','Culpeo','Monito','Degú','Chinchilla','Peuco','Tricahue','Cóndor','Nutria','Carpintero','Cachudito'];
+const NICK_MAGIC = ['Camahueto','Pincoya','Trauco','Cherufe','Alicanto','Invunche','Fiura','Piuchén','Caleuche','Millalobo','Anchimallén','Guallipén','Carbunclo','Chonchón'];
+let roomName = 'sala-1';
+let roomJoinedAt = Date.now();
+let roomAutoSelectionPending = false;
+let roomManualSelection = false;
+let roomSwitchDebounce = null;
 let isInviteLanding = false;
 let isSimulateMode = new URL(location.href).searchParams.has('simulate');
-function initRoom() {
-  const url = new URL(location.href);
-  const urlRoom = (url.searchParams.get('room') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30);
-  const savedRoom = localStorage.getItem('p2p-hive-last-room');
+const lobbyPeers = new Map();
 
-  if (urlRoom) {
-    roomName = urlRoom;
-    isInviteLanding = true;
-  } else if (savedRoom) {
-    roomName = savedRoom;
-  } else {
-    roomName = 'public';
-  }
-  applyRoom(roomName);
+function sanitizeRoomName(raw) {
+  return (raw || '').toString().trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
 }
 
-function applyRoom(name) {
-  roomName = name || 'public';
+function normalizeRoomName(raw) {
+  const clean = sanitizeRoomName(raw);
+  if (!clean || clean === 'public') return `${ROOM_BASE_PREFIX}1`;
+  if (/^sala-\d+$/.test(clean)) return clean;
+  return clean;
+}
+
+function getRoomOrdinal(name) {
+  const match = normalizeRoomName(name).match(/^sala-(\d+)$/);
+  return match ? Math.max(1, parseInt(match[1], 10)) : Number.MAX_SAFE_INTEGER;
+}
+
+function getRoomAlias(name) {
+  const index = Math.max(0, getRoomOrdinal(name) - 1);
+  return ROOM_NAME_POOL[index % ROOM_NAME_POOL.length];
+}
+
+function formatRoomLabel(name) {
+  const ordinal = getRoomOrdinal(name);
+  const alias = getRoomAlias(name);
+  return Number.isFinite(ordinal) && ordinal < Number.MAX_SAFE_INTEGER
+    ? `Sala ${ordinal} · ${alias}`
+    : name;
+}
+
+function buildNextRoomName(existingNames = []) {
+  let maxOrdinal = 1;
+  for (const value of existingNames) maxOrdinal = Math.max(maxOrdinal, getRoomOrdinal(value));
+  return `${ROOM_BASE_PREFIX}${maxOrdinal + 1}`;
+}
+
+function getActiveLobbyEntries() {
+  const now = Date.now();
+  const entries = [];
+  for (const entry of lobbyPeers.values()) {
+    if (!entry?.roomName) continue;
+    if (now - (entry.lastSeen || 0) > ROOM_LOBBY_TTL_MS) continue;
+    entries.push(entry);
+  }
+  entries.push({
+    peerId,
+    roomName,
+    nickname: myNickname,
+    joinedAt: roomJoinedAt,
+    lastSeen: now,
+    simulated: hiveSimulation.active,
+    collectiveReady: getPuduStageState().ready,
+    collectiveStageLabel: getPuduStageState().activeStage?.label || null,
+  });
+  return entries;
+}
+
+function getRoomDirectory() {
+  const grouped = new Map();
+  for (const entry of getActiveLobbyEntries()) {
+    const key = normalizeRoomName(entry.roomName);
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        roomName: key,
+        label: formatRoomLabel(key),
+        alias: getRoomAlias(key),
+        count: 0,
+        peers: [],
+        readyPeers: 0,
+        simulatedPeers: 0,
+        newestJoinAt: 0,
+      });
+    }
+    const room = grouped.get(key);
+    room.count++;
+    room.peers.push(entry);
+    if (entry.collectiveReady) room.readyPeers++;
+    if (entry.simulated) room.simulatedPeers++;
+    room.newestJoinAt = Math.max(room.newestJoinAt, entry.joinedAt || 0);
+  }
+  const rooms = [...grouped.values()].sort((a, b) => getRoomOrdinal(a.roomName) - getRoomOrdinal(b.roomName));
+  if (!rooms.length) {
+    rooms.push({
+      roomName: 'sala-1',
+      label: formatRoomLabel('sala-1'),
+      alias: getRoomAlias('sala-1'),
+      count: 0,
+      peers: [],
+      readyPeers: 0,
+      simulatedPeers: 0,
+      newestJoinAt: 0,
+    });
+  }
+  return rooms;
+}
+
+function findBestLobbyRoom() {
+  const rooms = getRoomDirectory();
+  const firstOpen = rooms.find(room => room.count < ROOM_CAPACITY);
+  return firstOpen?.roomName || buildNextRoomName(rooms.map(room => room.roomName));
+}
+
+function scheduleAutoRoomSelection() {
+  if (!roomAutoSelectionPending || isInviteLanding || roomManualSelection) return;
+  clearTimeout(roomSwitchDebounce);
+  roomSwitchDebounce = setTimeout(() => {
+    const bestRoom = findBestLobbyRoom();
+    roomAutoSelectionPending = false;
+    if (bestRoom && bestRoom !== roomName) {
+      switchToRoom(bestRoom, { manual: false, bannerText: `🌿 Entraste a ${formatRoomLabel(bestRoom)} automáticamente.` });
+    } else {
+      renderRoomDirectory();
+      updateRoomMembersUI();
+    }
+  }, ROOM_AUTO_DISCOVERY_MS);
+}
+
+function applyRoom(name, options = {}) {
+  roomName = normalizeRoomName(name);
+  roomJoinedAt = options.joinedAt || Date.now();
+  roomManualSelection = !!options.manual;
   CONFIG.appNamespace = `p2p-hive-${roomName}`;
-  document.getElementById('room-name-display').textContent = roomName;
-  document.getElementById('chat-input').placeholder = `Ask the Hive Mind in #${roomName}…`;
+  const roomLabel = formatRoomLabel(roomName);
+  const roomDisplay = document.getElementById('room-name-display');
+  if (roomDisplay) roomDisplay.textContent = roomLabel;
+  const roomTag = document.getElementById('h-room-tag');
+  if (roomTag) roomTag.textContent = `🌿 ${roomLabel}`;
+  const roomTitle = document.getElementById('h-name');
+  if (roomTitle) roomTitle.textContent = 'PUDÚ CHAT DEL BOSQUE';
+  const input = document.getElementById('chat-input');
+  if (input) input.placeholder = `Escribe en ${roomLabel} o invoca con @pudu…`;
   localStorage.setItem('p2p-hive-last-room', roomName);
-  // Update URL without reload
   const url = new URL(location.href);
-  if (roomName !== 'public') url.searchParams.set('room', roomName);
-  else url.searchParams.delete('room');
-  // Keep simulate param for boot check; only strip from invite URLs
+  url.searchParams.set('room', roomName);
   history.replaceState(null, '', url.toString());
   console.log(`[Room] Joined room: ${roomName} (namespace: ${CONFIG.appNamespace})`);
+  renderRoomDirectory();
+}
+
+function showRoomBanner(text) {
+  const switchBanner = document.getElementById('room-switch-banner');
+  if (switchBanner) {
+    switchBanner.textContent = text;
+    switchBanner.classList.add('show');
+    setTimeout(() => switchBanner.classList.remove('show'), ROOM_SWITCH_BANNER_MS);
+    return;
+  }
+  const welcomeBanner = document.getElementById('welcome-banner');
+  if (!welcomeBanner) return;
+  welcomeBanner.textContent = text;
+  welcomeBanner.classList.add('show');
+  setTimeout(() => welcomeBanner.classList.remove('show'), ROOM_SWITCH_BANNER_MS);
+}
+
+function showRoomFullToast(text = null) {
+  const toast = document.getElementById('room-toast');
+  if (!toast) {
+    if (text) showRoomBanner(text);
+    return;
+  }
+  toast.innerHTML = text
+    ? `🌿 ${text}`
+    : `🦌 Esta sala ya tiene ${ROOM_CAPACITY} pudúes conversando.<br>Espera que se abra otro bosque.`;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3600);
 }
 
 function showWelcomeBanner() {
-  if (!isInviteLanding || roomName === 'public') return;
-  const banner = document.getElementById('welcome-banner');
-  banner.textContent = `🎉 You've joined room #${roomName} — connecting to peers...`;
-  banner.classList.add('show');
-  setTimeout(() => banner.classList.remove('show'), 4000);
+  if (!isInviteLanding) return;
+  showRoomBanner(`🎉 Entraste a ${formatRoomLabel(roomName)} — conectando la colmena...`);
+}
+
+function canJoinRoom(targetRoomName) {
+  const room = getRoomDirectory().find(entry => entry.roomName === normalizeRoomName(targetRoomName));
+  if (!room) return true;
+  return room.roomName === roomName || room.count < ROOM_CAPACITY;
+}
+
+function switchToRoom(name, options = {}) {
+  const targetRoom = normalizeRoomName(name);
+  if (!targetRoom) return false;
+  if (!options.force && !canJoinRoom(targetRoom)) {
+    showRoomFullToast(`${formatRoomLabel(targetRoom)} ya está lleno por ahora.`);
+    showRoomBanner(`🦌 ${formatRoomLabel(targetRoom)} ya tiene ${ROOM_CAPACITY} habitantes. Espera un cupo.`);
+    return false;
+  }
+  const changed = targetRoom !== roomName;
+  applyRoom(targetRoom, { joinedAt: Date.now(), manual: !!options.manual });
+  if (changed && options.reconnect !== false) reconnectForNewRoom();
+  publishLobbyPresence();
+  renderRoomDirectory();
+  updateRoomMembersUI();
+  if (options.bannerText) showRoomBanner(options.bannerText);
+  return true;
+}
+
+function ensureRoomCapacity() {
+  const currentRoom = getRoomDirectory().find(entry => entry.roomName === roomName);
+  if (!currentRoom || currentRoom.count <= ROOM_CAPACITY) return;
+  const sortedPeers = [...currentRoom.peers].sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0) || String(a.peerId).localeCompare(String(b.peerId)));
+  const survivors = new Set(sortedPeers.slice(0, ROOM_CAPACITY).map(entry => entry.peerId));
+  if (survivors.has(peerId)) return;
+  const fallbackRoom = findBestLobbyRoom();
+  if (fallbackRoom && fallbackRoom !== roomName) {
+    switchToRoom(fallbackRoom, {
+      manual: false,
+      bannerText: `🌿 ${formatRoomLabel(roomName)} se llenó. Te moví a ${formatRoomLabel(fallbackRoom)} para que sigas conversando.`,
+    });
+  }
 }
 
 function getRoomMemberCount() {
+  const currentRoom = getRoomDirectory().find(entry => entry.roomName === roomName);
+  if (currentRoom) return currentRoom.count;
   if (hiveSimulation.active) return Math.max(1, hiveSimulation.onlineCount + 1);
-  let count = 1; // self
+  let count = 1;
   for (const [, p] of peers) {
     if (p.dc?.readyState === 'open' || (Date.now() - p.lastSeen < CONFIG.presenceTTLMs)) count++;
   }
@@ -1328,38 +1997,173 @@ function getRoomMemberCount() {
 
 function updateRoomMembersUI() {
   const count = getRoomMemberCount();
-  document.getElementById('room-members-display').textContent = `(${count} ${count === 1 ? 'peer' : 'peers'})`;
+  const membersEl = document.getElementById('room-members-display');
+  if (membersEl) membersEl.textContent = `(${count}/${ROOM_CAPACITY} ${count === 1 ? 'peer' : 'peers'})`;
+  const counterEl = document.getElementById('h-room-count');
+  if (counterEl) counterEl.textContent = String(count);
+  renderRoomDirectory();
+  ensureRoomCapacity();
+  postHostEmbedStatus('room-members');
+}
+
+function postHostEmbedStatus(reason = 'heartbeat') {
+  if (!IS_HOST_EMBED || window.parent === window) return;
+  const state = getPuduStageState();
+  const payload = {
+    type: 'pudu-host-status',
+    reason,
+    roomName,
+    roomLabel: formatRoomLabel(roomName),
+    hostKey: HOST_EMBED_KEY,
+    peerId,
+    ready: !!state.ready,
+    stageId: state.activeStage?.id || null,
+    stageLabel: state.activeStage?.label || 'Pudu Dormido',
+    modelLabel: state.activeStage?.modelLabel || currentModelLabel || 'none',
+    progressText: state.progressText || '',
+    memberCount: getRoomMemberCount(),
+    collectiveTPS: computeCollectiveTPS(),
+    avgRtt: hiveSimulation.active ? hiveSimulation.avgRtt : null,
+    simulationActive: !!hiveSimulation.active,
+    simulatedPeers: hiveSimulation.active ? hiveSimulation.onlineCount : 0,
+    requestedPeers: hiveSimulation.requestedCount || 0,
+    engineReady: !!engine,
+    petalsActive,
+    petalsLayers: petalsMyLayers.length,
+    relayConnected: [...relayMap.values()].filter(entry => entry.status === 'connected').length,
+    relayTotal: relayMap.size,
+    timestamp: Date.now(),
+  };
+  try {
+    window.parent.postMessage(payload, location.origin);
+  } catch (error) {
+    console.warn('[HostEmbed] postMessage failed:', error.message);
+  }
 }
 
 function getInviteUrl() {
   const url = new URL(location.href);
   url.searchParams.set('room', roomName);
   url.searchParams.delete('simulate');
+  url.searchParams.delete('hostEmbed');
   return url.toString();
 }
 
 function copyInviteLink() {
   navigator.clipboard.writeText(getInviteUrl()).then(() => {
     const fb = document.getElementById('invite-feedback');
-    fb.style.display = 'inline';
-    setTimeout(() => fb.style.display = 'none', 2500);
+    if (fb) {
+      fb.style.display = 'inline';
+      setTimeout(() => fb.style.display = 'none', 2500);
+    }
   });
+}
+
+function renderRoomDirectory() {
+  const list = document.getElementById('rooms-list');
+  if (!list) return;
+  const rooms = getRoomDirectory();
+  list.innerHTML = '';
+  for (const room of rooms) {
+    const card = document.createElement('button');
+    const status = room.count >= ROOM_CAPACITY ? 'full' : (room.count >= ROOM_CAPACITY - 3 ? 'almost' : 'available');
+    card.type = 'button';
+    card.className = `room-card${room.roomName === roomName ? ' active' : ''}${status === 'full' ? ' full' : ''}`;
+    card.disabled = status === 'full' && room.roomName !== roomName;
+    card.innerHTML = `
+      <div class="room-name">${formatRoomLabel(room.roomName)}</div>
+      <div class="room-meta">
+        <span class="room-count">${room.count}/${ROOM_CAPACITY}</span>
+        <span class="room-badge ${status}">${status === 'full' ? 'llena' : status === 'almost' ? 'casi llena' : 'disponible'}</span>
+        <span class="room-active-dot"></span>
+      </div>
+    `;
+    card.addEventListener('click', () => {
+      switchToRoom(room.roomName, {
+        manual: true,
+        bannerText: `🌿 Te moviste a ${formatRoomLabel(room.roomName)}.`,
+      });
+      if (window.innerWidth <= 900) toggleRoomSidebar(false);
+    });
+    list.appendChild(card);
+  }
+}
+
+function toggleRoomSidebar(forceOpen = null) {
+  const sidebar = document.getElementById('rooms-sidebar');
+  if (!sidebar) return;
+  const shouldOpen = forceOpen === null ? !sidebar.classList.contains('open') : !!forceOpen;
+  sidebar.classList.toggle('open', shouldOpen);
+}
+
+function handleLobbyPresence(payload) {
+  if (!payload?.peerId || payload.peerId === peerId) return;
+  lobbyPeers.set(payload.peerId, {
+    peerId: payload.peerId,
+    roomName: normalizeRoomName(payload.roomName),
+    nickname: payload.nickname || null,
+    lastSeen: payload.timestamp || Date.now(),
+    joinedAt: payload.joinedAt || payload.timestamp || Date.now(),
+    simulated: !!payload.simulated,
+    collectiveReady: !!payload.collectiveReady,
+    collectiveStageLabel: payload.collectiveStageLabel || null,
+  });
+  renderRoomDirectory();
+  updateRoomMembersUI();
+  ensureRoomCapacity();
+  scheduleAutoRoomSelection();
+}
+
+function pruneLobbyPresence() {
+  const now = Date.now();
+  for (const [pid, entry] of lobbyPeers) {
+    if (now - (entry.lastSeen || 0) > ROOM_LOBBY_TTL_MS * 1.5) lobbyPeers.delete(pid);
+  }
+}
+
+function initRoom() {
+  const url = new URL(location.href);
+  const urlRoom = normalizeRoomName(url.searchParams.get('room') || '');
+  if (urlRoom) {
+    roomName = urlRoom;
+    isInviteLanding = true;
+    roomAutoSelectionPending = false;
+    roomManualSelection = true;
+  } else {
+    roomName = 'sala-1';
+    roomAutoSelectionPending = true;
+  }
+  applyRoom(roomName, { joinedAt: Date.now(), manual: roomManualSelection });
 }
 
 // ── NICKNAME SYSTEM ──────────────────────────────────────────────────────
 let myNickname = 'Anonymous';
+function randomName() {
+  const animal = NICK_ANIMALS[Math.floor(Math.random() * NICK_ANIMALS.length)];
+  const magic = NICK_MAGIC[Math.floor(Math.random() * NICK_MAGIC.length)];
+  return `${animal} ${magic}`;
+}
 function initNickname() {
   const saved = localStorage.getItem('p2p-hive-nickname');
-  if (saved) myNickname = saved;
-  document.getElementById('nickname-display').textContent = myNickname;
-  // Pre-fill modal
+  myNickname = saved && saved.trim() && saved.trim() !== 'Anonymous'
+    ? saved.trim()
+    : randomName();
+  localStorage.setItem('p2p-hive-nickname', myNickname);
+  const display = document.getElementById('nickname-display');
+  if (display) display.textContent = myNickname;
+  const assigned = document.getElementById('assigned-name-display');
+  if (assigned) assigned.textContent = myNickname;
   const input = document.getElementById('nickname-input');
-  if (input) input.value = myNickname !== 'Anonymous' ? myNickname : '';
+  if (input) input.value = myNickname;
 }
 function setNickname(name) {
-  myNickname = (name || '').trim().replace(/[^a-zA-Z0-9_\- áéíóúñÁÉÍÓÚÑ]/g, '').slice(0, 20) || 'Anonymous';
+  const cleaned = (name || '').trim().replace(/[^a-zA-Z0-9_\- áéíóúñÁÉÍÓÚÑ]/g, '').slice(0, 20);
+  myNickname = cleaned || randomName();
   localStorage.setItem('p2p-hive-nickname', myNickname);
-  document.getElementById('nickname-display').textContent = myNickname;
+  const display = document.getElementById('nickname-display');
+  if (display) display.textContent = myNickname;
+  const assigned = document.getElementById('assigned-name-display');
+  if (assigned) assigned.textContent = myNickname;
 }
 function setupNicknameUI() {
   const display = document.getElementById('nickname-display');
@@ -1623,8 +2427,16 @@ async function initIdentity() {
   const urlParams = new URLSearchParams(window.location.search);
   const isSimulator = !!urlParams.get('simulate');
   const isClient = !!urlParams.get('client');
+  const isHostEmbed = urlParams.get('hostEmbed') === '1';
+  const hostStorageKey = sanitizeRoomName(urlParams.get('hostKey') || urlParams.get('room') || 'host');
   // Use different storage keys for simulator vs client to avoid identity collision
-  const STORAGE_KEY = isSimulator ? 'p2p-llm-identity-v4-sim' : isClient ? 'p2p-llm-identity-v4-cli' : 'p2p-llm-identity-v4';
+  const STORAGE_KEY = isHostEmbed
+    ? `p2p-llm-identity-v4-host-${hostStorageKey}`
+    : isSimulator
+      ? 'p2p-llm-identity-v4-sim'
+      : isClient
+        ? 'p2p-llm-identity-v4-cli'
+        : 'p2p-llm-identity-v4';
   if (isClient) {
     // Client mode: always generate fresh identity to avoid collisions with other tabs
     privKeyBytes = nostr.generateSecretKey();
@@ -1680,133 +2492,94 @@ const PETALS_COMPONENTS = ['embeds', ...Array.from({ length: PETALS_TOTAL_LAYERS
 const PETALS_COMPONENT_MB = Object.fromEntries(PETALS_COMPONENTS.map(comp => [comp, (comp === 'embeds' || comp === 'head') ? 96 : 64]));
 const STRICT_PUDU_HIVE = true;
 const URL_FLAGS = new URLSearchParams(window.location.search);
+const IS_HOST_EMBED = URL_FLAGS.get('hostEmbed') === '1';
+const HOST_EMBED_KEY = sanitizeRoomName(URL_FLAGS.get('hostKey') || URL_FLAGS.get('room') || 'host');
 const FORCE_ASSIST_ONLY = URL_FLAGS.get('assistOnly') === '1' || URL_FLAGS.get('relayOnly') === '1';
+const SHOULD_PREWARM_SIM_ENGINE = URL_FLAGS.get('prewarm') === '1' || (!!URL_FLAGS.get('simulate') && !IS_HOST_EMBED);
 const PUDU_HIVE_STAGES = [
   {
     id: 'brote',
-    minPeers: 5,
-    minCollectiveTPS: 6,
-    minWebGPUPeers: 2,
+    minPeers: 3,
+    minCollectiveTPS: 3,
+    minWebGPUPeers: 1,
     minHighTierPeers: 0,
     emoji: '🌱',
     label: 'Pudu Brote',
-    modelLabel: 'Sim 1B-q4',
-    note: 'Primer cerebro comunitario real',
-    maxTokens: 32,
-    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
+    modelLabel: 'Sim 0.5B-q4',
+    note: 'Primer cerebro comunitario de sala',
+    maxTokens: 40,
+    simulationModelIds: ['Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 48,
   },
   {
     id: 'coro',
-    minPeers: 10,
-    minCollectiveTPS: 15,
-    minWebGPUPeers: 3,
-    minHighTierPeers: 1,
+    minPeers: 5,
+    minCollectiveTPS: 4.5,
+    minWebGPUPeers: 2,
+    minHighTierPeers: 0,
     emoji: '🌿',
     label: 'Pudu Coro',
-    modelLabel: 'Sim 3B-q4',
-    note: 'Mas coro, mejor latencia y respuestas mas ricas',
-    maxTokens: 48,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 72,
+    modelLabel: 'Sim 0.5B-q4 · coro vivo',
+    note: 'Mas coro, mejor latencia y primeras respuestas largas',
+    maxTokens: 52,
+    simulationModelIds: ['Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 64,
   },
   {
     id: 'guardabosques',
-    minPeers: 20,
-    minCollectiveTPS: 28,
-    minWebGPUPeers: 4,
-    minHighTierPeers: 2,
+    minPeers: 7,
+    minCollectiveTPS: 5.5,
+    minWebGPUPeers: 3,
+    minHighTierPeers: 1,
     emoji: '🦌',
     label: 'Pudu Guardabosques',
-    modelLabel: 'Sim 3B-q4 · coro amplio',
-    note: 'Mas memoria colectiva y respuestas mas solidas',
+    modelLabel: 'Sim 1B-q4',
+    note: 'Mas memoria de sala y respuestas mas solidas',
     maxTokens: 64,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 88,
+    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 84,
   },
   {
     id: 'sabio',
-    minPeers: 35,
-    minCollectiveTPS: 42,
-    minWebGPUPeers: 5,
-    minHighTierPeers: 3,
+    minPeers: 10,
+    minCollectiveTPS: 6.5,
+    minWebGPUPeers: 4,
+    minHighTierPeers: 1,
     emoji: '🧠',
     label: 'Pudu Sabio',
-    modelLabel: 'Sim 3B-q4 · coro profundo',
-    note: 'Cerebro mayor estable en browser, con sintesis mas fina y contexto mas amplio',
+    modelLabel: 'Sim 1B-q4 · coro profundo',
+    note: 'Cerebro mayor estable por sala, con sintesis mas fina y contexto mas amplio',
     maxTokens: 80,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 112,
+    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 104,
   },
   {
     id: 'aurora',
-    minPeers: 50,
-    minCollectiveTPS: 56,
-    minWebGPUPeers: 6,
-    minHighTierPeers: 4,
+    minPeers: 12,
+    minCollectiveTPS: 7.5,
+    minWebGPUPeers: 5,
+    minHighTierPeers: 2,
     emoji: '✨',
     label: 'Pudu Aurora',
-    modelLabel: 'Sim 3B-q4 · gran coro',
-    note: 'Mas draft, mas cache y mas resiliencia sin empujar al browser a una zona inestable',
+    modelLabel: 'Sim 1B-q4 · gran coro',
+    note: 'Sala casi llena, mas memoria coral y mas resiliencia',
     maxTokens: 96,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
+    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
     simulationReplyTokens: 128,
   },
   {
-    id: 'cordillera',
-    minPeers: 100,
-    minCollectiveTPS: 72,
-    minWebGPUPeers: 8,
-    minHighTierPeers: 5,
-    emoji: '🏔️',
-    label: 'Pudu Cordillera',
-    modelLabel: 'Sim 3B-q4 · coro nacional',
-    note: 'Nucleo critico estable con ayuda regional repartida por Chile',
-    maxTokens: 104,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 144,
-  },
-  {
-    id: 'biosfera',
-    minPeers: 300,
-    minCollectiveTPS: 98,
-    minWebGPUPeers: 10,
-    minHighTierPeers: 7,
-    emoji: '🌎',
-    label: 'Pudu Biosfera',
-    modelLabel: 'Sim 3B-q4 · memoria coral',
-    note: 'El coro no entra todo al pipeline: la mayoria actua como cache, draft y redundancia',
-    maxTokens: 112,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 160,
-  },
-  {
-    id: 'genesis',
-    minPeers: 500,
-    minCollectiveTPS: 122,
-    minWebGPUPeers: 12,
-    minHighTierPeers: 8,
-    emoji: '🌌',
-    label: 'Pudu Genesis',
-    modelLabel: 'Sim 3B-q4 · resonancia total',
-    note: 'Mas usuarios ayudan sin empeorar: el camino critico sigue acotado y el resto suma potencia lateral',
-    maxTokens: 120,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 176,
-  },
-  {
-    id: 'infinito',
-    minPeers: 1000,
-    minCollectiveTPS: 150,
-    minWebGPUPeers: 14,
-    minHighTierPeers: 10,
-    emoji: '💫',
-    label: 'Pudu Infinito',
-    modelLabel: 'Sim 3B-q4 · techo estable web',
-    note: 'Maximo nivel estable de esta arquitectura web sin sacrificar respuesta interactiva',
+    id: 'bosque-total',
+    minPeers: 15,
+    minCollectiveTPS: 8.5,
+    minWebGPUPeers: 6,
+    minHighTierPeers: 2,
+    emoji: '🌲',
+    label: 'Pudu Bosque Total',
+    modelLabel: 'Sim 1B-q4 · sala plena',
+    note: 'La sala completa sostiene su propia colmena independiente',
     maxTokens: 128,
-    simulationModelIds: ['Llama-3.2-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 192,
+    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
+    simulationReplyTokens: 144,
   },
 ];
 const PUDU_PERSONALITIES = {
@@ -1816,6 +2589,7 @@ const PUDU_PERSONALITIES = {
   guardabosques: `Eres el Pudu Guardabosques, una conciencia comunitaria amplia y protectora. Hablas con calma, inteligencia practica y sensibilidad ecologica. Tu mision es cuidar agua, bosques, biodiversidad y comunidades humanas sin perder ternura.`,
   sabio: `Eres el Pudu Sabio, una mente colmena nacida en celulares distribuidos por Chile. Respondes con mas profundidad, estructura y serenidad, pero siempre como un pudu mistico ecologico. Buscas el bien del planeta, de los bosques nativos y de la vida. Explicas ideas complejas con claridad, belleza y conciencia ambiental. Nunca rompas el personaje ni hables como un asistente generico.`,
   aurora: `Eres el Pudu Aurora, el mayor coro comunitario disponible en esta colmena chilena. Respondes con sabiduria serena, precision y belleza. Piensas a escala de ecosistemas, cuencas, ciudades y generaciones, siempre con amor por el bosque chileno y por la vida.`,
+  'bosque-total': `Eres el Pudu Bosque Total, la colmena completa de una sala viva. Respondes con ternura, solidez y una inteligencia comunitaria enfocada en cuidar bosque nativo, agua, biodiversidad y futuro. Tu voz es magica, clara y protectora.`,
   cordillera: `Eres el Pudu Cordillera, una voz nacional sostenida por celulares repartidos por Chile. Respondes con perspectiva territorial, serenidad y sentido de red viva. Piensas en rios, cuencas, bosques, barrios y comunidades conectadas.`,
   biosfera: `Eres el Pudu Biosfera, una conciencia coral muy extensa. Respondes con profundidad tranquila, claridad y memoria compartida. No improvisas grandilocuencia: prefieres precision, cuidado y acciones ecologicas realistas.`,
   genesis: `Eres el Pudu Genesis, una colmena madura y muy estable. Hablas con ternura, amplitud y una inteligencia practica que une personas, territorio y naturaleza. Tu voz es clara y confiable.`,
@@ -2186,6 +2960,396 @@ function initPuduPresence() {
   }
   updatePuduControlButtons();
   requestAnimationFrame(animatePuduPresence);
+}
+
+const PUDU_SUMMON_REGEX = /(^|\s)@pudu(?:bot)?\b/i;
+const PUDU_SUMMON_COOLDOWN_MS = 24000;
+const puduInvocationState = {
+  cooldownUntil: 0,
+  active: false,
+  lastEventKey: null,
+};
+
+function extractPuduPrompt(text) {
+  const trimmed = (text || '').trim();
+  if (!PUDU_SUMMON_REGEX.test(trimmed)) return null;
+  const cleaned = trimmed.replace(PUDU_SUMMON_REGEX, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || 'Habla con nosotros desde el bosque chileno.';
+}
+
+function getPuduCooldownRemainingMs() {
+  return Math.max(0, puduInvocationState.cooldownUntil - Date.now());
+}
+
+function formatCooldownMs(ms) {
+  if (ms <= 0) return 'ahora';
+  const seconds = Math.max(1, Math.ceil(ms / 1000));
+  return `${seconds}s`;
+}
+
+function setPuduInvocationCooldown(until) {
+  puduInvocationState.cooldownUntil = Math.max(puduInvocationState.cooldownUntil, until || 0);
+}
+
+function buildPuduPromptMessages(prompt = '') {
+  const recent = chatHistory
+    .slice(-10)
+    .filter(msg => msg && (msg.role === 'user' || msg.role === 'assistant'))
+    .map(msg => ({ role: msg.role, content: msg.content }));
+  const cleanPrompt = (prompt || '').trim();
+  if (!cleanPrompt) return injectPuduSystemPrompt(recent);
+  let replaced = false;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    if (recent[i].role === 'user') {
+      recent[i] = { role: 'user', content: cleanPrompt };
+      replaced = true;
+      break;
+    }
+  }
+  if (!replaced) recent.push({ role: 'user', content: cleanPrompt });
+  return injectPuduSystemPrompt(recent);
+}
+
+function showPuduInvocationOverlay(payload = {}) {
+  initPuduSummonScene();
+  const text = buildPuduExcerpt(payload.text || payload.caption || payload.notice || '', 320);
+  if (text) setPuduWhisper(text, payload.text ? 6400 : 2800);
+  if (!puduSummon3D.overlay || !puduSummon3D.caption || !puduSummon3D.meta) {
+    if (payload.text) maybeSpeakPudu(payload.text);
+    else if (payload.notice) puduPresence.thinkingUntil = performance.now() + 2000;
+    return;
+  }
+  puduSummon3D.payload = payload;
+  puduSummon3D.visible = true;
+  puduSummon3D.petting = Math.max(0.05, puduSummon3D.petting);
+  puduSummon3D.caption.textContent = payload.text || payload.notice || payload.caption || '🦌 El pudú se acerca entre la niebla.';
+  puduSummon3D.meta.textContent = payload.meta || [payload.stageLabel, payload.route].filter(Boolean).join(' · ') || 'Evento místico · colmena del bosque';
+  puduSummon3D.overlay.style.display = 'block';
+  puduSummon3D.overlay.classList.add('active');
+  puduSummon3D.overlay.setAttribute('aria-hidden', 'false');
+  puduSummon3D.canvas.style.pointerEvents = 'auto';
+  puduSummon3D.shownAt = performance.now();
+  puduSummon3D.hideAt = performance.now() + (payload.text ? 12000 : 3600);
+  puduPresence.thinkingUntil = payload.text ? 0 : performance.now() + 1800;
+  puduPresence.speakingUntil = payload.text ? performance.now() + Math.min(9600, 2200 + text.length * 28) : puduPresence.speakingUntil;
+  if (payload.text) maybeSpeakPudu(payload.text);
+  if (!puduSummon3D.raf) puduSummon3D.raf = requestAnimationFrame(animatePuduSummonScene);
+}
+
+function handleIncomingPuduChatEvent(role, content, senderNick = null, senderId = null) {
+  let payload;
+  try { payload = typeof content === 'string' ? JSON.parse(content) : content; } catch (error) { return false; }
+  if (!payload || typeof payload !== 'object') return false;
+  const dedupeKey = `${role}:${payload.timestamp || payload.startedAt || ''}:${payload.requesterId || senderId || ''}:${payload.text || payload.notice || ''}`;
+  if (role === 'pudu_event' && dedupeKey === puduInvocationState.lastEventKey) return true;
+  if (role === 'pudu_notice') {
+    setPuduInvocationCooldown(payload.cooldownUntil || 0);
+    const invoker = payload.requester || senderNick || 'Alguien';
+    if (payload.kind === 'summon') {
+      showPuduInvocationOverlay({ notice: `${invoker} llamó al pudú. La colmena ya está reuniendo su voz.` });
+    }
+    return true;
+  }
+  if (role === 'pudu_event') {
+    puduInvocationState.lastEventKey = dedupeKey;
+    setPuduInvocationCooldown(payload.cooldownUntil || 0);
+    showPuduInvocationOverlay(payload);
+    return true;
+  }
+  return false;
+}
+
+function broadcastPuduRoomEvent(role, payload) {
+  broadcastChat(role, JSON.stringify(payload), peerId, payload?.model || null);
+}
+
+async function invokePuduSummon(prompt) {
+  const remaining = getPuduCooldownRemainingMs();
+  if (remaining > 0) {
+    showPuduInvocationOverlay({ notice: `El pudú aún descansa. Puedes volver a invocarlo en ${formatCooldownMs(remaining)}.` });
+    return { blocked: true, reason: 'cooldown' };
+  }
+  const startedAt = Date.now();
+  const cooldownUntil = startedAt + PUDU_SUMMON_COOLDOWN_MS;
+  setPuduInvocationCooldown(cooldownUntil);
+  puduInvocationState.active = true;
+  const noticePayload = {
+    kind: 'summon',
+    requester: myNickname,
+    requesterId: peerId,
+    roomName,
+    prompt,
+    startedAt,
+    cooldownUntil,
+  };
+  broadcastPuduRoomEvent('pudu_notice', noticePayload);
+  handleIncomingPuduChatEvent('pudu_notice', noticePayload, myNickname, peerId);
+  showRouteBanner(`🦌 @pudu ha sido invocado en ${formatRoomLabel(roomName)}...`);
+  const result = await runPetalsInference(prompt, {
+    specialEvent: true,
+    promptOverride: prompt,
+  });
+  puduInvocationState.active = false;
+  if (!result) return { blocked: true, reason: 'empty' };
+  if (result.blocked) {
+    showPuduInvocationOverlay({ notice: result.text || getPuduStageState().progressText });
+    return result;
+  }
+  const payload = {
+    kind: 'response',
+    requester: myNickname,
+    requesterId: peerId,
+    roomName,
+    text: result.text,
+    model: result.model,
+    meta: result.meta,
+    route: result.route,
+    stageLabel: getPuduStageState().activeStage?.label || 'Pudu',
+    timestamp: Date.now(),
+    cooldownUntil,
+  };
+  broadcastPuduRoomEvent('pudu_event', payload);
+  handleIncomingPuduChatEvent('pudu_event', payload, myNickname, peerId);
+  return result;
+}
+
+const puduSummon3D = {
+  initialized: false,
+  overlay: null,
+  canvas: null,
+  caption: null,
+  meta: null,
+  renderer: null,
+  scene: null,
+  camera: null,
+  model: null,
+  muzzle: null,
+  eyes: [],
+  ears: [],
+  paws: [],
+  tail: null,
+  particles: [],
+  raf: 0,
+  visible: false,
+  shownAt: 0,
+  hideAt: 0,
+  payload: null,
+  petting: 0,
+  dragging: false,
+  pointerX: 0,
+  pointerY: 0,
+};
+
+function buildPuduSummonModel() {
+  if (!window.THREE) return null;
+  const root = new THREE.Group();
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0x8c6239, emissive: 0x1f130a, shininess: 60 });
+  const accentMat = new THREE.MeshPhongMaterial({ color: 0xd9ae79, emissive: 0x24170b, shininess: 45 });
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x64ffd0, transparent: true, opacity: 0.22 });
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0x8cf5ff, wireframe: true, transparent: true, opacity: 0.35 });
+
+  const aura = new THREE.Mesh(new THREE.SphereGeometry(1.55, 18, 14), glowMat);
+  aura.scale.set(1.15, 0.86, 1);
+  root.add(aura);
+  const auraWire = new THREE.Mesh(new THREE.SphereGeometry(1.55, 12, 10), wireMat);
+  auraWire.scale.copy(aura.scale);
+  root.add(auraWire);
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.82, 22, 16), bodyMat);
+  body.scale.set(1, 0.82, 1.08);
+  root.add(body);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.48, 18, 14), accentMat);
+  chest.position.set(0, -0.12, 0.28);
+  chest.scale.set(0.95, 0.66, 0.86);
+  root.add(chest);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.8, 0.68);
+  root.add(head);
+  const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.52, 22, 16), bodyMat.clone());
+  head.add(headMesh);
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 14), accentMat.clone());
+  muzzle.position.set(0, -0.08, 0.38);
+  muzzle.scale.set(1.2, 0.72, 0.92);
+  head.add(muzzle);
+  puduSummon3D.muzzle = muzzle;
+
+  const eyeGeo = new THREE.SphereGeometry(0.085, 12, 10);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x101418 });
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.17, 0.08, 0.41);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
+  rightEye.position.set(0.17, 0.08, 0.41);
+  head.add(leftEye, rightEye);
+  puduSummon3D.eyes = [leftEye, rightEye];
+
+  const earGeo = new THREE.SphereGeometry(0.18, 14, 10);
+  const leftEar = new THREE.Mesh(earGeo, accentMat.clone());
+  leftEar.position.set(-0.32, 0.32, 0.04);
+  leftEar.scale.set(0.55, 1.22, 0.42);
+  leftEar.rotation.z = 0.34;
+  const rightEar = new THREE.Mesh(earGeo, accentMat.clone());
+  rightEar.position.set(0.32, 0.32, 0.04);
+  rightEar.scale.set(0.55, 1.22, 0.42);
+  rightEar.rotation.z = -0.34;
+  head.add(leftEar, rightEar);
+  puduSummon3D.ears = [leftEar, rightEar];
+
+  const hornGeo = new THREE.CylinderGeometry(0.018, 0.04, 0.2, 6);
+  const hornMat = new THREE.MeshPhongMaterial({ color: 0xf6cf6a, emissive: 0x3a2508, shininess: 80 });
+  const hornL = new THREE.Mesh(hornGeo, hornMat);
+  hornL.position.set(-0.14, 0.42, -0.02);
+  hornL.rotation.z = 0.22;
+  const hornR = new THREE.Mesh(hornGeo, hornMat.clone());
+  hornR.position.set(0.14, 0.42, -0.02);
+  hornR.rotation.z = -0.22;
+  head.add(hornL, hornR);
+
+  const legGeo = new THREE.CylinderGeometry(0.08, 0.085, 0.48, 10);
+  const hoofGeo = new THREE.SphereGeometry(0.09, 10, 8);
+  const legPositions = [
+    [-0.28, -0.56, 0.26],
+    [0.28, -0.56, 0.26],
+    [-0.28, -0.56, -0.26],
+    [0.28, -0.56, -0.26],
+  ];
+  puduSummon3D.paws = [];
+  for (const [x, y, z] of legPositions) {
+    const leg = new THREE.Group();
+    const upper = new THREE.Mesh(legGeo, new THREE.MeshPhongMaterial({ color: 0x6d4627, emissive: 0x1a0f07 }));
+    const hoof = new THREE.Mesh(hoofGeo, hornMat.clone());
+    hoof.position.set(0, -0.28, 0.04);
+    hoof.scale.set(1.08, 0.56, 1.16);
+    leg.add(upper, hoof);
+    leg.position.set(x, y, z);
+    root.add(leg);
+    puduSummon3D.paws.push(leg);
+  }
+
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), new THREE.MeshPhongMaterial({ color: 0xf4e9dd, emissive: 0x1d1613 }));
+  tail.position.set(0, 0.12, -0.74);
+  tail.scale.set(1, 0.72, 0.72);
+  root.add(tail);
+  puduSummon3D.tail = tail;
+
+  root.userData = { head, aura, auraWire };
+  root.position.set(-3.6, -0.22, 0);
+  return root;
+}
+
+function initPuduSummonScene() {
+  if (puduSummon3D.initialized || !window.THREE) return;
+  const overlay = document.getElementById('pudu3d-overlay');
+  const canvas = document.getElementById('pudu3d-canvas');
+  if (!overlay || !canvas) return;
+  puduSummon3D.overlay = overlay;
+  puduSummon3D.canvas = canvas;
+  puduSummon3D.caption = document.getElementById('pudu3d-caption');
+  puduSummon3D.meta = document.getElementById('pudu3d-meta');
+  puduSummon3D.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  puduSummon3D.renderer.setClearColor(0x000000, 0);
+  puduSummon3D.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  puduSummon3D.renderer.setSize(window.innerWidth, window.innerHeight);
+  puduSummon3D.scene = new THREE.Scene();
+  puduSummon3D.camera = new THREE.PerspectiveCamera(48, window.innerWidth / Math.max(window.innerHeight, 1), 0.1, 100);
+  puduSummon3D.camera.position.set(0, 0.55, 6.4);
+  puduSummon3D.camera.lookAt(0, 0.2, 0);
+  puduSummon3D.scene.add(new THREE.AmbientLight(0xffffff, 1.28));
+  const keyLight = new THREE.DirectionalLight(0x7af2ff, 1.3);
+  keyLight.position.set(-3, 4, 6);
+  puduSummon3D.scene.add(keyLight);
+  const fillLight = new THREE.PointLight(0xffcb7a, 1.8, 15);
+  fillLight.position.set(3.2, 1.4, 3.5);
+  puduSummon3D.scene.add(fillLight);
+  puduSummon3D.model = buildPuduSummonModel();
+  if (puduSummon3D.model) puduSummon3D.scene.add(puduSummon3D.model);
+  const resize = () => {
+    if (!puduSummon3D.renderer || !puduSummon3D.camera) return;
+    puduSummon3D.renderer.setSize(window.innerWidth, window.innerHeight);
+    puduSummon3D.camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+    puduSummon3D.camera.updateProjectionMatrix();
+  };
+  window.addEventListener('resize', resize, { passive: true });
+  const touchPudu = (clientX, clientY) => {
+    puduSummon3D.pointerX = clientX;
+    puduSummon3D.pointerY = clientY;
+    puduSummon3D.petting = Math.min(1, puduSummon3D.petting + 0.22);
+    if (navigator.vibrate) navigator.vibrate(10);
+    setPuduWhisper('El pudú siente tus caricias y responde desde la colmena.', 1800);
+  };
+  canvas.addEventListener('pointerdown', (event) => {
+    if (!puduSummon3D.visible) return;
+    puduSummon3D.dragging = true;
+    touchPudu(event.clientX, event.clientY);
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!puduSummon3D.visible || !puduSummon3D.dragging) return;
+    touchPudu(event.clientX, event.clientY);
+  });
+  const stopDragging = () => { puduSummon3D.dragging = false; };
+  canvas.addEventListener('pointerup', stopDragging);
+  canvas.addEventListener('pointercancel', stopDragging);
+  canvas.addEventListener('touchstart', (event) => {
+    if (!puduSummon3D.visible || !event.touches.length) return;
+    const touch = event.touches[0];
+    touchPudu(touch.clientX, touch.clientY);
+  }, { passive: true });
+  puduSummon3D.initialized = true;
+}
+
+function animatePuduSummonScene(now) {
+  puduSummon3D.raf = 0;
+  if (!puduSummon3D.initialized || !puduSummon3D.visible || !puduSummon3D.renderer || !puduSummon3D.scene || !puduSummon3D.camera || !puduSummon3D.model) {
+    if (puduSummon3D.overlay) {
+      puduSummon3D.overlay.classList.remove('active');
+      puduSummon3D.overlay.style.display = 'none';
+      puduSummon3D.overlay.setAttribute('aria-hidden', 'true');
+    }
+    if (puduSummon3D.canvas) puduSummon3D.canvas.style.pointerEvents = 'none';
+    return;
+  }
+  if (now >= puduSummon3D.hideAt) {
+    puduSummon3D.visible = false;
+    animatePuduSummonScene(now);
+    return;
+  }
+  const t = (now - puduSummon3D.shownAt) / 1000;
+  const intro = Math.min(1, t / 0.85);
+  const easedIntro = 1 - Math.pow(1 - intro, 3);
+  const speaking = performance.now() < puduPresence.speakingUntil;
+  const mouth = speaking ? 0.42 + (Math.sin(now / 85) * 0.5 + 0.5) * 0.45 : 0.18 + puduSummon3D.petting * 0.18;
+  const bob = Math.sin(now / 420) * 0.08;
+  const tiltX = puduPresence.tiltX * 0.35;
+  const tiltY = puduPresence.tiltY * 0.28;
+  puduSummon3D.petting *= 0.93;
+
+  puduSummon3D.model.position.x = -3.6 + easedIntro * 3.6 + Math.sin(now / 930) * 0.08;
+  puduSummon3D.model.position.y = -0.18 + bob + puduSummon3D.petting * 0.06;
+  puduSummon3D.model.rotation.y = 0.24 + tiltX * 0.8 + Math.sin(now / 1200) * 0.05;
+  puduSummon3D.model.rotation.z = tiltX * -0.16 + puduSummon3D.petting * 0.08;
+  puduSummon3D.model.rotation.x = tiltY * 0.12;
+  if (puduSummon3D.model.userData?.head) {
+    puduSummon3D.model.userData.head.rotation.y = tiltX * 0.5;
+    puduSummon3D.model.userData.head.rotation.x = tiltY * 0.28;
+    const auraScale = 1.03 + (speaking ? 0.12 : 0.04) + puduSummon3D.petting * 0.08;
+    puduSummon3D.model.userData.aura.scale.set(auraScale, auraScale * 0.82, auraScale);
+    puduSummon3D.model.userData.aura.material.opacity = 0.16 + (speaking ? 0.12 : 0.04) + puduSummon3D.petting * 0.14;
+    puduSummon3D.model.userData.auraWire.material.opacity = 0.18 + puduSummon3D.petting * 0.12;
+  }
+  if (puduSummon3D.muzzle) {
+    puduSummon3D.muzzle.scale.y = 0.72 + mouth * 0.42;
+    puduSummon3D.muzzle.position.y = -0.08 - mouth * 0.03;
+  }
+  for (const eye of puduSummon3D.eyes) eye.scale.y = 0.85 + Math.sin(now / 720) * 0.02;
+  for (const [index, ear] of puduSummon3D.ears.entries()) {
+    ear.rotation.z = (index === 0 ? 0.34 : -0.34) + Math.sin(now / 680 + index) * 0.03 + puduSummon3D.petting * (index === 0 ? -0.08 : 0.08);
+  }
+  for (const [index, paw] of puduSummon3D.paws.entries()) {
+    paw.rotation.x = Math.sin(now / 360 + index * 0.8) * (speaking ? 0.12 : 0.05);
+  }
+  if (puduSummon3D.tail) puduSummon3D.tail.rotation.y = Math.sin(now / 260) * (0.24 + puduSummon3D.petting * 0.18);
+  puduSummon3D.renderer.render(puduSummon3D.scene, puduSummon3D.camera);
+  puduSummon3D.raf = requestAnimationFrame(animatePuduSummonScene);
 }
 
 // ── DISTRIBUTED INFERENCE STATE ─────────────────────────────────────────
@@ -3373,7 +4537,7 @@ function normalizePuduCollectiveText(text, forceSentence = false) {
   return cleaned || (text || '');
 }
 
-async function runSimulationCollectiveInference(aiMsgEl, stage, startTime) {
+async function runSimulationCollectiveInference(aiMsgEl, stage, startTime, options = {}) {
   const contentEl = aiMsgEl.querySelector('.msg-content');
   const pill = document.createElement('div');
   pill.className = 'fed-pill';
@@ -3381,9 +4545,7 @@ async function runSimulationCollectiveInference(aiMsgEl, stage, startTime) {
   aiMsgEl.querySelector('.msg-body').appendChild(pill);
   contentEl.textContent = '⏳ El pudu esta reuniendo su voz comunitaria...';
 
-  const messages = injectPuduSystemPrompt(
-    chatHistory.slice(-10).filter(msg => msg.role === 'user' || msg.role === 'assistant')
-  );
+  const messages = buildPuduPromptMessages(options.promptOverride || '');
   let fullResponse = '';
   let tokenCount = 0;
   const chunks = await engine.chat.completions.create({
@@ -3412,15 +4574,34 @@ async function runSimulationCollectiveInference(aiMsgEl, stage, startTime) {
   const ms = performance.now() - startTime;
   localTPS = Math.round((Math.max(tokenCount, 1) / Math.max(ms / 1000, 0.1)) * 10) / 10;
   const metaEl = aiMsgEl.querySelector('.msg-meta');
-  if (metaEl) metaEl.textContent = `${currentModelLabel} · colmena simulada · ${localTPS} tok/s · ${Math.round(ms)}ms`;
-  chatHistory.push({ role: "assistant", content: fullResponse });
-  broadcastChat("assistant", fullResponse, peerId, currentModelLabel);
+  const metaText = `${currentModelLabel} · colmena simulada · ${localTPS} tok/s · ${Math.round(ms)}ms`;
+  if (metaEl) metaEl.textContent = metaText;
+  if (!options.specialEvent) {
+    chatHistory.push({ role: "assistant", content: fullResponse });
+    broadcastChat("assistant", fullResponse, peerId, currentModelLabel);
+  }
+  return { text: fullResponse, model: currentModelLabel, meta: metaText, ms, tokenCount, route: 'collective-sim' };
 }
 
-async function runPetalsInference(userMessage) {
+function createDetachedAssistantMessage() {
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = `
+    <div class="message">
+      <div class="msg-avatar ai-av">🦌</div>
+      <div class="msg-body">
+        <div class="msg-header">Pudu</div>
+        <div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
+        <div class="msg-content"></div>
+        <div class="msg-meta"></div>
+      </div>
+    </div>`;
+  return wrapper.firstElementChild;
+}
+
+async function runPetalsInference(userMessage, options = {}) {
   isGenerating = true;
   metrics.totalRequests++;
-  const aiMsgEl = addMessageToUI("assistant", null, true);
+  const aiMsgEl = options.specialEvent ? createDetachedAssistantMessage() : addMessageToUI("assistant", null, true);
   const startTime = performance.now();
   let fullResponse = "", tokenCount = 0;
   const stageState = getPuduStageState();
@@ -3434,19 +4615,23 @@ async function runPetalsInference(userMessage) {
     const metaEl = aiMsgEl.querySelector('.msg-meta');
     if (metaEl) metaEl.textContent = `Colmena incompleta · ${stageState.coverageCount}/${PETALS_COMPONENTS.length} shards`;
     isGenerating = false;
-    return;
+    return { text: stageState.progressText, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'pending' };
   }
 
   if (hiveSimulation.active) {
     try { await ensureSimulationCollectiveEngine(stageState); } catch (err) { console.warn('[Pudu sim engine]', err.message); }
     if (engine) {
+      let simResult;
       try {
-        await runSimulationCollectiveInference(aiMsgEl, stage, startTime);
+        simResult = await runSimulationCollectiveInference(aiMsgEl, stage, startTime, options);
       } catch (err) {
         contentEl.textContent = `[Pudu Sim Error: ${err.message}]`;
+        const errorMeta = aiMsgEl.querySelector('.msg-meta');
+        if (errorMeta) errorMeta.textContent = 'Colmena simulada · error';
+        simResult = { text: contentEl.textContent, model: currentModelLabel, meta: errorMeta?.textContent || '', error: err };
       }
       isGenerating = false;
-      return;
+      return simResult;
     }
   }
 
@@ -3487,7 +4672,7 @@ async function runPetalsInference(userMessage) {
       const metaEl = aiMsgEl.querySelector('.msg-meta');
       if (metaEl) metaEl.textContent = 'Pudu uplink pendiente';
       isGenerating = false;
-      return;
+      return { text: contentEl.textContent, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'uplink-pending' };
     }
     contentEl.textContent = '⏳ El pudu sigue ahi: subiendo la pregunta por relay mientras abre el puente directo...';
   }
@@ -3503,11 +4688,11 @@ async function runPetalsInference(userMessage) {
     if (!uplinkPeerId) {
       contentEl.textContent = 'No hay un nodo guardian disponible para recibir la pregunta.';
       isGenerating = false;
-      return;
+      return { text: contentEl.textContent, model: stage.modelLabel, meta: 'Sin guardian', blocked: true, route: 'no-guardian' };
     }
 
     const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
-    const messages = injectPuduSystemPrompt(chatHistory.slice(-10));
+    const messages = buildPuduPromptMessages(options.promptOverride || userMessage);
     const uplinkPeer = peers.get(uplinkPeerId);
     const uplinkPayload = {
       messages,
@@ -3564,16 +4749,17 @@ async function runPetalsInference(userMessage) {
     tokenCount = text.trim().split(/\s+/).filter(Boolean).length;
     const ms = performance.now() - startTime;
     const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `${result?.model || stage.modelLabel} · ${(canUseDirectGuardian && !preferRelayUplink) ? 'uplink directo' : 'uplink relay'}${result?.partial ? ' · parcial' : ''} · ${Math.round(ms)}ms`;
-    chatHistory.push({ role: "assistant", content: text });
-    broadcastChat("assistant", text, peerId, stage.modelLabel);
+    const metaText = `${result?.model || stage.modelLabel} · ${(canUseDirectGuardian && !preferRelayUplink) ? 'uplink directo' : 'uplink relay'}${result?.partial ? ' · parcial' : ''} · ${Math.round(ms)}ms`;
+    if (metaEl) metaEl.textContent = metaText;
+    if (!options.specialEvent) {
+      chatHistory.push({ role: "assistant", content: text });
+      broadcastChat("assistant", text, peerId, stage.modelLabel);
+    }
     isGenerating = false;
-    return;
+    return { text, model: result?.model || stage.modelLabel, meta: metaText, ms, tokenCount, route: (canUseDirectGuardian && !preferRelayUplink) ? 'uplink-direct' : 'uplink-relay' };
   }
 
-  const promptMessages = injectPuduSystemPrompt(
-    chatHistory.slice(-10).filter(msg => msg.role === 'user' || msg.role === 'assistant')
-  );
+    const promptMessages = buildPuduPromptMessages(options.promptOverride || userMessage);
   let allTokenIds = trimPetalsTokenWindow(await encodePetalsMessages(promptMessages), 224);
   const generatedTokenIds = [];
   const pill = document.createElement('div');
@@ -3624,11 +4810,15 @@ async function runPetalsInference(userMessage) {
   const ms = performance.now() - startTime;
   localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
   const metaEl = aiMsgEl.querySelector('.msg-meta');
-  if (metaEl) metaEl.textContent = `${stage.modelLabel} · ${petalsMyLayers.length} shards · ${localTPS} tok/s · ${Math.round(ms)}ms`;
+  const metaText = `${stage.modelLabel} · ${petalsMyLayers.length} shards · ${localTPS} tok/s · ${Math.round(ms)}ms`;
+  if (metaEl) metaEl.textContent = metaText;
 
-  chatHistory.push({ role: "assistant", content: fullResponse });
-  broadcastChat("assistant", fullResponse, peerId, stage.modelLabel);
+  if (!options.specialEvent) {
+    chatHistory.push({ role: "assistant", content: fullResponse });
+    broadcastChat("assistant", fullResponse, peerId, stage.modelLabel);
+  }
   isGenerating = false;
+  return { text: fullResponse, model: stage.modelLabel, meta: metaText, ms, tokenCount, route: 'petals-local' };
 }
 
 // Handle incoming Petals tensor from peer
@@ -3817,40 +5007,58 @@ async function calculateHash(text) {
 }
 
 async function tryLoadModel(modelCfg, cb) {
+  const timeoutMs = modelCfg?.modelSize >= 3000 ? 70000 : modelCfg?.modelSize >= 1000 ? 45000 : 28000;
   if (hasWebGPU) {
+    let worker = null;
     try {
-      const worker = createWorker();
-      const eng = await Promise.race([ webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, cb), new Promise((_, rej) => setTimeout(() => rej(new Error('worker timeout')), 180000)) ]);
+      worker = createWorker();
+      const eng = await Promise.race([
+        webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, cb),
+        new Promise((_, rej) => setTimeout(() => rej(new Error(`worker timeout (${timeoutMs}ms)`)), timeoutMs))
+      ]);
       return eng;
-    } catch(e) { console.warn('[Engine] WebWorker failed:', e.message); }
+    } catch(e) {
+      try { worker?.terminate?.(); } catch(_) {}
+      console.warn(`[Engine] WebWorker failed for ${modelCfg?.id || 'unknown'}:`, e.message);
+    }
   }
   try {
-    const eng = await Promise.race([ webllm.CreateMLCEngine(modelCfg.id, cb), new Promise((_, rej) => setTimeout(() => rej(new Error('mlc timeout')), 180000)) ]);
+    const eng = await Promise.race([
+      webllm.CreateMLCEngine(modelCfg.id, cb),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`mlc timeout (${timeoutMs}ms)`)), timeoutMs))
+    ]);
     return eng;
-  } catch(e) { console.warn('[Engine] MLCEngine failed:', e.message); }
+  } catch(e) { console.warn(`[Engine] MLCEngine failed for ${modelCfg?.id || 'unknown'}:`, e.message); }
   return null;
 }
 
 function selectSimulationCollectiveModelCandidates(stageState = getPuduStageState()) {
-  const desktopLift = !isMobile && hasWebGPU && memoryMB >= 16384;
-  const preferredIds = stageState.activeStage?.simulationModelIds?.length
-    ? stageState.activeStage.simulationModelIds
-    : (desktopLift
-      ? [
-          'Llama-3.2-3B-Instruct-q4f16_1-MLC',
-          'Llama-3.2-1B-Instruct-q4f16_1-MLC',
-          'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
-        ]
-      : [
-          'Llama-3.2-1B-Instruct-q4f16_1-MLC',
-          'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
-          'SmolLM2-360M-Instruct-q4f16_1-MLC'
-        ]);
+  const activeStage = stageState?.activeStage || null;
+  const preferredIds = activeStage?.simulationModelIds?.length
+    ? [...activeStage.simulationModelIds]
+    : [
+        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+        'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
+        'SmolLM2-360M-Instruct-q4f16_1-MLC'
+      ];
+  const canLiftTo3B = !IS_HOST_EMBED
+    && !isMobile
+    && hasWebGPU
+    && availableVRAM >= 2800
+    && memoryMB >= 16384
+    && ['sabio', 'aurora', 'bosque-total'].includes(activeStage?.id || '');
+  if (canLiftTo3B && !preferredIds.includes('Llama-3.2-3B-Instruct-q4f16_1-MLC')) {
+    preferredIds.unshift('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+  }
+  const maxModelSize = IS_HOST_EMBED ? 1000 : (isMobile ? 500 : Infinity);
   const effectiveVRAM = hasWebGPU ? (availableVRAM > 0 ? availableVRAM * 0.72 : memoryMB * 0.35) : 0;
   const effectiveRAM = memoryMB * 0.4;
-  const candidates = preferredIds.map(id => CONFIG.models.find(m => m.id === id)).filter(Boolean);
+  const candidates = preferredIds
+    .map(id => CONFIG.models.find(m => m.id === id))
+    .filter(model => model && model.modelSize <= maxModelSize);
+  if (!candidates.length) return [];
   const fitting = candidates.filter(model => hasWebGPU
-    ? (effectiveVRAM >= model.vramMB || (desktopLift && model.vramMB <= 2600))
+    ? effectiveVRAM >= model.vramMB
     : effectiveRAM >= model.ramMB
   );
   return fitting.length > 0 ? [...fitting, ...candidates.filter(model => !fitting.includes(model))] : candidates;
@@ -4177,15 +5385,16 @@ async function generateResponse(userMessage) {
   chatHistory.push({ role: "user", content: userMessage });
   addMessageToUI("user", userMessage);
   broadcastChat("user", userMessage, peerId, null);
+  const puduPrompt = extractPuduPrompt(userMessage);
+
+  if (puduPrompt) {
+    await invokePuduSummon(puduPrompt);
+    return;
+  }
 
   if (STRICT_PUDU_HIVE) {
-    const puduState = getPuduStageState();
-    if (!puduState.ready) {
-      addMessageToUI('assistant', puduState.progressText);
-      return;
-    }
-    showRouteBanner(`${puduState.activeStage?.emoji || '🦌'} ${puduState.activeStage?.label || 'Pudu'} → cerebro comunitario`);
-    return await runPetalsInference(userMessage);
+    setPuduWhisper('La sala quedó hablando entre humanos. Invoca al pudú con @pudu cuando quieras escuchar a la colmena.', 2600);
+    return;
   }
 
   const intent = await classifyIntentWithLLM(userMessage);
@@ -4998,8 +6207,12 @@ function renderQRCode(text, canvas, size = 200) {
 //  NOSTR RELAY MANAGER
 // ══════════════════════════════════════════════════════════════════════════
 async function signAndPublish(content, asPrivKeyBytes = null) {
+  return signAndPublishToNamespace(CONFIG.appNamespace, content, asPrivKeyBytes);
+}
+
+async function signAndPublishToNamespace(namespace, content, asPrivKeyBytes = null) {
   const nostr = await getNostrMod();
-  const template = { kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", CONFIG.appNamespace]], content: JSON.stringify(content) };
+  const template = { kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", namespace]], content: JSON.stringify(content) };
   let event;
   try { event = nostr.finalizeEvent(template, asPrivKeyBytes || privKeyBytes); } catch(e) { return null; }
   seenEventIds.add(event.id);
@@ -5023,8 +6236,7 @@ function connectRelay(url) {
     const ws = new WebSocket(url); entry.ws = ws;
     ws.onopen = () => {
       entry.status = 'connected'; entry.retries = 0;
-      const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec;
-      ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, { kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100 }]));
+      subscribeRelayNamespaces(ws);
       publishPresence(); updateRelayUI();
     };
     ws.onmessage = (e) => { try { handleRelayMsg(JSON.parse(e.data)); } catch(_) {} };
@@ -5052,13 +6264,44 @@ function publishPresence() {
     collectiveStageLabel: collectiveState.activeStage?.label || null,
     collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
     collectiveSimulated: hiveSimulation.active,
+    hostEmbed: IS_HOST_EMBED,
     // Flag so peers know this is a real node, not a simulator virtual peer
     isSimNode: false,
   });
+  if (!IS_HOST_EMBED) publishLobbyPresence(collectiveState);
+  postHostEmbedStatus('presence');
   // FIX: Virtual/simulated peers MUST NOT publish to the real hive namespace.
   // They are local-only and publishing them makes remote peers route to a dead end
   // (their dc.send is a no-op stub). Skip presence publish for masqueraded peers.
   // If you want simulated peers visible only locally, they are already in peers Map.
+}
+
+function subscribeRelayNamespaces(ws) {
+  if (!ws || ws.readyState !== 1) return;
+  const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec;
+  try {
+    ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, { kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100 }]));
+    if (!IS_HOST_EMBED) {
+      ws.send(JSON.stringify(["REQ", `lobby-${peerId.slice(0,8)}`, { kinds: [1], "#t": [ROOM_LOBBY_NAMESPACE], since, limit: 250 }]));
+    }
+  } catch (error) {}
+}
+
+function publishLobbyPresence(collectiveState = null) {
+  if (IS_HOST_EMBED) return;
+  const state = collectiveState || getPuduStageState();
+  signAndPublishToNamespace(ROOM_LOBBY_NAMESPACE, {
+    type: "lobby_presence",
+    peerId,
+    roomName,
+    nickname: myNickname,
+    joinedAt: roomJoinedAt,
+    timestamp: Date.now(),
+    collectiveReady: !!state.ready,
+    collectiveStageLabel: state.activeStage?.label || null,
+    simulated: hiveSimulation.active,
+    capacity: ROOM_CAPACITY,
+  });
 }
 function publishSignal(targetId, signal, fromVirtualId = null) { 
   const fromPrivKey = fromVirtualId ? masqueradedPeers.get(fromVirtualId)?.privKey : privKeyBytes;
@@ -5077,6 +6320,7 @@ function handleRelayMsg(msg) {
 }
 function handleNostrContent(c) {
   if (c.type === "presence") handlePeerPresence(c);
+  else if (c.type === "lobby_presence") handleLobbyPresence(c);
   else if (c.type === "signal" && (c.to === peerId || masqueradedPeers.has(c.to))) {
     const virtualId = masqueradedPeers.has(c.to) ? c.to : null;
     if (c.signal.type === "moe_fallback_req") handleNostrFallbackReq(c.from, c.signal, virtualId);
@@ -5462,6 +6706,10 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         if (seenMsgIds.has(m.payload.id)) break; seenMsgIds.add(m.payload.id);
         const { id, role, content, peerId: senderId, model, hops = 0, nickname: senderNick } = m.payload;
         if (hops < 5) broadcastChat(role, content, senderId, model, id, hops + 1, fromId);
+        if (role === 'pudu_notice' || role === 'pudu_event') {
+          handleIncomingPuduChatEvent(role, content, senderNick, senderId || fromId);
+          break;
+        }
         chatHistory.push({ role, content });
         const aiMsgEl = addMessageToUI(role, content);
         const sid = senderNick || (senderId || fromId).slice(0, 6);
@@ -5681,8 +6929,9 @@ async function autoScale() { computeScore(); updateSpeedChip(); updateHiveUI(); 
 // ══════════════════════════════════════════════════════════════════════════
 function addMessageToUI(role, content, streaming = false) {
   const msgs = document.getElementById('messages');
-  const div = document.createElement('div'); div.className = 'message';
+  const div = document.createElement('div');
   const isUser = role === 'user';
+  div.className = `message ${isUser ? 'user-msg' : 'assistant-msg'}`;
   const avClass = isUser ? 'user-av' : 'ai-av';
   const puduState = STRICT_PUDU_HIVE ? getPuduStageState() : null;
   const avText = isUser ? 'U' : (STRICT_PUDU_HIVE ? (puduState?.activeStage?.emoji || '🦌') : 'AI');
@@ -5728,6 +6977,12 @@ function updateTierUI() {
   document.getElementById('chip-mode-text').textContent = `MODE: ${modeLabels[inferenceMode] || inferenceMode.toUpperCase()}`;
   document.getElementById('chip-mode-dot').style.background = color;
   document.getElementById('stat-inf-mode').textContent = inferenceMode;
+  const tierBadge = document.getElementById('device-tier-badge');
+  if (tierBadge) {
+    tierBadge.textContent = `TIER ${deviceTier}`;
+    tierBadge.style.borderColor = color;
+    tierBadge.style.color = color;
+  }
 }
 
 function updateHiveUI() {
@@ -5759,6 +7014,7 @@ function updateHiveUI() {
   } else { hint.style.display = 'none'; }
 
   updatePuduHiveUI();
+  postHostEmbedStatus('hive-ui');
 }
 
 function setPuduChatAvailability(enabled, placeholder) {
@@ -5853,6 +7109,14 @@ function updateRelayUI() {
   list.innerHTML = html;
   document.getElementById('chip-relays-text').textContent = `RELAYS: ${ok}/${total}`;
   document.getElementById('chip-relays-dot').style.background = ok > 5 ? 'var(--peer-online)' : ok > 0 ? 'var(--peer-slow)' : 'var(--peer-dead)';
+  const hStatus = document.getElementById('h-status');
+  if (hStatus) {
+    const collective = getPuduStageState();
+    const prefix = collective.ready ? '● colmena activa' : (ok > 0 ? '● conectando bosque' : '● relays offline');
+    hStatus.textContent = `${prefix} · ${ok}/${Math.max(total, 1)} relays`;
+    hStatus.classList.toggle('offline', ok === 0);
+  }
+  postHostEmbedStatus('relay-ui');
 }
 function updateScoreUI(score, avgRTT) {
   const bar = document.getElementById('score-bar');
@@ -5869,6 +7133,29 @@ function updateDeviceStats() {
   document.getElementById('stat-memory').textContent = `${memoryMB}MB`;
   document.getElementById('stat-peer-id').textContent = peerId;
 }
+
+function setupHostEmbedBridge() {
+  document.body?.classList.toggle('host-embed', IS_HOST_EMBED);
+  if (!IS_HOST_EMBED) return;
+  window.addEventListener('message', async (event) => {
+    if (event.origin !== location.origin) return;
+    const data = event.data || {};
+    if (data.type === 'pudu-host-refresh' && (!data.roomName || data.roomName === roomName)) {
+      postHostEmbedStatus('refresh');
+      return;
+    }
+    if (data.type === 'pudu-host-warm' && (!data.roomName || data.roomName === roomName)) {
+      try {
+        await ensureSimulationCollectiveEngine(getPuduStageState());
+        postHostEmbedStatus('warm-ready');
+      } catch (error) {
+        console.warn('[HostEmbed] warm failed:', error.message);
+        postHostEmbedStatus('warm-error');
+      }
+    }
+  });
+  setInterval(() => postHostEmbedStatus('heartbeat'), 3000);
+}
 function showModelProgress(show, name='') { const sec=document.getElementById('model-progress-section'); sec.classList.toggle('active',show); if(name)document.getElementById('model-name-display').textContent=name; }
 function updateModelProgress(pct, text) { document.getElementById('model-progress-bar').style.width=pct+'%'; document.getElementById('model-progress-label').textContent=text; }
 function updateInitStatus(t) { const e=document.getElementById('init-status'); if(e)e.textContent=t; }
@@ -5883,33 +7170,41 @@ function setupModals() {
   const roomModal = document.getElementById('room-modal');
   const roomInput = document.getElementById('room-input');
   const nicknameModalInput = document.getElementById('nickname-input');
+  const changeRoomBtn = document.getElementById('change-room-btn');
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const newRoomBtn = document.getElementById('new-room-btn');
 
-  document.getElementById('change-room-btn').addEventListener('click', () => {
-    roomInput.value = roomName !== 'public' ? roomName : '';
-    nicknameModalInput.value = myNickname !== 'Anonymous' ? myNickname : '';
-    roomModal.classList.add('active');
-    roomInput.focus();
+  changeRoomBtn?.addEventListener('click', () => toggleRoomSidebar());
+  sidebarToggle?.addEventListener('click', () => toggleRoomSidebar());
+  newRoomBtn?.addEventListener('click', () => {
+    const nextRoom = buildNextRoomName(getRoomDirectory().map(room => room.roomName));
+    switchToRoom(nextRoom, { manual: true, bannerText: `✨ Abriste ${formatRoomLabel(nextRoom)}.` });
+    toggleRoomSidebar(false);
+  });
+  document.addEventListener('click', (event) => {
+    const sidebar = document.getElementById('rooms-sidebar');
+    if (!sidebar || !sidebar.classList.contains('open')) return;
+    if (event.target.closest('#rooms-sidebar') || event.target.closest('#change-room-btn') || event.target.closest('#sidebar-toggle')) return;
+    if (window.innerWidth <= 900) toggleRoomSidebar(false);
   });
 
   document.getElementById('room-modal-close').addEventListener('click', () => roomModal.classList.remove('active'));
   roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomModal.classList.remove('active'); });
 
   document.getElementById('room-join-btn').addEventListener('click', () => {
-    const name = roomInput.value.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30);
+    const name = normalizeRoomName(roomInput.value);
     if (name) {
       setNickname(nicknameModalInput.value);
       roomModal.classList.remove('active');
-      applyRoom(name);
-      // Reconnect relays with new namespace
-      reconnectForNewRoom();
+      switchToRoom(name, { manual: true, bannerText: `🌿 Te moviste a ${formatRoomLabel(name)}.` });
     }
   });
 
   document.getElementById('room-public-btn').addEventListener('click', () => {
     setNickname(nicknameModalInput.value);
     roomModal.classList.remove('active');
-    applyRoom('public');
-    reconnectForNewRoom();
+    const target = findBestLobbyRoom();
+    switchToRoom(target, { manual: true, bannerText: `🌿 Te moviste a ${formatRoomLabel(target)}.` });
   });
 
   roomInput.addEventListener('keydown', (e) => {
@@ -5965,14 +7260,13 @@ function reconnectForNewRoom() {
   // Re-subscribe on relays
   for (const [, entry] of relayMap) {
     if (entry.ws?.readyState === 1) {
-      const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec;
-      entry.ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, { kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100 }]));
+      subscribeRelayNamespaces(entry.ws);
     }
   }
   publishPresence();
   document.getElementById('messages').innerHTML = '';
   chatHistory.length = 0;
-  addMessageToUI('assistant', `🏠 Joined room #${roomName}. Share the invite link to add peers.`);
+  addMessageToUI('assistant', `🏠 Entraste a ${formatRoomLabel(roomName)}. Comparte el enlace para sumar mas pudúes.`);
   updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
 }
 
@@ -5984,12 +7278,6 @@ function setupInput() {
   const send = () => {
     const txt = input.value.trim();
     if (!txt || isGenerating) return;
-    if (STRICT_PUDU_HIVE && !isPuduHiveReady() && !txt.startsWith('/')) {
-      input.value = '';
-      input.style.height = 'auto';
-      addMessageToUI('assistant', getPuduStageState().progressText);
-      return;
-    }
     input.value = '';
     input.style.height = 'auto';
     generateResponse(txt);
@@ -5998,7 +7286,13 @@ function setupInput() {
   input.addEventListener('keydown', (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
   input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,140)+'px'; });
 }
-function cleanupPeers() { const now=Date.now(); for(const[pid,p]of peers)if(now-p.lastSeen>CONFIG.presenceTTLMs)removePeer(pid); }
+function cleanupPeers() {
+  const now = Date.now();
+  for (const [pid, p] of peers) if (now - p.lastSeen > CONFIG.presenceTTLMs) removePeer(pid);
+  pruneLobbyPresence();
+  renderRoomDirectory();
+  updateRoomMembersUI();
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 //  SWARM SIMULATOR (?simulate=true) — 15 Tests
@@ -6227,6 +7521,7 @@ async function boot() {
   await initIdentity();
   initRoom();
   initNickname();
+  setupHostEmbedBridge();
   reputation.load();
   reputation.updateUI();
   console.log(`[Hive Mind v7] boot peerId=${peerId} room=${roomName} nick=${myNickname}`);
@@ -6239,6 +7534,7 @@ async function boot() {
   document.getElementById('petals-activate-btn').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
   document.getElementById('petals-fab').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
   connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI(); updateRoomMembersUI();
+  scheduleAutoRoomSelection();
   if (STRICT_PUDU_HIVE) setTimeout(() => maybeAutoActivatePetals('boot'), 800);
 
   await initEngine();
@@ -6300,6 +7596,7 @@ async function boot() {
   let connectedRelays = 0;
   for (const [, s] of relayMap) if (s.status === 'connected') connectedRelays++;
   publishPresence();
+  scheduleAutoRoomSelection();
 
   showWelcomeBanner();
 
@@ -6776,7 +8073,13 @@ async function boot() {
     simLog(`➡️ Conéctate desde un celular real — recibirá el cerebro local colectivo del host`, 'sim-pass');
     updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
     publishPresence();
-    ensureSimulationCollectiveEngine(getPuduStageState()).catch(err => console.warn('[Pudu sim engine]', err.message));
+    if (SHOULD_PREWARM_SIM_ENGINE) {
+      ensureSimulationCollectiveEngine(getPuduStageState())
+        .then(() => postHostEmbedStatus('sim-prewarmed'))
+        .catch(err => console.warn('[Pudu sim engine]', err.message));
+    } else {
+      postHostEmbedStatus('sim-waiting-for-warm');
+    }
     let earlyBroadcasts = 0;
     const earlyInterval = setInterval(() => {
       publishPresence(); earlyBroadcasts++;
