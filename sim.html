@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pudú Sim Chile</title>
+  <style>
+    :root {
+      --bg: #070913;
+      --panel: rgba(16, 20, 36, 0.9);
+      --panel-2: rgba(12, 16, 30, 0.88);
+      --line: rgba(132, 154, 255, 0.22);
+      --text: #edf2ff;
+      --muted: #98a4cf;
+      --gold: #ffd26f;
+      --green: #7af1b7;
+      --chip: rgba(28, 34, 58, 0.88);
+      --accent: #9d85ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background:
+      radial-gradient(circle at top, rgba(86, 115, 255, 0.18), transparent 30%),
+      radial-gradient(circle at bottom right, rgba(0, 209, 178, 0.12), transparent 26%),
+      var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    body { padding: 20px; }
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+      overflow: hidden;
+      backdrop-filter: blur(18px);
+    }
+    .sidebar {
+      padding: 22px;
+      position: sticky;
+      top: 20px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.1;
+    }
+    .lead, .note {
+      color: var(--muted);
+      line-height: 1.5;
+      margin: 0;
+    }
+    .lead { margin-bottom: 18px; }
+    .section {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .label {
+      display: block;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    input {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      outline: none;
+    }
+    input:focus {
+      border-color: rgba(157, 133, 255, 0.55);
+      box-shadow: 0 0 0 3px rgba(157, 133, 255, 0.12);
+    }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    button, a.btn {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: var(--chip);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 11px 14px;
+      font: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+    button:hover, a.btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(157, 133, 255, 0.5);
+      background: rgba(40, 46, 78, 0.96);
+    }
+    .btn.primary {
+      background: linear-gradient(135deg, rgba(157,133,255,0.26), rgba(65,225,175,0.2));
+      border-color: rgba(157,133,255,0.38);
+    }
+    .url-block {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: var(--panel-2);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .url-block strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--gold);
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .url-text {
+      word-break: break-all;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .viewer {
+      min-height: calc(100vh - 40px);
+      background: rgba(4, 6, 14, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+    }
+    iframe {
+      width: 100%;
+      height: calc(100vh - 40px);
+      border: 0;
+      display: block;
+      background: #05070f;
+    }
+    @media (max-width: 1080px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: static;
+      }
+      .viewer, iframe {
+        min-height: 70vh;
+        height: 70vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="card sidebar">
+      <h1>🌀 Simulador Pudú Chile</h1>
+      <p class="lead">Esta entrada es solo para tu PC. Levanta una sala real con `index.html` y le inyecta celulares virtuales chilenos usando `?simulate=N`, mientras te deja a mano el link limpio para tu celular.</p>
+
+      <div class="section">
+        <label class="label" for="sim-room">Sala</label>
+        <div class="field-row">
+          <input id="sim-room" type="text" spellcheck="false">
+        </div>
+
+        <label class="label" for="sim-peers">Celulares virtuales</label>
+        <div class="field-row">
+          <input id="sim-peers" type="number" min="2" max="1000" value="50">
+        </div>
+
+        <div class="btn-row">
+          <button class="btn primary" id="launch-sim">🌸 Lanzar simulación</button>
+          <button class="btn" id="new-room">🔁 Nueva sala</button>
+          <button class="btn" id="copy-phone">📋 Copiar link celular</button>
+        </div>
+
+        <div class="chips">
+          <div class="chip">PC simulador → `index.html?simulate=N`</div>
+          <div class="chip">Celular real → `index.html?room=sala-x`</div>
+          <div class="chip">Cliente liviano → `assistOnly=1`</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="url-block">
+          <strong>PC Simulador</strong>
+          <div class="url-text" id="sim-host-url"></div>
+        </div>
+        <div class="url-block">
+          <strong>Celular Normal</strong>
+          <div class="url-text" id="sim-phone-url"></div>
+        </div>
+        <div class="url-block">
+          <strong>Cliente Liviano</strong>
+          <div class="url-text" id="sim-assist-url"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="note">Flujo recomendado: abre esta página en tu PC, espera a que la colmena se complete dentro del visor, y recién entonces entra desde tu celular al link limpio de la misma sala.</p>
+      </div>
+    </section>
+
+    <section class="viewer">
+      <iframe id="sim-frame" allow="clipboard-read; clipboard-write"></iframe>
+    </section>
+  </div>
+
+  <script>
+    const roomInput = document.getElementById('sim-room');
+    const peersInput = document.getElementById('sim-peers');
+    const frame = document.getElementById('sim-frame');
+    const hostUrlEl = document.getElementById('sim-host-url');
+    const phoneUrlEl = document.getElementById('sim-phone-url');
+    const assistUrlEl = document.getElementById('sim-assist-url');
+
+    function makeRoomName() {
+      const d = new Date();
+      const pad = value => String(value).padStart(2, '0');
+      const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+      return `sala-sim-${stamp}`;
+    }
+
+    function clampPeers(value) {
+      const parsed = parseInt(value, 10);
+      if (!Number.isFinite(parsed)) return 50;
+      return Math.min(1000, Math.max(2, parsed));
+    }
+
+    function buildUrls() {
+      const room = (roomInput.value || makeRoomName()).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30) || makeRoomName();
+      const peers = clampPeers(peersInput.value);
+      roomInput.value = room;
+      peersInput.value = String(peers);
+
+      const base = new URL('./index.html', location.href);
+      base.searchParams.set('room', room);
+
+      const host = new URL(base);
+      host.searchParams.set('simulate', String(peers));
+
+      const phone = new URL(base);
+      const assist = new URL(base);
+      assist.searchParams.set('assistOnly', '1');
+
+      return { room, peers, host: host.toString(), phone: phone.toString(), assist: assist.toString() };
+    }
+
+    function renderUrls(pushState = true) {
+      const urls = buildUrls();
+      hostUrlEl.textContent = urls.host;
+      phoneUrlEl.textContent = urls.phone;
+      assistUrlEl.textContent = urls.assist;
+      frame.src = urls.host;
+
+      const pageUrl = new URL(location.href);
+      pageUrl.searchParams.set('room', urls.room);
+      pageUrl.searchParams.set('peers', String(urls.peers));
+      if (pushState) history.replaceState({}, '', pageUrl.toString());
+      return urls;
+    }
+
+    function initializeFromQuery() {
+      const params = new URLSearchParams(location.search);
+      roomInput.value = params.get('room') || makeRoomName();
+      peersInput.value = String(clampPeers(params.get('peers') || '50'));
+    }
+
+    async function copyPhoneUrl() {
+      const { phone } = buildUrls();
+      await navigator.clipboard.writeText(phone);
+    }
+
+    document.getElementById('launch-sim').addEventListener('click', () => renderUrls());
+    document.getElementById('new-room').addEventListener('click', () => {
+      roomInput.value = makeRoomName();
+      renderUrls();
+    });
+    document.getElementById('copy-phone').addEventListener('click', async () => {
+      try {
+        await copyPhoneUrl();
+        document.getElementById('copy-phone').textContent = '✅ Link copiado';
+        setTimeout(() => { document.getElementById('copy-phone').textContent = '📋 Copiar link celular'; }, 1600);
+      } catch (_) {}
+    });
+
+    roomInput.addEventListener('change', () => renderUrls());
+    peersInput.addEventListener('change', () => renderUrls());
+
+    initializeFromQuery();
+    renderUrls(false);
+  </script>
+</body>
+</html>
