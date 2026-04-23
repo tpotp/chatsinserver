@@ -291,14 +291,12 @@
     <aside class="host-sidebar">
       <div class="host-title">
         <h1>🦌 Pudú Host</h1>
-        <p>Orquesta una colmena independiente por sala, sin ocupar cupos humanos. Cuando un bosque recibe gente, el host lo calienta y deja listo para responder.</p>
+        <p>Acompaña una colmena independiente por sala sin mezclar bosques. Cada iframe entra como un nodo Web-Petals extra de esa sala y ayuda a repartir SmolLM2-1.7B-Q8.</p>
       </div>
 
       <section class="card">
         <h2>Control</h2>
-        <div class="input-row">
-          <input id="simulate-count" type="number" min="3" max="15" value="12">
-        </div>
+        <div class="room-progress">Este host no inyecta motores locales alternativos: cada sala sigue viviendo de sus propios shards Web-Petals.</div>
         <div class="btn-row">
           <button class="btn" id="ensure-first-room">🌿 Asegurar Sala 1</button>
           <button class="btn secondary" id="copy-public-link">📋 Copiar index.html</button>
@@ -343,7 +341,6 @@
     const ROOM_LOBBY_TTL_MS = 45000;
     const ROOM_BASE_PREFIX = 'sala-';
     const URL_FLAGS = new URLSearchParams(location.search);
-    const DEFAULT_SIMULATE = Math.min(15, Math.max(3, parseInt(URL_FLAGS.get('simulate') || '12', 10) || 12));
 const LOCAL_RELAYS = ['localhost', '127.0.0.1'].includes(location.hostname)
   ? [`ws://${location.hostname}:7777`]
   : [];
@@ -362,9 +359,6 @@ const RELAYS = [
     const publicHostUrl = new URL('./host.html', location.href);
     const roomGrid = document.getElementById('room-grid');
     const logEl = document.getElementById('host-log');
-    const simulateInput = document.getElementById('simulate-count');
-    simulateInput.value = String(DEFAULT_SIMULATE);
-
     let nostrMod = null;
     async function getNostrMod() {
       if (!nostrMod) nostrMod = await import('https://esm.sh/nostr-tools@2/pure');
@@ -401,9 +395,6 @@ const RELAYS = [
       for (const name of existingNames) maxOrdinal = Math.max(maxOrdinal, getRoomOrdinal(name));
       return `${ROOM_BASE_PREFIX}${maxOrdinal + 1}`;
     }
-    function getSimulateCount() {
-      return Math.min(15, Math.max(3, parseInt(simulateInput.value || String(DEFAULT_SIMULATE), 10) || DEFAULT_SIMULATE));
-    }
     function buildUserRoomUrl(roomName) {
       const url = new URL(publicIndexUrl);
       url.searchParams.set('room', normalizeRoomName(roomName));
@@ -412,7 +403,6 @@ const RELAYS = [
     function buildHostFrameUrl(roomName, options = {}) {
       const url = new URL(publicIndexUrl);
       url.searchParams.set('room', normalizeRoomName(roomName));
-      url.searchParams.set('simulate', String(getSimulateCount()));
       url.searchParams.set('hostEmbed', '1');
       url.searchParams.set('hostKey', normalizeRoomName(roomName));
       if (options.prewarm) url.searchParams.set('prewarm', '1');
@@ -439,7 +429,11 @@ const RELAYS = [
     function updateSummary() {
       const rooms = getRoomDirectory();
       const statuses = [...roomControllers.values()];
-      const ready = statuses.filter(entry => entry.status?.ready).length;
+      const ready = statuses.filter(entry => {
+        const status = entry.status || {};
+        const coverageTotal = status.coverageTotal || 26;
+        return !!status.ready && !!status.petalsReady && (status.coverageCount || 0) >= coverageTotal;
+      }).length;
       const humans = rooms.reduce((sum, room) => sum + room.count, 0);
       document.getElementById('stat-rooms').textContent = String(Math.max(1, roomControllers.size));
       document.getElementById('stat-humans').textContent = String(humans);
@@ -515,12 +509,12 @@ const RELAYS = [
           <div class="room-meta">
             <div class="mini"><span class="mini-label">Humanos</span><span class="mini-value" data-room-humans>0 / ${ROOM_CAPACITY}</span></div>
             <div class="mini"><span class="mini-label">Estado</span><span class="mini-value" data-room-stage>Arrancando</span></div>
-            <div class="mini"><span class="mini-label">Motor</span><span class="mini-value" data-room-model>Sin warm</span></div>
+            <div class="mini"><span class="mini-label">Motor</span><span class="mini-value" data-room-model>SmolLM2-1.7B-Q8 · esperando shards</span></div>
           </div>
           <div class="room-actions">
             <button class="btn secondary" data-open-room>↗ Abrir sala</button>
             <button class="btn secondary" data-copy-room>📋 Copiar URL</button>
-            <button class="btn secondary" data-warm-room>🔥 Warm</button>
+            <button class="btn secondary" data-warm-room>🌸 Sincronizar</button>
           </div>
           <div class="room-progress" data-room-progress>Esperando presencia humana en este bosque…</div>
         </div>
@@ -581,11 +575,14 @@ const RELAYS = [
       const controller = ensureRoomController(roomName);
       controller.status = status;
       const humanCount = getRoomDirectory().find(room => room.roomName === roomName)?.count || 0;
-      const reallyReady = !!status.ready && !!status.engineReady;
+      const coverageTotal = status.coverageTotal || 26;
+      const reallyReady = !!status.ready && !!status.petalsReady && (status.coverageCount || 0) >= coverageTotal;
       controller.wrapper.querySelector('[data-room-humans]').textContent = `${humanCount} / ${ROOM_CAPACITY}`;
       controller.wrapper.querySelector('[data-room-stage]').textContent = status.stageLabel || 'Pudu Dormido';
-      controller.wrapper.querySelector('[data-room-model]').textContent = status.engineReady ? `${status.modelLabel || 'colectivo'} · listo` : `${status.modelLabel || 'colectivo'} · esperando warm`;
-      controller.wrapper.querySelector('[data-room-progress]').textContent = status.progressText || (reallyReady ? 'La colmena de esta sala ya está despierta.' : 'Esperando que el bosque termine de calentarse.');
+      controller.wrapper.querySelector('[data-room-model]').textContent = reallyReady
+        ? `${status.modelLabel || 'SmolLM2-1.7B-Q8 · Web-Petals'} · listo`
+        : `${status.modelLabel || 'SmolLM2-1.7B-Q8 · Web-Petals'} · ${status.petalsReady ? 'sincronizando cobertura' : 'esperando shards'}`;
+      controller.wrapper.querySelector('[data-room-progress]').textContent = status.progressText || (reallyReady ? 'La colmena de esta sala ya está despierta.' : 'Esperando que entren suficientes celulares y se repartan los shards.');
       const badge = controller.wrapper.querySelector('[data-room-badge]');
       badge.className = `room-badge ${reallyReady ? 'ready' : controller.warmed ? 'warming' : 'idle'}`;
       badge.textContent = reallyReady
@@ -659,11 +656,6 @@ const RELAYS = [
     });
     document.getElementById('open-public-link').addEventListener('click', () => {
       window.open(publicIndexUrl.toString(), '_blank', 'noopener');
-    });
-
-    simulateInput.addEventListener('change', () => {
-      const next = getSimulateCount();
-      logLine(`Nuevo objetivo de simulación por sala: ${next}`, 'warn');
     });
 
     for (const relay of RELAYS) connectRelay(relay);

@@ -2010,6 +2010,7 @@ function updateRoomMembersUI() {
 function postHostEmbedStatus(reason = 'heartbeat') {
   if (!IS_HOST_EMBED || window.parent === window) return;
   const state = getPuduStageState();
+  const petalsReady = !!petalsActive && petalsMyLayers.length > 0;
   const payload = {
     type: 'pudu-host-status',
     reason,
@@ -2024,13 +2025,16 @@ function postHostEmbedStatus(reason = 'heartbeat') {
     progressText: state.progressText || '',
     memberCount: getRoomMemberCount(),
     collectiveTPS: computeCollectiveTPS(),
-    avgRtt: hiveSimulation.active ? hiveSimulation.avgRtt : null,
-    simulationActive: !!hiveSimulation.active,
-    simulatedPeers: hiveSimulation.active ? hiveSimulation.onlineCount : 0,
-    requestedPeers: hiveSimulation.requestedCount || 0,
-    engineReady: !!engine,
+    avgRtt: getPuduLatencyLabel(),
+    simulationActive: false,
+    simulatedPeers: 0,
+    requestedPeers: 0,
+    engineReady: petalsReady,
+    petalsReady,
     petalsActive,
     petalsLayers: petalsMyLayers.length,
+    coverageCount: state.coverageCount,
+    coverageTotal: PETALS_COMPONENTS.length,
     relayConnected: [...relayMap.values()].filter(entry => entry.status === 'connected').length,
     relayTotal: relayMap.size,
     timestamp: Date.now(),
@@ -2500,87 +2504,63 @@ const SHOULD_PREWARM_SIM_ENGINE = URL_FLAGS.get('prewarm') === '1' || (!!URL_FLA
 const PUDU_HIVE_STAGES = [
   {
     id: 'brote',
-    minPeers: 3,
-    minCollectiveTPS: 3,
+    minPeers: 5,
+    minCollectiveTPS: 3.2,
     minWebGPUPeers: 1,
     minHighTierPeers: 0,
     emoji: '🌱',
     label: 'Pudu Brote',
-    modelLabel: 'Sim 0.5B-q4',
-    note: 'Primer cerebro comunitario de sala',
-    maxTokens: 40,
-    simulationModelIds: ['Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 48,
+    modelLabel: 'SmolLM2-1.7B-Q8 · Web-Petals',
+    note: 'Primer quorum real de shards en esta sala',
+    maxTokens: 44,
   },
   {
     id: 'coro',
-    minPeers: 5,
-    minCollectiveTPS: 4.5,
+    minPeers: 7,
+    minCollectiveTPS: 4.2,
     minWebGPUPeers: 2,
     minHighTierPeers: 0,
     emoji: '🌿',
     label: 'Pudu Coro',
-    modelLabel: 'Sim 0.5B-q4 · coro vivo',
-    note: 'Mas coro, mejor latencia y primeras respuestas largas',
-    maxTokens: 52,
-    simulationModelIds: ['Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 64,
+    modelLabel: 'SmolLM2-1.7B-Q8 · Web-Petals',
+    note: 'Mas estabilidad coral y mejor relevo entre shards',
+    maxTokens: 56,
   },
   {
     id: 'guardabosques',
-    minPeers: 7,
-    minCollectiveTPS: 5.5,
-    minWebGPUPeers: 3,
+    minPeers: 9,
+    minCollectiveTPS: 5.2,
+    minWebGPUPeers: 2,
     minHighTierPeers: 1,
     emoji: '🦌',
     label: 'Pudu Guardabosques',
-    modelLabel: 'Sim 1B-q4',
-    note: 'Mas memoria de sala y respuestas mas solidas',
-    maxTokens: 64,
-    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 84,
+    modelLabel: 'SmolLM2-1.7B-Q8 · Web-Petals',
+    note: 'Cobertura robusta de sala y routing mas sereno',
+    maxTokens: 68,
   },
   {
     id: 'sabio',
-    minPeers: 10,
-    minCollectiveTPS: 6.5,
-    minWebGPUPeers: 4,
+    minPeers: 12,
+    minCollectiveTPS: 6.2,
+    minWebGPUPeers: 3,
     minHighTierPeers: 1,
     emoji: '🧠',
     label: 'Pudu Sabio',
-    modelLabel: 'Sim 1B-q4 · coro profundo',
-    note: 'Cerebro mayor estable por sala, con sintesis mas fina y contexto mas amplio',
-    maxTokens: 80,
-    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 104,
-  },
-  {
-    id: 'aurora',
-    minPeers: 12,
-    minCollectiveTPS: 7.5,
-    minWebGPUPeers: 5,
-    minHighTierPeers: 2,
-    emoji: '✨',
-    label: 'Pudu Aurora',
-    modelLabel: 'Sim 1B-q4 · gran coro',
-    note: 'Sala casi llena, mas memoria coral y mas resiliencia',
-    maxTokens: 96,
-    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 128,
+    modelLabel: 'SmolLM2-1.7B-Q8 · Web-Petals',
+    note: 'Sala madura con contexto mas amplio y menos fragilidad',
+    maxTokens: 88,
   },
   {
     id: 'bosque-total',
     minPeers: 15,
-    minCollectiveTPS: 8.5,
-    minWebGPUPeers: 6,
-    minHighTierPeers: 2,
+    minCollectiveTPS: 7.2,
+    minWebGPUPeers: 4,
+    minHighTierPeers: 1,
     emoji: '🌲',
     label: 'Pudu Bosque Total',
-    modelLabel: 'Sim 1B-q4 · sala plena',
-    note: 'La sala completa sostiene su propia colmena independiente',
-    maxTokens: 128,
-    simulationModelIds: ['Llama-3.2-1B-Instruct-q4f16_1-MLC', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'SmolLM2-360M-Instruct-q4f16_1-MLC'],
-    simulationReplyTokens: 144,
+    modelLabel: 'SmolLM2-1.7B-Q8 · Web-Petals',
+    note: 'La sala completa sostiene su propio cerebro independiente',
+    maxTokens: 112,
   },
 ];
 const PUDU_PERSONALITIES = {
@@ -3479,12 +3459,10 @@ function getReportedCollectiveState() {
       reported.stageId = peer.collectiveStageId || reported.stageId;
       reported.stageLabel = peer.collectiveStageLabel || reported.stageLabel;
       reported.modelLabel = peer.collectiveModelLabel || reported.modelLabel;
-      reported.simulated = !!peer.collectiveSimulated;
     }
     if ((peer.collectiveCoverageCount || 0) > reported.coverageCount) {
       reported.coverageCount = peer.collectiveCoverageCount || 0;
       reported.modelLabel = peer.collectiveModelLabel || reported.modelLabel;
-      reported.simulated = !!peer.collectiveSimulated || reported.simulated;
     }
     if (peer.collectiveReady) reported.ready = true;
   }
@@ -3685,9 +3663,7 @@ function getPuduStageState() {
   const activeStageView = activeStage
     ? {
         ...activeStage,
-        modelLabel: (hiveSimulation.active && currentModelLabel && currentModelLabel !== 'none')
-          ? currentModelLabel
-          : (reportedCollective.modelLabel || activeStage.modelLabel),
+        modelLabel: reportedCollective.modelLabel || activeStage.modelLabel,
         unlockedByMetrics: !!getPuduStageById(activeStage.id) && canUnlockPuduStage(activeStage, metrics),
         collectiveTPS: metrics.collectiveTPS,
         coreSize: metrics.coreSize,
@@ -3714,18 +3690,14 @@ function getPuduStageState() {
   const activationPct = activeStageView
     ? Math.min(100, Math.round((coveragePct * 0.6) + (capabilityPct * 0.4)))
     : Math.min(capabilityPct, coveragePct || capabilityPct);
-  const remoteHostControlledRoom = !hiveSimulation.active && [...peers.values()].some(peer =>
-    peer &&
-    (peer.hostEmbed || peer.collectiveSimulated) &&
-    (Date.now() - (peer.lastSeen || 0) <= CONFIG.presenceTTLMs * 2)
-  );
-  const remoteSimulatedGuardianPending = (!!reportedCollective.simulated || remoteHostControlledRoom) && !hiveSimulation.active;
-  const collectiveReady = reportedCollective.ready || (!remoteSimulatedGuardianPending && hasCollectivePetalsAvailability());
-  const collectiveBrainReady = hiveSimulation.active
-    ? (!!engine && currentModelLabel && currentModelLabel !== 'none')
-    : (!!reportedCollective.ready && !!reportedCollective.modelLabel && reportedCollective.modelLabel !== 'none')
-      || (!!engine && currentModelLabel && currentModelLabel !== 'none');
-  const ready = !!activeStageView && collectiveReady && coverageCount >= PETALS_COMPONENTS.length && collectiveBrainReady;
+  const petalsSeedCount = (petalsActive ? 1 : 0) + Array.from(petalsReadyPeers.entries()).filter(([pid, info]) => {
+    if (!info?.active) return false;
+    if (masqueradedPeers.has(pid)) return false;
+    return Date.now() - (info.lastSeen || 0) <= CONFIG.presenceTTLMs * 2;
+  }).length;
+  const fullCoverage = coverageCount >= PETALS_COMPONENTS.length;
+  const collectiveReady = fullCoverage && (reportedCollective.ready || petalsSeedCount > 0 || hasCollectivePetalsAvailability());
+  const ready = !!activeStageView && collectiveReady;
   const missingPeers = Math.max(0, firstStage.minPeers - peerCount);
   const missingShards = Math.max(0, PETALS_COMPONENTS.length - coverageCount);
   const missingCollectiveTPS = Math.max(0, (nextStage || firstStage).minCollectiveTPS - metrics.collectiveTPS);
@@ -3733,20 +3705,18 @@ function getPuduStageState() {
   let progressText = '';
   if (!activeStageView) {
     if (missingPeers > 0) {
-      progressText = `Faltan ${missingPeers} celulares y ${Math.ceil(missingCollectiveTPS)} tok/s colectivos para despertar al pudu.`;
+      progressText = `Faltan ${missingPeers} celulares y ${Math.ceil(missingCollectiveTPS)} tok/s colectivos para despertar a ${formatRoomLabel(roomName)}.`;
     } else {
-      progressText = `La colmena ya tiene quorum parcial, pero faltan ${missingShards} shards y mas nucleo critico para encender el cerebro.`;
+      progressText = `La sala ya tiene quorum parcial, pero faltan ${missingShards} shards reales para completar SmolLM2-1.7B-Q8.`;
     }
   } else if (!ready) {
-    progressText = !collectiveBrainReady
-      ? `La colmena ya esta completa, pero el cerebro comunitario aun se esta cargando en el guardian anfitrion...`
-      : missingShards > 0
-      ? `El ${activeStageView.label} ya sostiene ${metrics.collectiveTPS} tok/s. Faltan ${missingShards} shards para completar el cerebro.`
-      : `La colmena esta sincronizando sus ultimos shards...`;
+    progressText = missingShards > 0
+      ? `El ${activeStageView.label} ya sostiene ${metrics.collectiveTPS} tok/s. Faltan ${missingShards} shards para completar la colmena de esta sala.`
+      : `La colmena de ${formatRoomLabel(roomName)} esta sincronizando sus ultimos nodos Petals...`;
   } else if (nextStage) {
-    progressText = `La colmena se ha creado. ${peerCount}/${nextStage.minPeers} celulares · ${metrics.collectiveTPS}/${nextStage.minCollectiveTPS} tok/s hacia ${nextStage.label}.`;
+    progressText = `La colmena de ${formatRoomLabel(roomName)} se ha creado. ${peerCount}/${nextStage.minPeers} celulares · ${metrics.collectiveTPS}/${nextStage.minCollectiveTPS} tok/s hacia ${nextStage.label}.`;
   } else {
-    progressText = `El ${activeStageView.label} ya esta hablando con ${metrics.collectiveTPS} tok/s colectivos y ${metrics.helperCount} ayudantes fuera del nucleo.`;
+    progressText = `El ${activeStageView.label} ya habla desde esta sala con ${metrics.collectiveTPS} tok/s colectivos y ${metrics.coreSize} nodos criticos.`;
   }
 
   return {
@@ -4387,10 +4357,8 @@ function listPetalsFallbackCandidates(limit = Infinity) {
       layers: info.layers || [],
       lastSeen,
       open: peer?.dc?.readyState === 'open',
-      hostEmbed: !!peer?.hostEmbed,
-      hasEngine: !!peer?.hasEngine,
       collectiveReady: !!peer?.collectiveReady,
-      canServe: !!peer?.hasEngine || !!peer?.collectiveReady || !!peer?.petalsActive || (info.layers?.length || 0) > 0,
+      canServe: !!peer?.petalsActive || (info.layers?.length || 0) > 0,
       collectiveCoverage: peer?.collectiveCoverageCount || 0,
       collectivePeers: peer?.collectivePeerCount || 0,
       score: estimatePetalsPeerScore({
@@ -4399,21 +4367,19 @@ function listPetalsFallbackCandidates(limit = Infinity) {
         tps: peer.tps,
         benchmark: peer.benchmark,
         webgpu: peer.webgpu,
-        hasEngine: peer.hasEngine,
+        hasEngine: false,
       }),
     });
   }
   candidates.sort((a, b) =>
     (Number(b.canServe) - Number(a.canServe)) ||
-    (Number(b.hostEmbed) - Number(a.hostEmbed)) ||
-    (Number(b.collectiveReady) - Number(a.collectiveReady)) ||
-    (Number(b.hasEngine) - Number(a.hasEngine)) ||
     (Number(b.open) - Number(a.open)) ||
-    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
+    (Number(b.collectiveReady) - Number(a.collectiveReady)) ||
     ((b.collectiveCoverage || 0) - (a.collectiveCoverage || 0)) ||
     ((b.collectivePeers || 0) - (a.collectivePeers || 0)) ||
     ((b.layers?.length || 0) - (a.layers?.length || 0)) ||
     ((b.score || 0) - (a.score || 0)) ||
+    ((b.lastSeen || 0) - (a.lastSeen || 0)) ||
     a.peerId.localeCompare(b.peerId)
   );
   const usable = candidates.some(candidate => candidate.canServe)
@@ -4625,7 +4591,6 @@ async function runPetalsInference(userMessage, options = {}) {
   const startTime = performance.now();
   let fullResponse = "", tokenCount = 0;
   const stageState = getPuduStageState();
-  const reportedCollective = getReportedCollectiveState();
   const stage = stageState.activeStage || PUDU_HIVE_STAGES[0];
   const contentEl = aiMsgEl.querySelector('.msg-content');
   aiMsgEl.querySelector('.typing-indicator')?.remove();
@@ -4638,26 +4603,7 @@ async function runPetalsInference(userMessage, options = {}) {
     return { text: stageState.progressText, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'pending' };
   }
 
-  if (hiveSimulation.active) {
-    try { await ensureSimulationCollectiveEngine(stageState); } catch (err) { console.warn('[Pudu sim engine]', err.message); }
-    if (engine) {
-      let simResult;
-      try {
-        simResult = await runSimulationCollectiveInference(aiMsgEl, stage, startTime, options);
-      } catch (err) {
-        contentEl.textContent = `[Pudu Sim Error: ${err.message}]`;
-        const errorMeta = aiMsgEl.querySelector('.msg-meta');
-        if (errorMeta) errorMeta.textContent = 'Colmena simulada · error';
-        simResult = { text: contentEl.textContent, model: currentModelLabel, meta: errorMeta?.textContent || '', error: err };
-      }
-      isGenerating = false;
-      return simResult;
-    }
-  }
-
-  const remoteCollectiveSim = !hiveSimulation.active && !!reportedCollective.simulated;
-  const shouldPreferCollectiveUplink = remoteCollectiveSim;
-  const hasLocalLayers = petalsMyLayers.length > 0 && !shouldPreferCollectiveUplink;
+  const hasLocalLayers = !!petalsActive && petalsMyLayers.length > 0;
   let hasReachablePeer = false;
   let uplinkCandidateId = null;
   for (const [pid] of petalsReadyPeers) {
@@ -4694,19 +4640,19 @@ async function runPetalsInference(userMessage, options = {}) {
       isGenerating = false;
       return { text: contentEl.textContent, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'uplink-pending' };
     }
-    contentEl.textContent = '⏳ El pudu sigue ahi: subiendo la pregunta por relay mientras abre el puente directo...';
+    contentEl.textContent = '⏳ El pudu sigue ahi: subiendo la pregunta por relay mientras abre el puente directo dentro de esta sala...';
   }
 
-  if (petalsMyLayers.length === 0 || shouldPreferCollectiveUplink) {
+  if (!hasLocalLayers) {
     const pill = document.createElement('div');
     pill.className = 'fed-pill';
-    pill.textContent = `${stage.emoji} ${stage.label} · uplink a la colmena real`;
+    pill.textContent = `${stage.emoji} ${stage.label} · colmena de esta sala`;
     aiMsgEl.querySelector('.msg-body').appendChild(pill);
-    contentEl.textContent = '⏳ El pudu escucha desde otro nodo de la colmena...';
+    contentEl.textContent = '⏳ El pudu escucha desde otro nodo de esta colmena...';
 
     const uplinkCandidates = Array.from(new Set([
       ...(uplinkCandidateId ? [uplinkCandidateId] : []),
-      ...listPetalsFallbackCandidates(3).map(candidate => candidate.peerId),
+      ...listPetalsFallbackCandidates(4).map(candidate => candidate.peerId),
     ])).filter(Boolean);
     const uplinkPeerId = uplinkCandidates[0];
     if (!uplinkPeerId) {
@@ -4793,10 +4739,10 @@ async function runPetalsInference(userMessage, options = {}) {
       broadcastChat("assistant", text, peerId, stage.modelLabel);
     }
     isGenerating = false;
-    return { text, model: result?.model || stage.modelLabel, meta: metaText, ms, tokenCount, route: (canUseDirectGuardian && !preferRelayUplink) ? 'uplink-direct' : 'uplink-relay' };
+    return { text, model: result?.model || stage.modelLabel, meta: metaText, ms, tokenCount, route: metaTransport === 'direct' ? 'uplink-direct' : 'uplink-relay' };
   }
 
-    const promptMessages = buildPuduPromptMessages(options.promptOverride || userMessage);
+  const promptMessages = buildPuduPromptMessages(options.promptOverride || userMessage);
   let allTokenIds = trimPetalsTokenWindow(await encodePetalsMessages(promptMessages), 224);
   const generatedTokenIds = [];
   const pill = document.createElement('div');
@@ -6301,7 +6247,7 @@ function publishPresence() {
     collectiveStageId: collectiveState.activeStage?.id || null,
     collectiveStageLabel: collectiveState.activeStage?.label || null,
     collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
-    collectiveSimulated: hiveSimulation.active,
+    collectiveSimulated: false,
     hostEmbed: IS_HOST_EMBED,
     // Flag so peers know this is a real node, not a simulator virtual peer
     isSimNode: false,
@@ -6337,7 +6283,7 @@ function publishLobbyPresence(collectiveState = null) {
     timestamp: Date.now(),
     collectiveReady: !!state.ready,
     collectiveStageLabel: state.activeStage?.label || null,
-    simulated: hiveSimulation.active,
+    simulated: false,
     capacity: ROOM_CAPACITY,
   });
 }
@@ -6398,45 +6344,14 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
   isGenerating = true;
   try {
     let text = "";
-    if (STRICT_PUDU_HIVE && hiveSimulation.active && !engine) {
-      try { await ensureSimulationCollectiveEngine(getPuduStageState()); } catch (err) { console.warn('[Pudu relay] collective engine preload failed:', err.message); }
-    }
-    const collectiveSim = STRICT_PUDU_HIVE && hiveSimulation.active && inferenceMode === 'collective-sim' && !!engine;
-    if (collectiveSim) {
-      if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
-        console.log('[Pudu relay][collectiveSim] req', {
-          reqId,
-          model: currentModelLabel,
-          roles: Array.isArray(signal.messages) ? signal.messages.map(msg => msg?.role) : [],
-          lastUser: Array.isArray(signal.messages)
-            ? [...signal.messages].reverse().find(msg => msg?.role === 'user')?.content?.slice(0, 160)
-            : null,
-        });
-      }
-      const stageState = getPuduStageState();
-      const maxTokens = Math.max(signal.max_tokens || 0, stageState.activeStage?.maxTokens || 48);
-      const chunks = await engine.chat.completions.create({
-        messages: signal.messages,
-        stream: true,
-        temperature: 0.4,
-        max_tokens: maxTokens
-      });
-      let tokenCount = 0;
-      for await (const chunk of chunks) {
-        const token = chunk.choices[0]?.delta?.content || "";
-        if (!token) continue;
-        text += token;
-        tokenCount++;
-      }
-      if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
-        console.log('[Pudu relay][collectiveSim] done', {
-          reqId,
-          tokenCount,
-          sample: text.slice(0, 160),
-        });
-      }
-      text = normalizePuduCollectiveText(text, true);
-      if (tokenCount > 0) localTPS = Math.max(localTPS || 0, tokenCount);
+    const strictPetalsRequest = STRICT_PUDU_HIVE && !!signal?.petalsHive && Array.isArray(signal.messages);
+    if (strictPetalsRequest && petalsActive && petalsMyLayers.length > 0) {
+      const startedAt = performance.now();
+      const result = await generatePetalsTextFromMessages(signal.messages, { maxTokens: signal.max_tokens || 200 });
+      text = result.text;
+      const elapsedMs = Math.max(1, performance.now() - startedAt);
+      const servedTps = Math.round(((result.tokenCount || 1) / (elapsedMs / 1000)) * 10) / 10;
+      localTPS = Math.max(localTPS || 0, servedTps || 0);
     } else if (engine && !STRICT_PUDU_HIVE) {
       // WebLLM path (fast)
       const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 512 });
@@ -6451,7 +6366,7 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
       const stage = getPuduStageState().activeStage;
       text += `\n\n> ✅ *${stage?.label || 'Colmena Pudu'}: ${vnick}*`;
     }
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: collectiveSim ? currentModelLabel : (getPuduStageState().activeStage?.modelLabel || currentModelId || 'SmolLM2-1.7B'), tps: localTPS }}, virtualId);
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: getPuduStageState().activeStage?.modelLabel || 'SmolLM2-1.7B-Q8 · Web-Petals', tps: localTPS }}, virtualId);
     reputation.addInference();
   } catch (e) {
     publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }}, virtualId);
@@ -6521,7 +6436,7 @@ function handlePeerPresence(p) {
       collectiveStageId: p.collectiveStageId || peer.collectiveStageId || null,
       collectiveStageLabel: p.collectiveStageLabel || peer.collectiveStageLabel || null,
       collectiveModelLabel: p.collectiveModelLabel || peer.collectiveModelLabel || null,
-      collectiveSimulated: !!p.collectiveSimulated || !!peer.collectiveSimulated,
+      collectiveSimulated: !!p.collectiveSimulated,
     });
   }
 
@@ -6661,7 +6576,7 @@ function setupDC(dc, remoteId, myVirtualId = null) {
       collectiveStageId: collectiveState.activeStage?.id || null,
       collectiveStageLabel: collectiveState.activeStage?.label || null,
       collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
-      collectiveSimulated: hiveSimulation.active,
+      collectiveSimulated: false,
       hostEmbed: IS_HOST_EMBED,
     }));
       if (petalsActive) {
@@ -6783,7 +6698,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         peer.collectiveStageId = m.payload.collectiveStageId || peer.collectiveStageId || null;
         peer.collectiveStageLabel = m.payload.collectiveStageLabel || peer.collectiveStageLabel || null;
         peer.collectiveModelLabel = m.payload.collectiveModelLabel || peer.collectiveModelLabel || null;
-        peer.collectiveSimulated = !!m.payload.collectiveSimulated || !!peer.collectiveSimulated;
+        peer.collectiveSimulated = !!m.payload.collectiveSimulated;
         peer.hostEmbed = !!m.payload.hostEmbed || !!peer.hostEmbed;
         if (peer.petalsActive) upsertPetalsPeer(fromId, m.payload.petalsLayers || [], true, Date.now());
         else petalsReadyPeers.delete(fromId);
@@ -6852,7 +6767,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
     case MSG.MOE_REQ:
     case MSG.TOK_REQ:
     case MSG.SHARD_HANDOFF:
-      if (m.payload?.petalsHive && STRICT_PUDU_HIVE && petalsActive && petalsTokenizer && Array.isArray(m.payload.messages) && !engine) {
+      if (m.payload?.petalsHive && STRICT_PUDU_HIVE && petalsActive && petalsMyLayers.length > 0 && petalsTokenizer && Array.isArray(m.payload.messages)) {
         if (isGenerating) {
           if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null }));
           break;
@@ -6885,7 +6800,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         isGenerating = false;
         break;
       }
-      if (engine && (m.payload?.messages || m.payload?.hash)) {
+      if (!STRICT_PUDU_HIVE && engine && (m.payload?.messages || m.payload?.hash)) {
         if (isGenerating) { if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null })); break; }
         isGenerating = true;
         let ctxMessages = m.payload.messages;
@@ -6898,18 +6813,13 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
         }
         const resType = m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_END;
         const isHandoff = m.type === MSG.SHARD_HANDOFF || m.payload.isThermalSharding;
-        const collectiveSim = STRICT_PUDU_HIVE && hiveSimulation.active && inferenceMode === 'collective-sim';
-        const stageState = collectiveSim ? getPuduStageState() : null;
-        const maxLimit = collectiveSim
-          ? Math.max(m.payload.max_tokens || 0, stageState?.activeStage?.id === 'sabio' ? 96 : 48)
-          : (m.payload.max_tokens || 512);
+        const maxLimit = (m.payload.max_tokens || 512);
         const limitToGen = isHandoff ? 25 : maxLimit;
 
         try {
           const chunks = await engine.chat.completions.create({ messages: ctxMessages, stream: true, temperature: 0.7, max_tokens: limitToGen });
           let fullR = "", seqC = 0;
           for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ && m.type !== MSG.SHARD_HANDOFF) peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); else if (token && m.type === MSG.SHARD_HANDOFF) { const originalRequester = peers.get(m.payload.originalRequester); if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token, hopNode: peerId.slice(0,4) })); } }
-          if (collectiveSim) fullR = normalizePuduCollectiveText(fullR, true);
           
           let generatedNaturalEOS = (seqC < limitToGen - 1);
           
@@ -6929,11 +6839,11 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
                  }
              } else {
                  const originalRequester = peers.get(m.payload.originalRequester || fromId);
-                 if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: collectiveSim ? currentModelLabel : currentModelId, tps: localTPS }));
+                 if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
              }
           } else {
              const originalRequester = peers.get(m.payload.originalRequester || fromId);
-             if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: collectiveSim ? currentModelLabel : currentModelId, tps: localTPS }));
+             if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: localTPS }));
           }
           reputation.addInference();
         } catch(e) { 
@@ -7195,7 +7105,7 @@ function setupHostEmbedBridge() {
     }
     if (data.type === 'pudu-host-warm' && (!data.roomName || data.roomName === roomName)) {
       try {
-        await ensureSimulationCollectiveEngine(getPuduStageState());
+        await petalsActivate('host-warm');
         postHostEmbedStatus('warm-ready');
       } catch (error) {
         console.warn('[HostEmbed] warm failed:', error.message);
@@ -7586,7 +7496,13 @@ async function boot() {
   scheduleAutoRoomSelection();
   if (STRICT_PUDU_HIVE) setTimeout(() => maybeAutoActivatePetals('boot'), 800);
 
-  await initEngine();
+  if (!STRICT_PUDU_HIVE) {
+    await initEngine();
+  } else {
+    engine = null;
+    currentModelId = null;
+    currentModelLabel = 'none';
+  }
   updateTierUI(); updateDeviceStats(); hideInitOverlay();
 
   if (engine) { updateInitStatus('Running benchmark…'); await runBenchmark(); }

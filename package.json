@@ -7,6 +7,7 @@
     "relay": "node relay.js",
     "serve": "npx -y serve .",
     "start": "node relay.js & npx -y serve .",
+    "validate:room-hive": "node validate_room_hive.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
