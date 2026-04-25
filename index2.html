@@ -675,40 +675,7 @@ canvas{position:fixed;inset:0;z-index:0}
 // ═══════════════════════════════════════════════════════════════
 
 
-// ═══════════════════════════════════════════════════════════════
-// DEVICE TIER CLASSIFICATION (from index.html)  
-// ═══════════════════════════════════════════════════════════════
-let DEVICE_IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-let DEVICE_HAS_WEBGPU = false;
-let DEVICE_MEM_MB = (navigator.deviceMemory || 4) * 1024;
-let DEVICE_TIER = 'D';
-let DEVICE_PERF = 'medium';
 
-(async function classifyDevice() {
-  try {
-    if (navigator.gpu) {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (adapter) {
-        DEVICE_HAS_WEBGPU = true;
-        const info = adapter.info || {};
-        // Estimate VRAM from adapter limits
-        const maxBuf = adapter.limits?.maxBufferSize || 0;
-        const vramEst = maxBuf > 0 ? Math.round(maxBuf / (1024*1024)) : 0;
-        
-        if (!DEVICE_IS_MOBILE && DEVICE_MEM_MB >= 8000 && vramEst >= 2000) DEVICE_TIER = 'A';
-        else if (DEVICE_MEM_MB >= 4000 && vramEst >= 1000) DEVICE_TIER = 'B';
-        else if (DEVICE_MEM_MB >= 2000) DEVICE_TIER = 'C';
-        else DEVICE_TIER = 'D';
-      }
-    }
-  } catch(e) {}
-  
-  DEVICE_PERF = (DEVICE_TIER === 'A' || DEVICE_TIER === 'B') ? 'high' :
-                (DEVICE_TIER === 'C') ? 'medium' : 'low';
-  
-  console.log('[DEVICE] Tier:', DEVICE_TIER, 'Mobile:', DEVICE_IS_MOBILE, 
-              'WebGPU:', DEVICE_HAS_WEBGPU, 'Mem:', DEVICE_MEM_MB+'MB');
-})();
 
 
 // ═══════════════════════════════════════════════════════════════
