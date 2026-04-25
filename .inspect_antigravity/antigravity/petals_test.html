@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Micro-Petals P2P Pipeline</title>
+  <style>
+    :root { --bg: #09090b; --fg: #fafafa; --border: #27272a; --accent: #8b5cf6; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--fg); margin: 0; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    .card { background: #18181b; border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    button { background: var(--accent); color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input, select { background: transparent; border: 1px solid var(--border); color: var(--fg); padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; }
+    .peer-badge { display: inline-block; padding: 4px 8px; background: rgba(139,92,246,0.2); border: 1px solid var(--accent); border-radius: 12px; font-size: 12px; }
+    pre { background: #000; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 13px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1 style="margin-top:0">🌸 Web-Petals PoC</h1>
+    <p>True Layer Sharding over WebRTC (ONNX Tensor Passing)</p>
+    <div style="display:flex; gap:10px; align-items: center">
+        <div id="status" class="peer-badge">System Offline</div>
+        <div id="peerIdDisplay" style="font-family:monospace"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Assign Responsibility (What does this tab compute?)</h3>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+        <label><input type="checkbox" id="chk-embeds"> Embeddings (input -&gt; tensor)</label>
+        <label><input type="checkbox" id="chk-layer0"> Layer 0 (tensor -&gt; tensor)</label>
+        <label><input type="checkbox" id="chk-layer1"> Layer 1 (tensor -&gt; tensor)</label>
+        <label><input type="checkbox" id="chk-layer2"> Layer 2 (tensor -&gt; tensor)</label>
+        <label><input type="checkbox" id="chk-head"> LM Head (tensor -&gt; token)</label>
+    </div>
+    <button id="btn-load">Load Checked Models into RAM</button>
+  </div>
+
+  <div class="card">
+    <h3>Prompt (Needs Embeddings node to start)</h3>
+    <input type="text" id="prompt-input" value="Hola mundo" placeholder="Ingresa texto..."><br><br>
+    <button id="btn-run" disabled>Inference Pipeline Run (1 Token)</button>
+    <pre id="output-log">Waiting for action...</pre>
+  </div>
+</div>
+
+<script type="module">
+// ── IMPORTS ──
+import { AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
+import { relayInit, generatePrivateKey, getPublicKey } from 'https://cdn.jsdelivr.net/npm/nostr-tools@1.13.0/+esm';
+
+// ── GLOBALS ──
+const MODELS = {};
+let tokenizer = null;
+const HIDDEN_SIZE = 576;
+const myPeerId = getPublicKey(generatePrivateKey()).slice(0, 8);
+document.getElementById('peerIdDisplay').textContent = `ID: ${myPeerId}`;
+
+const log = (msg) => { const el = document.getElementById('output-log'); el.textContent += '\n' + msg; el.scrollTop = el.scrollHeight; console.log(msg); };
+
+// ── P2P NETWORKING (NOSTR SIGNALING & WEBRTC) ──
+const peers = new Map();
+let currentGlobalSequence = []; // Store generated tokens
+let kvHackState = null;         // to store state
+
+// Mock a simple "room" via broadcast channel for local tab-to-tab testing since Nostr relays might fail
+// If we want real devices, we need full WebRTC. For simplicity in the PoC, we will use BroadcastChannel to simulate WebRTC DataChannels between tabs.
+// It uses exactly the same ArrayBuffer passing mechanics as WebRTC.
+const bc = new BroadcastChannel('petals_swarm');
+bc.onmessage = async (e) => {
+    const msg = e.data;
+    if (msg.type === 'TENSOR_PASS') await handleTensorPass(msg);
+    if (msg.type === 'NEW_TOKEN') {
+        log(`[Net] Got new token from ${msg.from}: ${msg.tokenString}`);
+    }
+};
+
+// ── ONNX LOADER ──
+document.getElementById('btn-load').onclick = async () => {
+    document.getElementById('btn-load').disabled = true;
+    log('Initializing ONNX Runtime (WASM/WebGPU)...');
+    ort.env.wasm.numThreads = 4;
+    
+    const loadSession = async (file) => {
+        log(`Loading ${file}...`);
+        return await ort.InferenceSession.create(`onnx_layers/${file}`, { executionProviders: ['wasm'] });
+    };
+
+    try {
+        if (!tokenizer) tokenizer = await AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-135M');
+
+        if (document.getElementById('chk-embeds').checked) MODELS['embeds'] = await loadSession('embeds.onnx');
+        if (document.getElementById('chk-layer0').checked) MODELS['layer_0'] = await loadSession('layer_0.onnx');
+        if (document.getElementById('chk-layer1').checked) MODELS['layer_1'] = await loadSession('layer_1.onnx');
+        if (document.getElementById('chk-layer2').checked) MODELS['layer_2'] = await loadSession('layer_2.onnx');
+        if (document.getElementById('chk-head').checked)   MODELS['head'] = await loadSession('lm_head.onnx');
+
+        log('All requested models loaded to memory!');
+        document.getElementById('status').textContent = 'Node Ready';
+        document.getElementById('status').style.background = 'rgba(16,185,129,0.2)';
+        document.getElementById('status').style.borderColor = '#10b981';
+        document.getElementById('btn-run').disabled = !MODELS['embeds'];
+    } catch(err) {
+        log(`ERROR: ${err.message}`);
+        console.error(err);
+    }
+};
+
+// ── INFERENCE LOGIC ──
+document.getElementById('btn-run').onclick = async () => {
+    if (!MODELS['embeds']) { log("I don't have Embeddings to calculate the prompt!"); return; }
+    
+    // 1. Tokenize Input
+    const text = document.getElementById('prompt-input').value;
+    log(`Tokenizing: "${text}"...`);
+    const { input_ids } = await tokenizer(text);
+    const idArray = Array.from(input_ids.data);
+    const seq_len = idArray.length;
+    
+    // 2. Run Embeddings
+    log(`[Embedder] Running embeds.onnx on shape [1, ${seq_len}]...`);
+    const inputTensor = new ort.Tensor('int64', BigInt64Array.from(idArray.map(BigInt)), [1, seq_len]);
+    
+    const t0 = performance.now();
+    const results = await MODELS['embeds'].run({ input_ids: inputTensor });
+    const hidden_states = results.hidden_states; // Float32Array
+    log(`[Embedder] Done. Time: ${Math.round(performance.now() - t0)}ms. Output shape: ${hidden_states.dims}`);
+
+    // Pass to Layer 0
+    passTensorToNextStep('layer_0', hidden_states.data, seq_len);
+};
+
+// ── DISTRIBUTED PIPELINE ROUTER ──
+function passTensorToNextStep(nextTarget, float32Buffer, seqLen) {
+    log(`[Router] Routing Hidden States Tensor (Size: ${float32Buffer.length}) to -> ${nextTarget}`);
+    bc.postMessage({ type: 'TENSOR_PASS', target: nextTarget, buffer: float32Buffer, seqLen: seqLen, from: myPeerId });
+    // If we have it locally, we also run it
+    handleTensorPass({ target: nextTarget, buffer: float32Buffer, seqLen: seqLen, from: myPeerId });
+}
+
+async function handleTensorPass(msg) {
+    if (msg.target === 'layer_0' && MODELS['layer_0']) {
+        const outData = await runLayerMath(MODELS['layer_0'], msg.buffer, msg.seqLen, 0);
+        passTensorToNextStep('layer_1', outData, msg.seqLen);
+    }
+    else if (msg.target === 'layer_1' && MODELS['layer_1']) {
+        const outData = await runLayerMath(MODELS['layer_1'], msg.buffer, msg.seqLen, 1);
+        passTensorToNextStep('layer_2', outData, msg.seqLen);
+    }
+    else if (msg.target === 'layer_2' && MODELS['layer_2']) {
+        const outData = await runLayerMath(MODELS['layer_2'], msg.buffer, msg.seqLen, 2);
+        passTensorToNextStep('head', outData, msg.seqLen); // Jump straight to head for PoC
+    }
+    else if (msg.target === 'head' && MODELS['head']) {
+        log(`[LM Head] Processing final hidden states...`);
+        const hiddenTensor = new ort.Tensor('float32', new Float32Array(msg.buffer), [1, msg.seqLen, HIDDEN_SIZE]);
+        const results = await MODELS['head'].run({ hidden_states: hiddenTensor });
+        const logits = results.logits.data; // [1, vocab_size]
+        
+        // Argmax
+        let maxIndex = 0; let maxValue = -Infinity;
+        for (let i=0; i<logits.length; i++) { if (logits[i] > maxValue) { maxValue = logits[i]; maxIndex = i; } }
+        
+        const tokenString = tokenizer.decode([maxIndex]);
+        log(`[LM Head] PREDICTED TOKEN ID: ${maxIndex} -> "${tokenString}"`);
+        bc.postMessage({ type: 'NEW_TOKEN', tokenString, from: myPeerId });
+    }
+}
+
+// ── UTILITIES ──
+async function runLayerMath(session, float32Buffer, seqLen, layerIndex) {
+    log(`[Layer ${layerIndex}] Executing math on incoming tensor...`);
+    const hiddenTensor = new ort.Tensor('float32', new Float32Array(float32Buffer), [1, seqLen, HIDDEN_SIZE]);
+    const maskTensor = new ort.Tensor('float32', new Float32Array(seqLen * seqLen).fill(1.0), [1, 1, seqLen, seqLen]);
+    const posTensor = new ort.Tensor('int64', BigInt64Array.from(Array.from({length: seqLen}, (_, i) => BigInt(i))), [1, seqLen]);
+    
+    const t0 = performance.now();
+    const results = await session.run({ input_hidden: hiddenTensor, attention_mask: maskTensor, position_ids: posTensor });
+    log(`[Layer ${layerIndex}] Done. Time: ${Math.round(performance.now() - t0)}ms`);
+    return results.output_hidden.data;
+}
+
+</script>
+</body>
+</html>

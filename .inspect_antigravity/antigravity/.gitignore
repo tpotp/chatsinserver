@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# ONNX model weights (hosted on HuggingFace CDN)
+onnx_layers/
+onnx_layers_1.7b/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Slice scripts (not needed in production)
+slice_model.py
+slice_model_real.py
+upload_to_hf.py
+test_quant.py
+quantize_and_upload.py
+onnx_layers_1.7b_int8/

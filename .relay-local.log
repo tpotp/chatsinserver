@@ -1,0 +1,12 @@
+
+╔══════════════════════════════════════════════╗
+║  P2P-LLM Nostr Relay (Local)                ║
+║  WebSocket: ws://localhost:7777              ║
+║  NIP-11:    http://localhost:7777             ║
+║  Events TTL: 600s | Max Events: 5000       ║
+╚══════════════════════════════════════════════╝
+  
+[+] Client connected from ::ffff:127.0.0.1
+[+] Client connected from ::ffff:127.0.0.1
+[-] Client disconnected from ::ffff:127.0.0.1
+[-] Client disconnected from ::ffff:127.0.0.1
