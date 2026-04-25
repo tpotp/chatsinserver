@@ -1469,17 +1469,13 @@ body.debug-mode #pudu-ambient-wrap { display: none; }
 /* El canvas del ambient pudú — fullscreen z-index bajo */
 #pudu-ambient-canvas {
   position: fixed;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
+  top: 0;
+  left: 0;
   z-index: 1;
   pointer-events: none;
+  display: block;
+  /* NO width/height — Three.js controla el tamaño */
 }
-@media (max-width: 480px) {
-  #pudu-ambient-canvas { width: 100% !important; height: 100% !important; }
-}
-
 /* Partículas de bosque flotantes */
 #forest-particles {
   position: fixed;
@@ -1767,7 +1763,7 @@ body.debug-mode #pudu-whisper-float { display: none; }
 </div>
 
 <!-- ══ BOSQUE VIVO — capas ambientales siempre presentes ══ -->
-<canvas id="pudu-ambient-canvas" style="position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;"></canvas>
+<canvas id="pudu-ambient-canvas" style="position:fixed;top:0;left:0;z-index:1;pointer-events:none;display:block;"></canvas>
 <div id="forest-particles" aria-hidden="true"></div>
 <div id="pudu-whisper-float" aria-hidden="true"></div>
 
@@ -8686,10 +8682,13 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
     renderer.setClearColor(0x000000, 0);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(W, H);
+    /* Fijar tamaño CSS exacto — evita el blur por escalado */
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
 
     var scene = new T.Scene();
     var camera = new T.PerspectiveCamera(52, W / H, 0.1, 100);
-    camera.position.set(0, 0.3, 7.2);
+    camera.position.set(0, 0.3, 5.5);
     camera.lookAt(0, 0.1, 0);
 
     /* luces minimal — wireframe no necesita mucho */
@@ -8833,6 +8832,8 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
     window.addEventListener('resize', function() {
       W = window.innerWidth; H = window.innerHeight;
       renderer.setSize(W, H);
+      canvas.style.width  = W + 'px';
+      canvas.style.height = H + 'px';
       camera.aspect = W / H;
       camera.updateProjectionMatrix();
     }, { passive: true });
