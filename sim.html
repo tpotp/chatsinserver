@@ -183,7 +183,7 @@
   <div class="shell">
     <section class="card sidebar">
       <h1>🌀 Simulador Pudú Chile</h1>
-      <p class="lead">Esta entrada es solo para tu PC. Levanta una sala real con `index.html` y le inyecta celulares virtuales chilenos usando `?simulate=N`, mientras te deja a mano el link limpio para tu celular.</p>
+      <p class="lead">Esta entrada es solo para tu PC. Levanta una sala real con `index.html` y le inyecta celulares virtuales chilenos usando `?simulate=N`, mientras te deja a mano el link limpio para tu celular. Por defecto usa `sala-1`, así que incluso el acceso normal del celular cae en la misma colmena.</p>
 
       <div class="section">
         <label class="label" for="sim-room">Sala</label>
@@ -225,7 +225,7 @@
       </div>
 
       <div class="section">
-        <p class="note">Flujo recomendado: abre esta página en tu PC, espera a que la colmena se complete dentro del visor, y recién entonces entra desde tu celular al link limpio de la misma sala.</p>
+        <p class="note">Flujo recomendado: abre esta página en tu PC, espera a que la colmena se complete dentro del visor, y recién entonces entra desde tu celular al link limpio de la misma sala. Si quieres que el celular genérico caiga solo en el mismo bosque, usa salas tipo `sala-1`, `sala-2`, `sala-3`.</p>
       </div>
     </section>
 
@@ -242,11 +242,19 @@
     const phoneUrlEl = document.getElementById('sim-phone-url');
     const assistUrlEl = document.getElementById('sim-assist-url');
 
+    function normalizeRoomName(raw) {
+      const clean = (raw || '').toString().trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
+      return clean || 'sala-1';
+    }
+
     function makeRoomName() {
-      const d = new Date();
-      const pad = value => String(value).padStart(2, '0');
-      const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-      return `sala-sim-${stamp}`;
+      return 'sala-1';
+    }
+
+    function nextNumericRoom(current) {
+      const match = normalizeRoomName(current).match(/^sala-(\d+)$/);
+      const next = match ? Math.max(1, parseInt(match[1], 10)) + 1 : 1;
+      return `sala-${next}`;
     }
 
     function clampPeers(value) {
@@ -256,7 +264,7 @@
     }
 
     function buildUrls() {
-      const room = (roomInput.value || makeRoomName()).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30) || makeRoomName();
+      const room = normalizeRoomName(roomInput.value || makeRoomName());
       const peers = clampPeers(peersInput.value);
       roomInput.value = room;
       peersInput.value = String(peers);
@@ -290,7 +298,7 @@
 
     function initializeFromQuery() {
       const params = new URLSearchParams(location.search);
-      roomInput.value = params.get('room') || makeRoomName();
+      roomInput.value = normalizeRoomName(params.get('room') || makeRoomName());
       peersInput.value = String(clampPeers(params.get('peers') || '50'));
     }
 
@@ -301,7 +309,7 @@
 
     document.getElementById('launch-sim').addEventListener('click', () => renderUrls());
     document.getElementById('new-room').addEventListener('click', () => {
-      roomInput.value = makeRoomName();
+      roomInput.value = nextNumericRoom(roomInput.value || 'sala-1');
       renderUrls();
     });
     document.getElementById('copy-phone').addEventListener('click', async () => {
