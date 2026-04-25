@@ -4732,7 +4732,11 @@ async function runPetalsInference(userMessage, options = {}) {
   }
 
   const reportedCollective = getReportedCollectiveState();
-  const roomUsesSimulatedCollective = !!reportedCollective.simulated && !shouldServeSimulatedCollective();
+  const roomUsesSimulatedCollective = !shouldServeSimulatedCollective() && (
+    !!reportedCollective.simulated ||
+    (reportedCollective.peerCount || 0) > ROOM_CAPACITY ||
+    (stageState.peerCount || 0) > ROOM_CAPACITY
+  );
   const hasLocalLayers = !roomUsesSimulatedCollective && !!petalsActive && petalsMyLayers.length > 0;
   let hasReachablePeer = false;
   let uplinkCandidateId = null;
