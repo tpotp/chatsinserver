@@ -1461,21 +1461,9 @@ body:not(.debug-mode)::before {
 }
 
 /* Pudú ambient — canvas fullscreen en el fondo */
-#pudu-ambient-wrap {
-  display: none; /* ya no usamos wrap, el canvas es directo */
-}
-body.debug-mode #pudu-ambient-wrap { display: none; }
+
 
 /* El canvas del ambient pudú — fullscreen z-index bajo */
-#pudu-ambient-canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 1;
-  pointer-events: none;
-  display: block;
-  /* NO width/height — Three.js controla el tamaño */
-}
 /* Partículas de bosque flotantes */
 #forest-particles {
   position: fixed;
@@ -1486,15 +1474,14 @@ body.debug-mode #pudu-ambient-wrap { display: none; }
 }
 .fp {
   position: absolute;
-  border-radius: 50%;
   opacity: 0;
-  animation: fpFloat linear infinite;
+  /* NO border-radius — queremos cuadrados y rombos, no círculos */
 }
 @keyframes fpFloat {
-  0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
-  10%  { opacity: 0.6; }
-  90%  { opacity: 0.4; }
-  100% { transform: translateY(-10vh) rotate(360deg); opacity: 0; }
+  0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 0.7; }
+  92%  { opacity: 0.5; }
+  100% { transform: translateY(-105vh) rotate(270deg); opacity: 0; }
 }
 
 /* Whisper badge flotante encima del input */
@@ -1763,7 +1750,7 @@ body.debug-mode #pudu-whisper-float { display: none; }
 </div>
 
 <!-- ══ BOSQUE VIVO — capas ambientales siempre presentes ══ -->
-<canvas id="pudu-ambient-canvas" style="position:fixed;top:0;left:0;z-index:1;pointer-events:none;display:block;"></canvas>
+
 <div id="forest-particles" aria-hidden="true"></div>
 <div id="pudu-whisper-float" aria-hidden="true"></div>
 
@@ -8645,265 +8632,65 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
     setTimeout(() => waitThree(cb, tries + 1), 100);
   }
 
-  /* ── Partículas flotantes CSS (hojas / brillos) ── */
+  /* ── Partículas geométricas CSS flotantes estilo v12 ── */
   function spawnForestParticles() {
     var wrap = document.getElementById('forest-particles');
     if (!wrap) return;
-    var colors = ['#66ffab','#a0ffd0','#ffd66b','#b5efff','#e0fff5','#c8ffa0'];
-    for (var i = 0; i < 28; i++) {
+    var colors = ['#ffdd00','#ff4488','#44ffaa','#4488ff','#ff8844','#cc88ff','#ffffff','#00ffee','#ff0066','#66ff00'];
+    // Tipos: 0=cuadrado, 1=rombo, 2=triángulo
+    var count = 55;
+    for (var i = 0; i < count; i++) {
       (function(i) {
         setTimeout(function() {
           var p = document.createElement('div');
-          p.className = 'fp';
-          var sz = 2 + Math.random() * 5;
-          p.style.cssText = [
-            'width:' + sz + 'px',
-            'height:' + sz + 'px',
-            'left:' + (Math.random() * 100) + '%',
-            'background:' + colors[Math.floor(Math.random() * colors.length)],
-            'box-shadow: 0 0 ' + (sz * 2) + 'px ' + colors[Math.floor(Math.random() * colors.length)],
-            'animation-duration:' + (8 + Math.random() * 18) + 's',
-            'animation-delay:' + (Math.random() * 12) + 's',
-          ].join(';');
+          var type = i % 3;
+          var sz = 6 + Math.random() * 14;
+          var color = colors[i % colors.length];
+          var dur = 10 + Math.random() * 22;
+          var delay = Math.random() * 18;
+          var left = Math.random() * 100;
+          var baseStyle = [
+            'position:absolute',
+            'left:' + left + '%',
+            'bottom:-20px',
+            'animation:fpFloat ' + dur + 's ' + delay + 's linear infinite',
+            'opacity:0',
+          ];
+          if (type === 0) {
+            // cuadrado
+            p.style.cssText = baseStyle.concat([
+              'width:' + sz + 'px',
+              'height:' + sz + 'px',
+              'background:' + color,
+              'transform:rotate(' + (Math.random()*45) + 'deg)',
+            ]).join(';');
+          } else if (type === 1) {
+            // rombo
+            p.style.cssText = baseStyle.concat([
+              'width:' + sz + 'px',
+              'height:' + sz + 'px',
+              'background:' + color,
+              'transform:rotate(45deg)',
+            ]).join(';');
+          } else {
+            // triángulo (border trick)
+            var half = Math.round(sz * 0.6);
+            p.style.cssText = baseStyle.concat([
+              'width:0',
+              'height:0',
+              'background:transparent',
+              'border-left:' + half + 'px solid transparent',
+              'border-right:' + half + 'px solid transparent',
+              'border-bottom:' + sz + 'px solid ' + color,
+            ]).join(';');
+          }
           wrap.appendChild(p);
-        }, i * 120);
+        }, i * 80);
       })(i);
     }
   }
 
   /* ── Pudú ambiental Three.js permanente — estilo wireframe v12 ── */
-  function initAmbientPudu() {
-    var canvas = document.getElementById('pudu-ambient-canvas');
-    if (!canvas || !window.THREE) return;
-
-    var T = window.THREE;
-    var W = window.innerWidth, H = window.innerHeight;
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-    renderer.setClearColor(0x000000, 0);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(W, H);
-    /* Fijar tamaño CSS exacto — evita el blur por escalado */
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
-
-    var scene = new T.Scene();
-    var camera = new T.PerspectiveCamera(52, W / H, 0.1, 100);
-    camera.position.set(0, 0.3, 5.5);
-    camera.lookAt(0, 0.1, 0);
-
-    /* luces minimal — wireframe no necesita mucho */
-    scene.add(new T.AmbientLight(0xffffff, 1.8));
-    var kl = new T.DirectionalLight(0x88ffee, 1.0); kl.position.set(-2, 5, 4); scene.add(kl);
-    var fl = new T.PointLight(0xffcc44, 1.2, 22); fl.position.set(3, 2, 5); scene.add(fl);
-
-    /* materiales wireframe colores v12 */
-    var wCyan   = function() { return new T.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.65 }); };
-    var wGreen  = function() { return new T.MeshBasicMaterial({ color: 0x44ffaa, wireframe: true, transparent: true, opacity: 0.50 }); };
-    var wPurp   = function() { return new T.MeshBasicMaterial({ color: 0xcc88ff, wireframe: true, transparent: true, opacity: 0.42 }); };
-    var wGold   = function() { return new T.MeshBasicMaterial({ color: 0xffd700, wireframe: true, transparent: true, opacity: 0.58 }); };
-    var glow    = function(c) { return new T.MeshBasicMaterial({ color: c||0x00ffcc, transparent: true, opacity: 0.05 }); };
-
-    /* ── modelo pudú wireframe ── */
-    var root = new T.Group();
-
-    /* halos */
-    var halo = new T.Mesh(new T.TorusGeometry(1.58, 0.020, 7, 52),
-      new T.MeshBasicMaterial({ color: 0xffdd00, transparent: true, opacity: 0.42 }));
-    halo.rotation.x = Math.PI / 2;
-    root.add(halo);
-    var halo2 = new T.Mesh(new T.TorusGeometry(1.32, 0.014, 6, 38),
-      new T.MeshBasicMaterial({ color: 0xff66cc, transparent: true, opacity: 0.30 }));
-    halo2.rotation.x = Math.PI / 2; halo2.rotation.z = 0.5;
-    root.add(halo2);
-
-    /* aura */
-    var aura = new T.Mesh(new T.SphereGeometry(1.60, 16, 11), glow(0x00ffcc));
-    aura.scale.set(1.12, 0.88, 1); root.add(aura);
-    var auraWire = new T.Mesh(new T.SphereGeometry(1.60, 10, 8), wCyan());
-    auraWire.material.opacity = 0.16; auraWire.scale.copy(aura.scale); root.add(auraWire);
-
-    /* cuerpo */
-    var body = new T.Mesh(new T.SphereGeometry(0.86, 18, 13), wCyan());
-    body.scale.set(1, 0.80, 1.08); root.add(body);
-    root.add(new T.Mesh(new T.SphereGeometry(0.84, 12, 9), glow(0x00ffcc)));
-
-    /* vientre */
-    var belly = new T.Mesh(new T.SphereGeometry(0.50, 14, 10), wPurp());
-    belly.position.set(0, -0.11, 0.30); belly.scale.set(0.92, 0.62, 0.84); root.add(belly);
-
-    /* cabeza */
-    var head = new T.Group();
-    head.position.set(0, 0.84, 0.68); root.add(head);
-    head.add(new T.Mesh(new T.SphereGeometry(0.54, 18, 13), wGreen()));
-
-    /* hocico */
-    var muzzle = new T.Mesh(new T.SphereGeometry(0.23, 14, 10), wCyan());
-    muzzle.position.set(0, -0.09, 0.40); muzzle.scale.set(1.18, 0.70, 0.90); head.add(muzzle);
-
-    /* nariz */
-    head.add(function(){ var n=new T.Mesh(new T.SphereGeometry(0.065,8,6),
-      new T.MeshBasicMaterial({color:0xff88bb,transparent:true,opacity:0.85}));
-      n.position.set(0,-0.06,0.60); return n; }());
-
-    /* ojos grandes expresivos */
-    function mkEye(x) {
-      var g = new T.Group(); g.position.set(x, 0.10, 0.42);
-      g.add(new T.Mesh(new T.SphereGeometry(0.112,12,10), new T.MeshBasicMaterial({color:0xffffff})));
-      var iris=new T.Mesh(new T.SphereGeometry(0.088,10,8),new T.MeshBasicMaterial({color:0x22aaff})); iris.position.z=0.03; g.add(iris);
-      var pupil=new T.Mesh(new T.SphereGeometry(0.052,8,6),new T.MeshBasicMaterial({color:0x080c12})); pupil.position.z=0.06; g.add(pupil);
-      var shine=new T.Mesh(new T.SphereGeometry(0.020,6,5),new T.MeshBasicMaterial({color:0xffffff})); shine.position.set(0.028,0.030,0.075); g.add(shine);
-      return g;
-    }
-    var lEye = mkEye(-0.185), rEye = mkEye(0.185);
-    head.add(lEye, rEye);
-
-    /* orejas */
-    var earG = new T.SphereGeometry(0.20, 12, 8);
-    var lEar = new T.Mesh(earG, wGold()); lEar.position.set(-0.33,0.36,0.04); lEar.scale.set(0.52,1.26,0.40); lEar.rotation.z=0.36;
-    var rEar = new T.Mesh(earG, wGold()); rEar.position.set(0.33,0.36,0.04); rEar.scale.set(0.52,1.26,0.40); rEar.rotation.z=-0.36;
-    head.add(lEar, rEar);
-
-    /* cuernitos */
-    var hornG = new T.CylinderGeometry(0.020,0.046,0.22,6);
-    var hL=new T.Mesh(hornG,wGold()); hL.position.set(-0.14,0.44,-0.03); hL.rotation.z=0.24;
-    var hR=new T.Mesh(hornG,wGold()); hR.position.set(0.14,0.44,-0.03); hR.rotation.z=-0.24;
-    head.add(hL, hR);
-
-    /* patas */
-    var legG=new T.CylinderGeometry(0.085,0.090,0.50,9), hoofG=new T.SphereGeometry(0.095,9,7);
-    var paws = [];
-    [[-0.29,-0.58,0.28],[0.29,-0.58,0.28],[-0.29,-0.58,-0.28],[0.29,-0.58,-0.28]].forEach(function(pos,i){
-      var leg=new T.Group();
-      leg.add(new T.Mesh(legG, i%2===0 ? wPurp() : wCyan()));
-      var hoof=new T.Mesh(hoofG,wGold()); hoof.position.set(0,-0.30,0.04); hoof.scale.set(1.06,0.54,1.14); leg.add(hoof);
-      leg.position.set(pos[0],pos[1],pos[2]); root.add(leg); paws.push(leg);
-    });
-
-    /* cola */
-    var tail=new T.Mesh(new T.SphereGeometry(0.12,10,8),
-      new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.60}));
-    tail.position.set(0,0.14,-0.76); tail.scale.set(1,0.70,0.70); root.add(tail);
-
-    root.position.set(0, -0.32, 0);
-    scene.add(root);
-
-    /* ── Partículas geométricas 3D flotando (cuadrados, triángulos, rombos) ── */
-    var gParticles = [];
-    var pColors = [0xffdd00, 0xff4488, 0x44ffaa, 0x4488ff, 0xff8844, 0xcc88ff, 0xffffff, 0x00ffee, 0xff0066, 0x66ff00];
-    var pGeos = [
-      new T.BoxGeometry(0.13, 0.13, 0.13),
-      new T.TetrahedronGeometry(0.11),
-      new T.OctahedronGeometry(0.10),
-      new T.BoxGeometry(0.15, 0.15, 0.015),   // flat square (rombo)
-      new T.TetrahedronGeometry(0.13, 0),
-    ];
-    for (var i = 0; i < 65; i++) {
-      var mat = new T.MeshBasicMaterial({
-        color: pColors[i % pColors.length],
-        transparent: true,
-        opacity: 0.50 + Math.random() * 0.35,
-        wireframe: i % 4 === 0
-      });
-      var mesh = new T.Mesh(pGeos[i % pGeos.length], mat);
-      mesh.position.set(
-        (Math.random() - 0.5) * 18,
-        (Math.random() - 0.5) * 10,
-        (Math.random() - 0.5) * 6 - 1
-      );
-      mesh.rotation.set(Math.random()*Math.PI*2, Math.random()*Math.PI*2, Math.random()*Math.PI*2);
-      mesh.userData = {
-        vx: (Math.random()-0.5)*0.007,
-        vy: (Math.random()-0.5)*0.004,
-        rx: (Math.random()-0.5)*0.022,
-        ry: (Math.random()-0.5)*0.022,
-        phase: Math.random()*Math.PI*2
-      };
-      scene.add(mesh);
-      gParticles.push(mesh);
-    }
-
-    /* acelerómetro */
-    var tiltX = 0, tiltY = 0;
-    window.addEventListener('deviceorientation', function(e) {
-      tiltX = (e.gamma||0)/40; tiltY = (e.beta||0)/60;
-    }, { passive: true });
-
-    /* resize */
-    window.addEventListener('resize', function() {
-      W = window.innerWidth; H = window.innerHeight;
-      renderer.setSize(W, H);
-      canvas.style.width  = W + 'px';
-      canvas.style.height = H + 'px';
-      camera.aspect = W / H;
-      camera.updateProjectionMatrix();
-    }, { passive: true });
-
-    /* ── Animación principal ── */
-    var startT = null;
-    function animate(now) {
-      requestAnimationFrame(animate);
-      if (!startT) startT = now;
-      var t = (now - startT) / 1000;
-
-      /* pudú flota y respira */
-      root.position.y = -0.32 + Math.sin(t * 0.9) * 0.07;
-      root.rotation.y = Math.sin(t * 0.35) * 0.20 + tiltX * 0.55;
-      root.rotation.z = tiltX * -0.12 + Math.sin(t * 0.6) * 0.022;
-      root.rotation.x = tiltY * 0.10;
-
-      /* cabeza */
-      head.rotation.y = Math.sin(t * 0.5) * 0.12 + tiltX * 0.40;
-      head.rotation.x = Math.sin(t * 0.4) * 0.06 + tiltY * 0.22;
-
-      /* halos */
-      halo.rotation.z = t * 0.55;
-      halo2.rotation.z = -(t * 0.40);
-
-      /* aura pulsa */
-      var aS = 1.04 + Math.sin(t * 1.2) * 0.04;
-      aura.scale.set(aS*1.12, aS*0.88, aS);
-      aura.material.opacity = 0.04 + Math.sin(t*1.5)*0.02;
-      auraWire.material.opacity = 0.10 + Math.sin(t*1.8)*0.05;
-
-      /* orejas */
-      lEar.rotation.z = 0.36 + Math.sin(t*1.4)*0.06;
-      rEar.rotation.z = -0.36 - Math.sin(t*1.4)*0.06;
-
-      /* cola */
-      tail.rotation.y = Math.sin(t*2.2)*0.28;
-
-      /* patas */
-      paws.forEach(function(p,i){ p.rotation.x = Math.sin(t*1.1+i*0.9)*0.06; });
-
-      /* nariz */
-      muzzle.scale.y = 0.70 + Math.sin(t*1.6)*0.04;
-
-      /* ojos parpadeo suave */
-      var blink = Math.sin(t * 0.8);
-      if (blink < -0.9) { lEye.scale.y = 0.12; rEye.scale.y = 0.12; }
-      else { lEye.scale.y = 1; rEye.scale.y = 1; }
-
-      /* luz pulsa */
-      fl.intensity = 1.0 + Math.sin(t*0.7)*0.4;
-
-      /* partículas geométricas */
-      gParticles.forEach(function(p) {
-        p.position.x += p.userData.vx;
-        p.position.y += p.userData.vy;
-        p.rotation.x += p.userData.rx;
-        p.rotation.y += p.userData.ry;
-        if (p.position.x > 10)  p.position.x = -10;
-        if (p.position.x < -10) p.position.x = 10;
-        if (p.position.y > 6)   p.position.y = -6;
-        if (p.position.y < -6)  p.position.y = 6;
-        p.material.opacity = 0.30 + Math.sin(t*1.2 + p.userData.phase) * 0.28;
-      });
-
-      renderer.render(scene, camera);
-    }
-    requestAnimationFrame(animate);
-  }
-
   /* ── Whisper float (espejo del pudu-whisper en overlay) ── */
   function initWhisperFloat() {
     var wf = document.getElementById('pudu-whisper-float');
@@ -8937,12 +8724,10 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
   document.addEventListener('DOMContentLoaded', function() {
     spawnForestParticles();
     initWhisperFloat();
-    waitThree(initAmbientPudu);
   });
   if (document.readyState !== 'loading') {
     spawnForestParticles();
     initWhisperFloat();
-    waitThree(initAmbientPudu);
   }
 })();
 </script>
