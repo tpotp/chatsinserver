@@ -6,10 +6,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
-<title>PudúChat — Colmena Distribuida v7</title>
+<title>aaPudúChat — Colmena Distribuida Mágica</title>
 
 <style>
-/* ── BACKGROUNDS & THREE.JS CANVAS (Z-INDEX LAYERING FIX) ── */
+/* ── BACKGROUNDS & THREE.JS CANVAS ── */
 #bg-img {
   position: fixed; inset: 0; z-index: 0;
   background: url('https://media-cldnry.s-nbcnews.com/image/upload/t_social_share_1024x768_scale,f_auto,q_auto:best/rockcms/2024-11/Pudu-Argentina-207469.jpg') center/cover no-repeat;
@@ -24,12 +24,6 @@
 #three-canvas {
   position: fixed; inset: 0; z-index: 2; pointer-events: none;
 }
-#msg3d {
-  position: fixed; inset: 0; z-index: 5; pointer-events: none;
-}
-#text3d-canvas {
-  position: fixed; inset: 0; z-index: 6; pointer-events: none;
-}
 
 /* ── PUDÚ 3D OVERLAY ── */
 #pudu3d-overlay {
@@ -37,15 +31,15 @@
   overflow: hidden; display: none;
 }
 #pudu3d-canvas {
-  position: absolute; bottom: 0; left: 0;
-  width: 100%; height: 100%;
-  pointer-events: none !important; /* CRÍTICO: Previene que bloquee el input */
+  position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
 }
 #pudu3d-caption {
   position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
   font-family: 'Fredoka One', cursive; font-size: clamp(18px, 4vw, 32px); letter-spacing: 2px;
   color: #fff; text-shadow: 0 0 20px #00e5ff, 0 0 40px #b16bff, 2px 2px 0 #000;
   white-space: pre-wrap; text-align: center; max-width: 90vw; opacity: 0; pointer-events: none;
+  transition: opacity 0.4s; z-index: 501; background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius: 20px;
 }
 #pudu3d-vignette {
   position: absolute; inset: 0;
@@ -58,7 +52,6 @@
 html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito', sans-serif; background: #050814; }
 :root {
   --primary: #00e5ff;
-  --primary-dark: #0072ff;
   --secondary: #b16bff;
   --accent: #4ade80;
   --gold: #ffd700;
@@ -67,7 +60,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
   --bubble-other: rgba(20, 24, 40, 0.95);
   --sidebar-w: 280px;
   --font-title: 'Fredoka One', cursive;
-  --font-body: 'Nunito', sans-serif;
 }
 .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity .5s, transform .5s; }
 .screen.hidden { opacity: 0; pointer-events: none; transform: scale(.96); }
@@ -124,29 +116,40 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
 .chat-messages {
   flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth;
 }
-.sys-msg { text-align: center; font-family: var(--font-title); font-size: 11px; color: rgba(255,255,255,.5); text-transform: uppercase; margin: 8px 0; }
+.sys-msg, .route-banner { text-align: center; font-family: var(--font-title); font-size: 11px; color: rgba(255,255,255,.5); text-transform: uppercase; margin: 8px 0; }
 .msg-row { display: flex; flex-direction: column; max-width: 75%; animation: bubbleIn .3s ease-out; }
 .msg-row.me { align-self: flex-end; align-items: flex-end; }
 .msg-row.other { align-self: flex-start; align-items: flex-start; }
 @keyframes bubbleIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .msg-sender { font-family: var(--font-title); font-size: 12px; margin-bottom: 4px; padding: 0 6px; color: var(--primary); text-transform: uppercase; }
 .msg-row.me .msg-sender { color: rgba(255,255,255,.6); }
+
+.msg-body { display: flex; flex-direction: column; gap: 4px; }
 .msg-bubble {
-  padding: 12px 18px; border-radius: 18px; font-size: 16px; font-weight: 700; line-height: 1.5; word-break: break-word;
+  padding: 12px 18px; border-radius: 18px; font-size: 15px; font-weight: 700; line-height: 1.5; word-break: break-word;
 }
 .msg-row.me .msg-bubble { background: var(--bubble-me); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 4px 15px rgba(0,229,255,.3); }
 .msg-row.other .msg-bubble { background: var(--bubble-other); color: #e2e8f0; border-bottom-left-radius: 4px; border: 1px solid rgba(177,107,255,.5); }
-.msg-time { font-size: 10px; color: rgba(255,255,255,.4); margin-top: 4px; font-weight: 700; }
+.msg-time { font-size: 10px; color: rgba(255,255,255,.4); margin-top: 4px; font-weight: 700; text-align: right; }
+.msg-row.other .msg-time { text-align: left; }
 
-/* ── INPUT AREA (Z-INDEX 9999 CRÍTICO) ── */
+.moe-pill, .fed-pill {
+  font-size: 10px; padding: 4px 8px; border-radius: 10px; background: rgba(177,107,255,0.1);
+  border: 1px solid rgba(177,107,255,0.3); color: var(--secondary); width: fit-content;
+}
+.swarm-pipeline {
+  font-size: 10px; background: rgba(0,229,255,0.05); border-left: 2px solid var(--primary); padding: 8px; border-radius: 6px; color: #fff;
+}
+
+/* ── INPUT AREA ── */
 .chat-input-area {
-  position: relative; z-index: 9999 !important; background: rgba(10,14,25,.98);
+  position: relative; z-index: 9999; background: rgba(10,14,25,.98);
   border-top: 1px solid rgba(0,229,255,.3); padding: 14px 18px; display: flex; gap: 12px; align-items: flex-end;
   box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
 }
 .chat-input {
   flex: 1; background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.4); border-radius: 16px;
-  padding: 14px 20px; color: #fff; font-family: var(--font-body); font-size: 16px; font-weight: 700;
+  padding: 14px 20px; color: #fff; font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 700;
   outline: none; resize: none; max-height: 100px;
 }
 .chat-input:focus { border-color: var(--primary); box-shadow: 0 0 15px rgba(0,229,255,.3); }
@@ -172,6 +175,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
   #sidebar-toggle { position: absolute; left: 10px; top: 10px; z-index: 30; background: rgba(0,229,255,.2); border: 1px solid var(--primary); color: white; padding: 8px; border-radius: 8px; cursor: pointer; }
 }
 @media(min-width: 601px) { #sidebar-toggle { display: none; } }
+
+/* Ripples & FX */
+.ripple { position: fixed; border-radius: 50%; border: 2px solid var(--primary); pointer-events: none; z-index: 9999; animation: rOut 1s ease-out forwards; }
+@keyframes rOut { from { width: 8px; height: 8px; opacity: 1; transform: translate(-50%,-50%) scale(1); } to { width: 220px; height: 220px; opacity: 0; transform: translate(-50%,-50%) scale(1); } }
 </style>
 </head>
 <body>
@@ -179,21 +186,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
 <div id="bg-img"></div>
 <div id="bg-overlay"></div>
 <canvas id="three-canvas"></canvas>
-<canvas id="msg3d"></canvas>
-<canvas id="text3d-canvas"></canvas>
 
 <!-- WELCOME SCREEN -->
 <div class="screen" id="welcome-screen">
   <div class="welcome-card">
     <span class="title-iron">PUDÚ MENTE</span>
-    <div class="title-sub">Colmena P2P Distribuida</div>
+    <div class="title-sub">Colmena P2P Nativa</div>
     <div style="margin: 20px 0;">
       <div style="font-size:50px; animation: dotBounce 2s infinite;">🦌</div>
     </div>
     <div style="font-weight:700; color:rgba(255,255,255,0.7); font-size:14px; margin-bottom:15px;">
-      El bosque está despertando.<br>Únete a la colmena descentralizada.
+      Inferencia distribuida real.
     </div>
-    <button class="mode-btn" onclick="window.enterChat()">ENTRAR AL BOSQUE</button>
+    <button class="mode-btn" onclick="window.enterChat()">ENTRAR AL BOSQUE 3D</button>
   </div>
 </div>
 
@@ -202,7 +207,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
   <div class="connecting-card">
     <span class="title-iron">CONECTANDO</span>
     <div class="dots" style="margin:20px 0;"><span></span><span></span><span></span></div>
-    <div id="connecting-text" style="font-weight:700; color:rgba(255,255,255,0.7); font-size:14px;">Generando identidad...</div>
+    <div id="connecting-text" style="font-weight:700; color:rgba(255,255,255,0.7); font-size:14px;">Preparando entorno...</div>
     <div id="assigned-name-display" style="color:var(--gold); font-family:var(--font-title); margin-top:10px;"></div>
   </div>
 </div>
@@ -214,7 +219,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
   <div id="rooms-sidebar">
     <div class="sidebar-header">
       <span class="sidebar-title">🦌 BOSQUES</span>
-      <div class="sidebar-subtitle">Red mesh P2P</div>
+      <div class="sidebar-subtitle">Red mesh P2P (Max 15)</div>
     </div>
     <div class="sidebar-rooms" id="rooms-list"></div>
   </div>
@@ -230,11 +235,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
     </div>
     
     <div class="chat-messages" id="chat-messages">
-      <!-- Mensajes van aquí -->
+      <div class="sys-msg">⚡ CHAT MESH P2P LISTO ⚡</div>
     </div>
     
     <div class="chat-input-area">
-      <textarea class="chat-input" id="chat-input" placeholder="Escribe aquí... o invoca a @pudu" rows="1"></textarea>
+      <textarea class="chat-input" id="chat-input" placeholder="Escribe algo... o usa /colmena 10 para simular" rows="1"></textarea>
       <button class="send-btn" id="send-btn">➤</button>
     </div>
   </div>
@@ -251,7 +256,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Nunito',
 
 <script type="module">
 // ══════════════════════════════════════════════════════════════════════════
-//  WEB WORKER & IMPORTS (From index.html v7)
+//  WEB WORKER & IMPORTS LAZY LOAD
 // ══════════════════════════════════════════════════════════════════════════
 const WORKER_CODE = `
 import { WebWorkerMLCEngineHandler } from "https://esm.run/@mlc-ai/web-llm";
@@ -263,17 +268,12 @@ function createWorker() {
   return new Worker(URL.createObjectURL(blob), { type: "module" });
 }
 
-const _nostrPreload = import("https://esm.sh/nostr-tools@2/pure").catch(()=>null);
 let nostrMod = null;
-async function getNostrMod() {
-  if (!nostrMod) nostrMod = await (_nostrPreload || import("https://esm.sh/nostr-tools@2/pure"));
-  return nostrMod;
-}
-
-const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+let webllm = null;
+let mlcLoaded = false;
 
 // ══════════════════════════════════════════════════════════════════════════
-//  CONFIGURATIONS & STATE
+//  CONFIGURATIONS & STATE (Original Index.html logic intact)
 // ══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
   models:[
@@ -283,11 +283,32 @@ const CONFIG = {
     { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", name: "3B-q4", label: "medium", vramMB: 2200, ramMB: 3000, modelSize: 3000, tier: "B", roles:["creative", "general"] },
   ],
   maxPeers: 12,
-  nostrCoreRelays:["wss://relay.damus.io", "wss://nos.lol", "wss://offchain.pub"],
-  maxActiveRelays: 3,
+  nostrCoreRelays:["wss://relay.damus.io", "wss://nos.lol", "wss://offchain.pub", "wss://relay.snort.social"],
+  maxActiveRelays: 4,
   appNamespace: "p2p-hive-public",
   presenceTTLMs: 45000,
 };
+
+const MSG = {
+  HELLO: 1, TOK_REQ: 2, TOK_RES: 3, TOK_CHUNK: 4, TOK_END: 5,
+  PING: 0x10, PONG: 0x11, CHAT: 0x20, MOE_REQ: 0x50, MOE_RES: 0x51
+};
+
+function encodeMsg(type, reqId, seq, payload) {
+  const pb = payload ? new TextEncoder().encode(JSON.stringify(payload)) : new Uint8Array(0);
+  const buf = new ArrayBuffer(7 + pb.length);
+  const dv = new DataView(buf);
+  dv.setUint8(0, type); dv.setUint32(1, reqId); dv.setUint16(5, seq);
+  if (pb.length) new Uint8Array(buf, 7).set(pb);
+  return buf;
+}
+function decodeMsg(buf) {
+  const dv = new DataView(buf);
+  const type = dv.getUint8(0), reqId = dv.getUint32(1), seq = dv.getUint16(5);
+  let payload = null;
+  if (buf.byteLength > 7) try { payload = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 7))); } catch(e) {}
+  return { type, reqId, seq, payload };
+}
 
 const ROOM_CAPACITY = 15;
 let roomName = 'sala-1';
@@ -296,33 +317,32 @@ const peers = new Map();
 const relayMap = new Map();
 const chatHistory =[];
 const seenEventIds = new Set();
+const seenMsgIds = new Set();
 const fedPending = new Map();
+const masqueradedPeers = new Map();
 
 let privKeyBytes = null, pubKeyHex = "", peerId = "", myNickname = "Viajero";
 let deviceTier = "D", hasWebGPU = false, memoryMB = 0, availableVRAM = 0, myRole = "relay";
 let engine = null, currentModelId = null, currentModelLabel = "none", localTPS = 0;
-let isGenerating = false, petalsActive = false, petalsMyLayers = [];
+let isGenerating = false, hiveSimulation = { active: false };
 
 const NICK_ANIMALS =['Pudú','Huemul','Guiña','Vizcacha','Puma','Zorro','Cóndor'];
-const NICK_MAGIC = ['Camahueto','Pincoya','Trauco','Alicanto','Caleuche'];
-
-function randomName() {
-  return `${NICK_ANIMALS[Math.floor(Math.random()*NICK_ANIMALS.length)]} ${NICK_MAGIC[Math.floor(Math.random()*NICK_MAGIC.length)]}`;
-}
+const NICK_MAGIC =['Camahueto','Pincoya','Trauco','Alicanto','Caleuche'];
+function randomName() { return `${NICK_ANIMALS[Math.floor(Math.random()*NICK_ANIMALS.length)]} ${NICK_MAGIC[Math.floor(Math.random()*NICK_MAGIC.length)]}`; }
 function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function uid() { return Math.random().toString(36).substr(2, 9); }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  UI INTEGRATION (V12 STYLE)
+//  UI INTEGRATION (V12 STYLE REPLACEMENT FOR OLD UI)
 // ══════════════════════════════════════════════════════════════════════════
 function show(id) {['welcome-screen','connecting-screen','chat-screen'].forEach(s => {
     document.getElementById(s).classList.toggle('hidden', s !== id);
   });
 }
 
-function updateConnectingText(txt) {
+function updateInitStatus(t) {
   const el = document.getElementById('connecting-text');
-  if (el) el.textContent = txt;
+  if (el) el.textContent = t;
 }
 
 function addSystemMsgVS(room, txt) {
@@ -330,11 +350,21 @@ function addSystemMsgVS(room, txt) {
   const c = document.getElementById('chat-messages');
   const d = document.createElement('div');
   d.className = 'sys-msg';
-  d.textContent = txt;
+  d.innerHTML = txt;
   c.appendChild(d);
   c.scrollTop = c.scrollHeight;
 }
 
+function showRouteBanner(txt) {
+  const c = document.getElementById('chat-messages');
+  const d = document.createElement('div');
+  d.className = 'route-banner';
+  d.innerHTML = `🧩 ${txt}`;
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+
+// Maps the old addMessageToUI to the new V12 styling
 function addMessageToUI(role, content, streaming = false) {
   const isUser = role === 'user';
   const c = document.getElementById('chat-messages');
@@ -342,19 +372,18 @@ function addMessageToUI(role, content, streaming = false) {
   const row = document.createElement('div');
   row.className = `msg-row ${isUser ? 'me' : 'other'}`;
   
-  const snd = document.createElement('div');
-  snd.className = 'msg-sender msg-header';
-  snd.textContent = isUser ? myNickname : 'Pudú Colmena';
+  const sender = document.createElement('div');
+  sender.className = 'msg-sender';
+  sender.textContent = isUser ? myNickname : (role === 'assistant' ? 'Pudú Colmena' : role);
   
   const bodyWrap = document.createElement('div');
   bodyWrap.className = 'msg-body';
-  bodyWrap.style.display = 'contents';
   
   const bub = document.createElement('div');
   bub.className = 'msg-bubble';
   
   if (streaming) {
-     bub.innerHTML = `<span class="msg-content"></span><div class="typing-indicator" style="display:inline-block; margin-left:8px;"><span class="typing-dot" style="display:inline-block;width:6px;height:6px;background:#fff;border-radius:50%;margin:0 2px;animation:dotBounce 1s infinite"></span></div>`;
+     bub.innerHTML = `<span class="msg-content"></span><div class="typing-indicator" style="display:inline-block; margin-left:8px;"><span style="display:inline-block;width:6px;height:6px;background:#fff;border-radius:50%;margin:0 2px;animation:dotBounce 1s infinite"></span><span style="display:inline-block;width:6px;height:6px;background:#fff;border-radius:50%;margin:0 2px;animation:dotBounce 1s infinite 0.2s"></span><span style="display:inline-block;width:6px;height:6px;background:#fff;border-radius:50%;margin:0 2px;animation:dotBounce 1s infinite 0.4s"></span></div>`;
   } else {
      bub.innerHTML = `<span class="msg-content">${escapeHtml(content || '').replace(/\n/g, '<br>')}</span>`;
   }
@@ -363,7 +392,7 @@ function addMessageToUI(role, content, streaming = false) {
   meta.className = 'msg-time msg-meta';
   
   bodyWrap.appendChild(bub);
-  row.appendChild(snd);
+  row.appendChild(sender);
   row.appendChild(bodyWrap);
   row.appendChild(meta);
   
@@ -371,40 +400,36 @@ function addMessageToUI(role, content, streaming = false) {
   c.scrollTop = c.scrollHeight;
   
   if (!streaming && content) {
-    if (isUser) { try{ add3DText(content, true); playSendSound(); } catch(e){} }
-    else { try{ add3DText(content, false); playMsgReceive(); } catch(e){} }
+    if (isUser) { try{ playSendSound(); } catch(e){} }
+    else { try{ playMsgReceive(); } catch(e){} }
   }
   
-  return row;
+  return row; // The script uses .querySelector('.msg-content') on this return
 }
 
+// Audio FX
+function playTone(f,d) {
+  try {
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+    const g = ac.createGain(); g.gain.setValueAtTime(0.1, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime+d);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime+d);
+  } catch(e){}
+}
+function playSendSound() { playTone(880, 0.1); }
+function playMsgReceive() { playTone(523, 0.15); }
+
 // ══════════════════════════════════════════════════════════════════════════
-//  PUDÚ 3D AI & CINEMATIC (FROM V12)
+//  PUDÚ 3D AI & CINEMATIC (V12 STYLE)
 // ══════════════════════════════════════════════════════════════════════════
 let pudu3dScene, pudu3dRenderer, pudu3dCamera, pudu3dModel, pudu3dClock;
 let pudu3dRunning = false, pudu3dLoaded = false, puduOnScreen = false;
 let puduLeaveTimer = null;
 let puduParts = {};
 
-class PuduAI {
-  constructor() {
-    this.state = 'idle';
-    this.stateTime = 0;
-    this.tailWag = 0;
-    this.speakingUntil = 0;
-    this.thinkingUntil = 0;
-  }
-  think(dt) {
-    this.stateTime += dt;
-    this.tailWag = Math.max(0, this.tailWag - dt * 0.5);
-  }
-}
-const puduBrain = new PuduAI();
-
 function buildProceduralPudu() {
   const root = new THREE.Group();
   const P = {};
-  
   const wMat = new THREE.MeshBasicMaterial({color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.85});
   const sMat = new THREE.MeshBasicMaterial({color: 0x0072ff, transparent: true, opacity: 0.15});
   
@@ -426,7 +451,6 @@ function buildProceduralPudu() {
   headMesh.add(new THREE.Mesh(headGeo, wMat));
   headGroup.add(headMesh);
   
-  // Eyes
   const eyeM = new THREE.MeshBasicMaterial({color: 0xffffff});
   const eyePupM = new THREE.MeshBasicMaterial({color: 0x000000});
   const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeM);
@@ -438,15 +462,6 @@ function buildProceduralPudu() {
   lPup.position.set(-0.15, 0.1, 0.42); headGroup.add(lPup);
   const rPup = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), eyePupM);
   rPup.position.set(0.15, 0.1, 0.42); headGroup.add(rPup);
-  
-  // Ears
-  const earM = new THREE.MeshBasicMaterial({color: 0xffd700, wireframe: true});
-  const lEar = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), earM);
-  lEar.position.set(-0.3, 0.3, 0); lEar.scale.set(0.5, 1.5, 0.2); lEar.rotation.z = 0.4; headGroup.add(lEar);
-  P.lEar = lEar;
-  const rEar = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), earM);
-  rEar.position.set(0.3, 0.3, 0); rEar.scale.set(0.5, 1.5, 0.2); rEar.rotation.z = -0.4; headGroup.add(rEar);
-  P.rEar = rEar;
   
   puduParts = P;
   return root;
@@ -470,39 +485,19 @@ async function initPudu3D() {
 function runPudu3DLoop() {
   if (!pudu3dRunning) return;
   requestAnimationFrame(runPudu3DLoop);
-  const dt = Math.min(pudu3dClock.getDelta(), 0.1);
   const t = pudu3dClock.getElapsedTime();
-  
-  puduBrain.think(dt);
-  
   if (pudu3dModel && puduParts.head) {
-    const isSpeaking = performance.now() < puduBrain.speakingUntil;
-    const isThinking = performance.now() < puduBrain.thinkingUntil;
-    
-    // Breathing / Bobbing
     pudu3dModel.position.y = -0.2 + Math.sin(t * 2) * 0.05;
-    
-    // Head animation
-    if (isSpeaking) {
-      puduParts.head.rotation.x = Math.sin(t * 10) * 0.05;
-      puduParts.lEar.rotation.z = 0.4 + Math.sin(t * 5) * 0.1;
-      puduParts.rEar.rotation.z = -0.4 - Math.sin(t * 5) * 0.1;
-    } else if (isThinking) {
-      puduParts.head.rotation.z = Math.sin(t * 3) * 0.15;
-    } else {
-      puduParts.head.rotation.set(0,0,0);
-    }
-    
-    // Run / Leave animations handled by tweening position
+    puduParts.head.rotation.z = Math.sin(t * 3) * 0.1;
   }
-  
   pudu3dRenderer.render(pudu3dScene, pudu3dCamera);
 }
 
 function lerp(a,b,t) { return a+(b-a)*t; }
 function easeOut(t) { return 1 - Math.pow(1-t, 3); }
 
-async function showPuduCinematic(payload) {
+// Proxies the old showPuduInvocationOverlay to the 3D cinematic
+window.showPuduCinematic = async function(payload) {
   if (!pudu3dLoaded) await initPudu3D();
   if (!pudu3dModel) return;
 
@@ -518,7 +513,6 @@ async function showPuduCinematic(payload) {
     pudu3dClock.start();
     runPudu3DLoop();
     
-    // Arrive tween
     const start = performance.now();
     await new Promise(r => {
       function step(now) {
@@ -528,7 +522,6 @@ async function showPuduCinematic(payload) {
       }
       requestAnimationFrame(step);
     });
-    
     caption.style.opacity = 1;
     vignette.style.opacity = 0.7;
   }
@@ -536,14 +529,11 @@ async function showPuduCinematic(payload) {
   if (payload.text) {
     const cleanText = payload.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     caption.textContent = cleanText;
-    puduBrain.thinkingUntil = 0;
-    puduBrain.speakingUntil = performance.now() + 2000 + cleanText.length * 50;
     
     clearTimeout(puduLeaveTimer);
     puduLeaveTimer = setTimeout(async () => {
       caption.style.opacity = 0;
       vignette.style.opacity = 0;
-      // Leave tween
       const start = performance.now();
       await new Promise(r => {
         function step(now) {
@@ -557,40 +547,43 @@ async function showPuduCinematic(payload) {
       puduOnScreen = false;
       pudu3dRunning = false;
     }, Math.min(15000, 3000 + cleanText.length * 40));
-    
   } else if (payload.notice) {
     caption.textContent = payload.notice;
-    puduBrain.thinkingUntil = performance.now() + 15000;
     clearTimeout(puduLeaveTimer);
   }
 }
-
-// ── Raycaster for Interactions ──
-window.addEventListener('mousedown', e => {
-  if (!puduOnScreen) return;
-  // If we click anywhere while Pudu is on screen, maybe pet it
-  puduBrain.tailWag = 1;
-});
+window.showPuduInvocationOverlay = window.showPuduCinematic;
 
 // ══════════════════════════════════════════════════════════════════════════
-//  CORE LOGIC & NOSTR (From v7)
+//  CORE LOGIC & NOSTR (Original Index.html Logic)
 // ══════════════════════════════════════════════════════════════════════════
 async function initIdentity() {
-  const nostr = await getNostrMod();
-  privKeyBytes = nostr.generateSecretKey();
-  pubKeyHex = nostr.getPublicKey(privKeyBytes);
-  peerId = pubKeyHex.slice(0, 12);
-  myNickname = randomName();
-  document.getElementById('assigned-name-display').textContent = myNickname;
+  try {
+    nostrMod = await import("https://esm.sh/nostr-tools@2/pure");
+    privKeyBytes = nostrMod.generateSecretKey();
+    pubKeyHex = nostrMod.getPublicKey(privKeyBytes);
+    peerId = pubKeyHex.slice(0, 12);
+    myNickname = randomName();
+    document.getElementById('assigned-name-display').textContent = myNickname;
+  } catch(e) {
+    throw new Error("No se pudo cargar criptografía Nostr");
+  }
 }
 
 async function classifyDevice() {
   isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   if ('gpu' in navigator && navigator.gpu) {
     try {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (adapter) { hasWebGPU = true; availableVRAM = Math.floor((adapter.limits.maxBufferSize || 0)/1024/1024); }
-    } catch(e){}
+      // VITAL FIX: Promise.race to prevent infinite hang on requestAdapter
+      const adapter = await Promise.race([
+        navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+      ]);
+      if (adapter) { 
+        hasWebGPU = true; 
+        availableVRAM = Math.floor((adapter.limits.maxBufferSize || 0)/1024/1024); 
+      }
+    } catch(e){ console.log("WebGPU fallback"); }
   }
   memoryMB = Math.round((navigator.deviceMemory || 2) * 1024);
   if (hasWebGPU && availableVRAM >= 5000) { deviceTier = "A"; myRole = "coder"; }
@@ -612,6 +605,13 @@ function updateRelayUI() {
   }
 }
 
+function updateRoomMembersUI() {
+  let c = 1; 
+  for (const [, p] of peers) { if (p.dc?.readyState === 'open' || (Date.now() - p.lastSeen < CONFIG.presenceTTLMs)) c++; }
+  const tag = document.getElementById('h-room-tag');
+  if (tag) tag.textContent = `🌿 SALA 1 · ${c}/${ROOM_CAPACITY}`;
+}
+
 function connectToRelays() {
   CONFIG.nostrCoreRelays.forEach(url => {
     relayMap.set(url, { ws: null, status: 'connecting' });
@@ -621,9 +621,9 @@ function connectToRelays() {
       ws.onopen = () => {
         relayMap.get(url).status = 'connected';
         updateRelayUI();
-        // subscribe
         const since = Math.floor(Date.now()/1000) - 600;
         ws.send(JSON.stringify(["REQ", `sub-${peerId}`, { kinds:[1], "#t":[CONFIG.appNamespace], since }]));
+        publishPresence();
       };
       ws.onmessage = e => {
         try {
@@ -631,7 +631,7 @@ function connectToRelays() {
           if (msg[0] === 'EVENT' && !seenEventIds.has(msg[2].id)) {
             seenEventIds.add(msg[2].id);
             const c = JSON.parse(msg[2].content);
-            if (c && c.peerId !== peerId) handleNetworkEvent(c);
+            if (c && c.peerId !== peerId && c.from !== peerId) handleNetworkEvent(c);
           }
         } catch(err){}
       };
@@ -640,104 +640,411 @@ function connectToRelays() {
   });
 }
 
+function publishPresence() {
+  if(!nostrMod || !privKeyBytes) return;
+  const content = {
+    type: "presence", peerId, deviceTier, webgpu: hasWebGPU, memoryMB, tps: localTPS,
+    currentModel: currentModelId, moeRole: myRole, hasEngine: !!engine, timestamp: Date.now(),
+    nickname: myNickname
+  };
+  const event = nostrMod.finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", CONFIG.appNamespace]], content: JSON.stringify(content) }, privKeyBytes);
+  seenEventIds.add(event.id);
+  const raw = JSON.stringify(["EVENT", event]);
+  for (const [, entry] of relayMap) { if (entry.ws?.readyState === 1) { try { entry.ws.send(raw); } catch(e) {} } }
+}
+
+function publishSignal(targetId, signal, fromVirtualId = null) { 
+  if(!nostrMod || !privKeyBytes) return;
+  const fromPrivKey = fromVirtualId ? masqueradedPeers.get(fromVirtualId)?.privKey : privKeyBytes;
+  const fromId = fromVirtualId || peerId;
+  const event = nostrMod.finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [["t", CONFIG.appNamespace]], content: JSON.stringify({ type: "signal", from: fromId, to: targetId, signal, timestamp: Date.now() }) }, fromPrivKey);
+  const raw = JSON.stringify(["EVENT", event]);
+  for (const [, entry] of relayMap) { if (entry.ws?.readyState === 1) { try { entry.ws.send(raw); } catch(e) {} } }
+}
+
 function handleNetworkEvent(c) {
-  // Simplificado para la demostración
-  if (c.type === "chat") {
-    if (c.payload && c.payload.role === 'pudu_notice') {
-       showPuduCinematic({ notice: `${c.payload.requester} llamó a Pudu...` });
-    } else if (c.payload && c.payload.role === 'pudu_event') {
-       showPuduCinematic({ text: c.payload.text });
+  if (c.type === "presence") {
+    if (!peers.has(c.peerId)) {
+      peers.set(c.peerId, { ...c, lastSeen: Date.now(), dc: null, conn: null });
+      if (peerId < c.peerId) initiateWebRTC(c.peerId);
+      updateRoomMembersUI();
     } else {
-       addMessageToUI(c.role || 'user', c.content || '');
+      const p = peers.get(c.peerId);
+      Object.assign(p, c, { lastSeen: Date.now() });
     }
+  } else if (c.type === "signal" && (c.to === peerId || masqueradedPeers.has(c.to))) {
+    const virtualId = masqueradedPeers.has(c.to) ? c.to : null;
+    if (c.signal.type === "moe_fallback_req") handleNostrFallbackReq(c.from, c.signal, virtualId);
+    else if (c.signal.type === "moe_fallback_res") handleNostrFallbackRes(c.from, c.signal);
+    else handleWebRTCSignal(c.from, c.signal, virtualId);
   }
 }
 
-async function initEngine() {
-  if (deviceTier === 'D') return; // Sin motor local
-  try {
-    const modelCfg = CONFIG.models.find(m => m.tier === deviceTier) || CONFIG.models[0];
-    const worker = createWorker();
-    engine = await webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, {
-      initProgressCallback: p => console.log('Engine load:', p.text)
-    });
-    currentModelId = modelCfg.id;
-    currentModelLabel = modelCfg.label;
-    console.log("Motor cargado!");
-  } catch(e) { console.warn("Fallo carga motor:", e); }
+// ── WebRTC ──
+const ICE_SERVERS =[{ urls: "stun:stun.l.google.com:19302" },{ urls: "stun:stun.cloudflare.com:3478" }];
+function createPeerConn(targetId, myVirtualId = null) {
+  const conn = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  let iceBatch =[], iceTimer = null;
+  conn.onicecandidate = (e) => { if (!e.candidate) return; iceBatch.push(e.candidate.toJSON()); clearTimeout(iceTimer); iceTimer = setTimeout(() => { if (!iceBatch.length) return; publishSignal(targetId, { type: "candidates", candidates: [...iceBatch] }, myVirtualId); iceBatch =[]; }, 200); };
+  return conn;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-//  LLM INFERENCE & PUDU SUMMON
-// ══════════════════════════════════════════════════════════════════════════
+function initiateWebRTC(targetId) {
+  let peer = peers.get(targetId);
+  if (peer?.conn && ['connecting','connected'].includes(peer.conn.connectionState)) return;
+  const conn = createPeerConn(targetId); peer.conn = conn;
+  const dc = conn.createDataChannel("p2p", { ordered: true }); peer.dc = dc; setupDC(dc, targetId);
+  conn.createOffer().then(o => conn.setLocalDescription(o)).then(() => publishSignal(targetId, { type:"offer", sdp: conn.localDescription })).catch(e=>{});
+}
+
+async function handleWebRTCSignal(fromId, signal, myVirtualId = null) {
+  if (myVirtualId) {
+    const vp = masqueradedPeers.get(myVirtualId);
+    let rConn = vp.connections.get(fromId);
+    if (!rConn) { rConn = { conn: null, dc: null }; vp.connections.set(fromId, rConn); }
+    if (signal.type === "offer") {
+      const conn = createPeerConn(fromId, myVirtualId); rConn.conn = conn;
+      conn.ondatachannel = (e) => { rConn.dc = e.channel; setupDC(e.channel, fromId, myVirtualId); };
+      try { await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); const ans = await conn.createAnswer(); await conn.setLocalDescription(ans); publishSignal(fromId, { type:"answer", sdp: conn.localDescription }, myVirtualId); } catch(e) {}
+    } else if (signal.type === "answer" && rConn.conn) {
+      try { await rConn.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); } catch(e) {}
+    } else if ((signal.type === "candidate" || signal.type === "candidates") && rConn.conn) {
+      const candidates = signal.candidates || (signal.candidate ? [signal.candidate] :[]);
+      for (const c of candidates) { try { await rConn.conn.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {} }
+    }
+    return;
+  }
+
+  let peer = peers.get(fromId);
+  if (!peer) { peer = { lastSeen:Date.now(), conn:null, dc:null }; peers.set(fromId,peer); }
+  if (signal.type === "offer") {
+    if (peer.conn && ['connecting','connected'].includes(peer.conn.connectionState) && peerId > fromId) return;
+    const conn = createPeerConn(fromId); peer.conn = conn;
+    conn.ondatachannel = (e) => { peer.dc = e.channel; setupDC(e.channel, fromId); };
+    try { await conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); const ans = await conn.createAnswer(); await conn.setLocalDescription(ans); publishSignal(fromId, { type:"answer", sdp: conn.localDescription }); } catch(e) {}
+  } else if (signal.type === "answer" && peer.conn) {
+    try { await peer.conn.setRemoteDescription(new RTCSessionDescription(signal.sdp)); } catch(e) {}
+  } else if ((signal.type === "candidate" || signal.type === "candidates") && peer.conn) {
+    const candidates = signal.candidates || (signal.candidate ? [signal.candidate] :[]);
+    for (const c of candidates) { try { await peer.conn.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {} }
+  }
+}
+
+function setupDC(dc, remoteId, myVirtualId = null) {
+  dc.binaryType = "arraybuffer";
+  dc.onopen = () => {
+    if (!myVirtualId) {
+      const peer = peers.get(remoteId);
+      if (peer) addSystemMsgVS(roomName, `🌿 Conexión WebRTC P2P directa con ${peer.nickname || remoteId.slice(0,6)}`);
+    }
+  };
+  dc.onmessage = (e) => { handleBinMsg(remoteId, e.data, myVirtualId, dc); };
+}
+
+async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
+  const m = decodeMsg(buf); 
+  
+  if (myVirtualId) {
+    const vp = masqueradedPeers.get(myVirtualId);
+    const rConn = vp.connections.get(fromId);
+    if (m.type === MSG.MOE_REQ || m.type === MSG.TOK_REQ) {
+       if (engine && m.payload?.messages) {
+          try {
+             const chunks = await engine.chat.completions.create({ messages: m.payload.messages, stream: true, temperature: 0.7, max_tokens: 200 });
+             let fullR = "", seqC = 0;
+             for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
+             if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(MSG.TOK_END, m.reqId, seqC, { text: fullR, model: currentModelId }));
+         } catch(e) {}
+       }
+    }
+    return;
+  }
+
+  const peer = peers.get(fromId); if (!peer) return;
+  switch(m.type) {
+    case MSG.CHAT:
+      if (m.payload?.id && !seenMsgIds.has(m.payload.id)) {
+        seenMsgIds.add(m.payload.id);
+        const { id, role, content, nickname } = m.payload;
+        if (role === 'pudu_notice') showPuduCinematic({ notice: `${nickname} llamó a Pudu...` });
+        else if (role === 'pudu_event') showPuduCinematic({ text: content });
+        else addMessageToUI(role, content);
+      }
+      break;
+    case MSG.TOK_CHUNK:
+      if (m.payload && fedPending.has(m.reqId)) fedPending.get(m.reqId).onChunk?.(m.payload.token);
+      break;
+    case MSG.TOK_RES:
+    case MSG.TOK_END:
+    case MSG.MOE_RES:
+      if (m.payload && fedPending.has(m.reqId)) { 
+        const { resolve } = fedPending.get(m.reqId); 
+        fedPending.delete(m.reqId); 
+        resolve(m.payload); 
+      }
+      break;
+    case MSG.MOE_REQ:
+      if (engine && m.payload?.messages) {
+        if (isGenerating) break;
+        isGenerating = true;
+        try {
+          const chunks = await engine.chat.completions.create({ messages: m.payload.messages, stream: true, temperature: 0.7, max_tokens: 200 });
+          let fullR = "", seqC = 0;
+          for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_END, m.reqId, seqC, { text: fullR, model: currentModelId }));
+        } catch(e) {}
+        isGenerating = false;
+      }
+      break;
+  }
+}
+
+// ── Inferencia y Ruteo ──
+function broadcastChat(role, content, senderId, msgId = null) {
+  const id = msgId || uid(); seenMsgIds.add(id);
+  const payload = { id, role, content, peerId: senderId, nickname: myNickname };
+  const raw = encodeMsg(MSG.CHAT, 0, 0, payload);
+  for (const [pid, p] of peers) { if (p.dc?.readyState === 'open') { try { p.dc.send(raw); } catch(e) {} } }
+}
+
+async function handleNostrFallbackReq(fromId, signal, virtualId = null) {
+  if (!engine) return;
+  const reqId = signal.reqId;
+  isGenerating = true;
+  try {
+    const res = await engine.chat.completions.create({ messages: signal.messages, stream: false, max_tokens: signal.max_tokens || 200 });
+    let text = res.choices[0]?.message?.content || "";
+    if (virtualId) {
+      const vnick = masqueradedPeers.get(virtualId)?.nickname || virtualId;
+      text += `\n\n> ✅ *Colmena Simulada: ${vnick}*`;
+    }
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: currentModelId }}, virtualId);
+  } catch(e){}
+  isGenerating = false;
+}
+
+function handleNostrFallbackRes(fromId, signal) {
+  const reqId = signal.reqId;
+  if (signal.payload && fedPending.has(reqId)) {
+    const { resolve } = fedPending.get(reqId);
+    fedPending.delete(reqId);
+    resolve(signal.payload);
+  }
+}
+
 async function invokePuduSummon(prompt) {
-  showPuduCinematic({ notice: "Consultando el bosque..." });
+  showPuduCinematic({ notice: "Consultando la colmena del bosque..." });
+  broadcastChat('pudu_notice', '', peerId);
   
-  let resultText = "Lo siento, la red está dormida o no hay GPUs activas en este bosque.";
+  const aiMsgEl = addMessageToUI("assistant", null, true);
+  const contentEl = aiMsgEl.querySelector('.msg-content');
+  let fullResponse = "";
   
-  if (engine) {
+  const messages =[{ role: "system", content: "Eres Pudu, un guardian poetico del bosque chileno. Responde breve." }, { role: "user", content: prompt }];
+  
+  // Buscar peer remoto
+  let expertPeerId = null;
+  for (const [pid, p] of peers) {
+    if (!masqueradedPeers.has(pid) && !pid.startsWith('sim_') && p.hasEngine && p.dc?.readyState === 'open') {
+      expertPeerId = pid; break;
+    }
+  }
+  
+  if (!expertPeerId && engine) {
+    // Inferencia Local
     try {
-      const msgs =[{role:"system", content:"Eres Pudú, espíritu del bosque chileno. Responde breve y poético."}, {role:"user", content: prompt}];
-      let fullResponse = "";
-      const chunks = await engine.chat.completions.create({ messages: msgs, stream: true, max_tokens: 100 });
+      showRouteBanner("Inferencia Local (Tier " + deviceTier + ")");
+      const chunks = await engine.chat.completions.create({ messages, stream: true, max_tokens: 150 });
       for await (const chunk of chunks) {
         const token = chunk.choices[0]?.delta?.content || "";
         fullResponse += token;
-        const caption = document.getElementById('pudu3d-caption');
-        if (caption && puduOnScreen) caption.textContent = fullResponse.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        contentEl.textContent = fullResponse;
+        document.getElementById('chat-messages').scrollTop = 99999;
       }
-      resultText = fullResponse;
-    } catch(e) {}
-  } else {
-    // Si no hay motor, usamos la nube pública temporal (Fallback de v7)
+      const pill = document.createElement('div'); pill.className = 'moe-pill'; pill.textContent = `Local · ${currentModelLabel}`;
+      aiMsgEl.querySelector('.msg-body').appendChild(pill);
+    } catch(e) { fullResponse = "Perdón, me enredé en las ramas."; contentEl.textContent = fullResponse; }
+  } 
+  else if (expertPeerId) {
+    // WebRTC Directo
     try {
-       const res = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?system=Eres%20un%20Pudu%20chileno.%20Responde%20breve.`);
-       resultText = await res.text();
-    } catch(e){}
+      const p = peers.get(expertPeerId);
+      showRouteBanner("Ruteo P2P a " + (p.nickname || expertPeerId.slice(0,6)));
+      const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+      const result = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => { fedPending.delete(reqId); reject(); }, 30000);
+        fedPending.set(reqId, {
+          resolve: (res) => { clearTimeout(to); resolve(res); },
+          onChunk: (t) => { if(t) { fullResponse+=t; contentEl.textContent=fullResponse; document.getElementById('chat-messages').scrollTop = 99999;} }
+        });
+        p.dc.send(encodeMsg(MSG.MOE_REQ, reqId, 0, { messages, max_tokens: 150 }));
+      });
+      if(!fullResponse && result.text) { fullResponse = result.text; contentEl.textContent = fullResponse; }
+      const pill = document.createElement('div'); pill.className = 'fed-pill'; pill.textContent = `P2P · ${p.nickname}`;
+      aiMsgEl.querySelector('.msg-body').appendChild(pill);
+    } catch(e) { fullResponse = "La conexión con el bosque se perdió."; contentEl.textContent = fullResponse; }
+  }
+  else {
+    // Relay Nostr Fallback si hay simulados
+    if (hiveSimulation.active) {
+      showRouteBanner("Ruteo por Relay Nostr a Colmena Simulada");
+      const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
+      // Pick a random simulated peer
+      const vps = Array.from(masqueradedPeers.keys());
+      const target = vps[Math.floor(Math.random() * vps.length)];
+      
+      const result = await new Promise(resolve => {
+        const to = setTimeout(() => { fedPending.delete(reqId); resolve({text:"El bosque está en silencio."}); }, 40000);
+        fedPending.set(reqId, { resolve: (res) => { clearTimeout(to); resolve(res); } });
+        publishSignal(target, { type: "moe_fallback_req", reqId, messages, max_tokens: 150 });
+      });
+      fullResponse = result.text;
+      contentEl.textContent = fullResponse;
+    } else {
+      fullResponse = "No hay nodos con motor activos. Escribe /colmena 10 para simular la red.";
+      contentEl.textContent = fullResponse;
+    }
   }
   
-  const clean = resultText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  aiMsgEl.querySelector('.typing-indicator')?.remove();
+  const clean = fullResponse.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   showPuduCinematic({ text: clean });
-  addMessageToUI('assistant', clean);
+  chatHistory.push({role:"assistant", content: clean});
+  broadcastChat('pudu_event', clean, peerId);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  BOOT & UI EVENTS
+//  SIMULATOR (FROM V7)
 // ══════════════════════════════════════════════════════════════════════════
-window.enterChat = async function() {
-  show('connecting-screen');
+function simLog(html, cls='') {
+  const log = document.getElementById('sim-log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.innerHTML = html;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function startColmenaChile(n) {
+  if (!nostrMod) return;
+  hiveSimulation.active = true;
+  masqueradedPeers.clear();
   
+  document.getElementById('sim-log').classList.add('active');
+  document.getElementById('sim-log').innerHTML = '';
+  simLog(`═══ COLMENA CHILE v9: Simulando ${n} nodos ═══`, 'sim-title');
+
+  const PHONES =[
+    { brand:'Samsung-A14', city:'Santiago', ram:3072, tps:0.8, tier:'C' },
+    { brand:'iPhone-15', city:'Arica', ram:6144, tps:5.0, tier:'B' },
+    { brand:'MacStudio', city:'Valdivia', ram:32000, tps:25.0, tier:'S' },
+  ];
+
+  for(let i=0; i<n; i++) {
+    const base = PHONES[i % PHONES.length];
+    const priv = nostrMod.generateSecretKey();
+    const pub = nostrMod.getPublicKey(priv);
+    const pid = pub.slice(0,12);
+    masqueradedPeers.set(pid, {
+      privKey:priv, pubKey:pub, deviceTier:base.tier, webgpu:base.ram>=6144,
+      memoryMB:base.ram, tps:base.tps, hasEngine:true,
+      nickname:`${base.brand}-${base.city}`, connections:new Map()
+    });
+    
+    // Inyectamos como peer visible
+    peers.set(pid, {
+      deviceTier:base.tier, webgpu:base.ram>=6144, memoryMB:base.ram, tps:base.tps, hasEngine:true,
+      moeRole:'general', inferenceMode:'local', lastSeen:Date.now(), rtt:Math.floor(Math.random()*80)+10,
+      conn:null, dc:null, nickname:`${base.brand}-${base.city}`
+    });
+    
+    if(i < 10) simLog(`  + ${base.brand}-${base.city} (${pid}) → Tier ${base.tier} · PoC: ${base.tps} t/s`, 'sim-info');
+  }
+  if (n > 10) simLog(`... y ${n-10} nodos más.`, 'sim-info');
+  
+  updateRoomMembersUI();
+  simLog(`\n✅ Cobertura virtual activa. Pide algo a @pudu para probar el ruteo.`, 'sim-pass');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════════════════════════════
+async function boot() {
+  updateInitStatus("Generando identidad (Nostr)...");
   await initIdentity();
+  
+  updateInitStatus("Clasificando hardware...");
   await classifyDevice();
+  
+  updateInitStatus("Conectando relays...");
   connectToRelays();
   
-  updateConnectingText("Cargando motor P2P AI...");
-  await initEngine();
+  if (deviceTier !== 'D') {
+    updateInitStatus("Descargando motor IA (WebLLM)...");
+    try {
+      webllm = await import("https://esm.run/@mlc-ai/web-llm");
+      const modelCfg = CONFIG.models.find(m => m.tier === deviceTier) || CONFIG.models[0];
+      const worker = createWorker();
+      engine = await webllm.CreateWebWorkerMLCEngine(worker, modelCfg.id, {
+        initProgressCallback: p => {
+          updateInitStatus(`Cargando cerebro: ${Math.round(p.progress*100)}%`);
+        }
+      });
+      currentModelId = modelCfg.id;
+      currentModelLabel = modelCfg.label;
+    } catch(e) { console.warn("Motor falló", e); }
+  }
   
-  show('chat-screen');
-  addSystemMsgVS(roomName, `🌿 Bienvenido al bosque como ${myNickname} 🦌`);
+  // Transition to chat
+  document.getElementById('connecting-screen').classList.add('hidden');
+  document.getElementById('chat-screen').classList.remove('hidden');
+  addSystemMsgVS(roomName, `🌿 Entraste al bosque como ${myNickname} 🦌`);
+  updateRoomMembersUI();
   
-  try { triggerEntryAnimation(); } catch(e){}
+  setInterval(publishPresence, CONFIG.presenceTTLMs / 2);
+}
+
+// Bind to window to allow the HTML button to trigger it
+window.enterChat = async function() {
+  show('connecting-screen');
+  try {
+    await boot();
+  } catch (e) {
+    updateInitStatus(`Error: ${e.message}`);
+    console.error(e);
+  }
 };
 
+// Bind chat inputs
 document.getElementById('send-btn').addEventListener('click', async () => {
   const inp = document.getElementById('chat-input');
   const text = inp.value.trim();
   if (!text || isGenerating) return;
   inp.value = '';
   
+  if (text.startsWith('/colmena')) {
+    addMessageToUI('user', text);
+    const n = parseInt(text.split(' ')[1]) || 10;
+    await startColmenaChile(n);
+    return;
+  }
+  
   addMessageToUI('user', text);
+  chatHistory.push({role:"user", content: text});
+  broadcastChat('user', text, peerId);
   
   if (/(^|\s)@pudu\b/i.test(text)) {
     isGenerating = true;
-    await invokePuduSummon(text.replace(/@pudu/gi, '').trim() || 'Hola');
+    await invokePuduSummon(text.replace(/@pudu/gi, '').trim() || 'Hola bosque');
     isGenerating = false;
   }
 });
 
-// ══════════════════════════════════════════════════════════════════════════
-//  THREE.JS BACKGROUND & FX (FROM V12)
-// ══════════════════════════════════════════════════════════════════════════
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('send-btn').click(); }
+});
+
+// Init Three.js Background
 let bgRenderer, bgScene, bgCam, bgShapes =[];
 function initBg() {
   const canvas = document.getElementById('three-canvas');
@@ -768,26 +1075,15 @@ function initBg() {
     bgRenderer.render(bgScene, bgCam);
   }
   anim();
+  
+  window.addEventListener('resize', () => {
+    bgRenderer.setSize(window.innerWidth, window.innerHeight);
+    bgCam.aspect = window.innerWidth / window.innerHeight;
+    bgCam.updateProjectionMatrix();
+  });
 }
-setTimeout(initBg, 500);
+setTimeout(initBg, 100);
 
-// Audio FX
-function playTone(f,d) {
-  try {
-    const ac = new (window.AudioContext||window.webkitAudioContext)();
-    const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
-    const g = ac.createGain(); g.gain.setValueAtTime(0.1, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime+d);
-    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime+d);
-  } catch(e){}
-}
-function playSendSound() { playTone(880, 0.1); }
-function playMsgReceive() { playTone(523, 0.15); }
-function playPuduMeow() { playTone(300, 0.3); } // Simplified
-
-// 3D Text Floating (Minimal implementation to avoid huge file size)
-function add3DText(txt, isMe) {
-  // Just spawn CSS particles for performance/code limit
-}
 </script>
 </body>
 </html>
