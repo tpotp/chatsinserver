@@ -1424,9 +1424,9 @@ body.host-embed #pudu-hive-section .pudu-card {
         <div class="pudu-head">
           <button class="pudu-avatar" id="pudu-avatar" type="button" aria-label="Acaricia al pudu mistico"></button>
           <div class="pudu-head-copy">
-            <div class="pudu-stage-name" id="pudu-stage-name" data-pudu-sync="stage-name">Dormido</div>
-            <div class="pudu-stage-model" id="pudu-stage-model" data-pudu-sync="stage-model">Sin colmena activa</div>
-            <div class="pudu-status-whisper" id="pudu-whisper" data-pudu-sync="whisper">Acaricialo mientras despierta la colmena.</div>
+            <div class="pudu-stage-name" id="pudu-stage-name" data-pudu-sync="stage-name">Pudu del Bosque</div>
+            <div class="pudu-stage-model" id="pudu-stage-model" data-pudu-sync="stage-model">SmolLM2-1.7B-Q8 · colmena por sala</div>
+            <div class="pudu-status-whisper" id="pudu-whisper" data-pudu-sync="whisper">Acaricialo. El pudu va reuniendo su voz mientras escucha la sala.</div>
             <div class="pudu-controls">
               <button class="pudu-control-btn pudu-motion-btn" type="button">Movimiento</button>
               <button class="pudu-control-btn pudu-voice-btn" type="button">Voz</button>
@@ -1434,7 +1434,7 @@ body.host-embed #pudu-hive-section .pudu-card {
           </div>
         </div>
         <div class="pudu-progress-track"><div class="pudu-progress-fill" id="pudu-progress-fill" data-pudu-fill="main"></div></div>
-        <div class="pudu-progress-text" id="pudu-progress-text" data-pudu-sync="progress-text">Faltan mas celulares para despertar al pudu.</div>
+        <div class="pudu-progress-text" id="pudu-progress-text" data-pudu-sync="progress-text">El pudu esta reuniendo su respuesta desde esta sala.</div>
         <div class="pudu-stats">
           <div class="pudu-stat">
             <span class="pudu-stat-label">Colmena</span>
@@ -1565,10 +1565,10 @@ body.host-embed #pudu-hive-section .pudu-card {
       <div class="pudu-mobile-row">
         <button class="pudu-avatar" id="pudu-avatar-mobile" type="button" aria-label="Acaricia al pudu mistico"></button>
         <div class="pudu-mobile-copy">
-          <div class="pudu-stage-name" data-pudu-sync="stage-name">Dormido</div>
-          <div class="pudu-stage-model" data-pudu-sync="stage-model">Sin colmena activa</div>
+      <div class="pudu-stage-name" data-pudu-sync="stage-name">Pudu del Bosque</div>
+      <div class="pudu-stage-model" data-pudu-sync="stage-model">SmolLM2-1.7B-Q8 · colmena por sala</div>
           <div class="pudu-progress-track"><div class="pudu-progress-fill" data-pudu-fill="mobile"></div></div>
-          <div class="pudu-progress-text" data-pudu-sync="progress-text">Faltan mas celulares para despertar al pudu.</div>
+      <div class="pudu-progress-text" data-pudu-sync="progress-text">El pudu esta reuniendo su respuesta desde esta sala.</div>
           <div class="pudu-status-whisper" data-pudu-sync="whisper">Acaricialo mientras despierta la colmena.</div>
           <div class="pudu-controls">
             <button class="pudu-control-btn pudu-motion-btn" type="button">Movimiento</button>
@@ -2020,7 +2020,7 @@ function postHostEmbedStatus(reason = 'heartbeat') {
     peerId,
     ready: !!state.ready,
     stageId: state.activeStage?.id || null,
-    stageLabel: state.activeStage?.label || 'Pudu Dormido',
+    stageLabel: state.activeStage?.label || 'Pudu del Bosque',
     modelLabel: state.activeStage?.modelLabel || currentModelLabel || 'none',
     progressText: state.progressText || '',
     memberCount: getRoomMemberCount(),
@@ -2724,8 +2724,8 @@ function nudgePudu(kind, avatar, clientX, clientY, intensity = 0.7) {
     if (navigator.vibrate) navigator.vibrate(8);
     const state = getPuduStageState();
     const whisper = state.ready
-      ? 'El pudu te siente. La colmena sigue despierta.'
-      : (state.activeStage ? 'Buen musgo. Ya casi terminamos de iluminar el cerebro.' : 'Gracias por el carino. Aun faltan celulares para despertar.');
+      ? 'El pudu te siente. La colmena sigue respondiendo.'
+      : 'Gracias por el carino. El pudu sigue reuniendo su voz.';
     setPuduWhisper(whisper, 2000);
   }
 }
@@ -2861,7 +2861,7 @@ function syncPuduPresenceWithHive(state) {
     ? (state.nextStage
       ? `La colmena ya habla. Vamos por ${state.nextStage.label}.`
       : 'El pudu ya canta desde la colmena chilena.')
-    : state.progressText;
+    : getPuduPendingText(state);
   if (performance.now() >= puduPresence.manualWhisperUntil) setPuduWhisper(defaultWhisper, 900);
   puduPresence.warmth = Math.max(puduPresence.warmth, state.ready ? 0.34 : state.activeStage ? 0.24 : 0.16);
   if (state.ready && !puduPresence.lastReady) {
@@ -2968,6 +2968,46 @@ function formatCooldownMs(ms) {
   return `${seconds}s`;
 }
 
+function getPuduNeutralStageName(state = getPuduStageState()) {
+  return state.activeStage ? `${state.activeStage.emoji} ${state.activeStage.label}` : 'Pudu del Bosque';
+}
+
+function getPuduNeutralModelLabel(state = getPuduStageState()) {
+  return state.activeStage
+    ? `${state.activeStage.modelLabel} · ${state.activeStage.note}`
+    : 'SmolLM2-1.7B-Q8 · colmena por sala';
+}
+
+function getPuduPendingText(state = getPuduStageState()) {
+  if (state.ready) {
+    return state.nextStage
+      ? `La colmena de ${formatRoomLabel(roomName)} ya responde y sigue creciendo.`
+      : `El pudu ya responde desde ${formatRoomLabel(roomName)}.`;
+  }
+  if (state.activeStage) {
+    return `El pudu esta reuniendo su respuesta en ${formatRoomLabel(roomName)}.`;
+  }
+  return `El pudu esta reuniendo su respuesta desde ${formatRoomLabel(roomName)}.`;
+}
+
+async function waitForPuduResponseWindow({ timeoutMs = 16000, pollMs = 500, onProgress = null } = {}) {
+  const startedAt = performance.now();
+  let state = getPuduStageState();
+  while ((performance.now() - startedAt) < timeoutMs) {
+    state = getPuduStageState();
+    const hasLocalLayers = !!petalsActive && petalsMyLayers.length > 0;
+    const hasReachablePeer = Array.from(petalsReadyPeers.keys()).some(pid => peers.get(pid)?.dc?.readyState === 'open');
+    const hasRelayCandidate = !!pickPetalsFallbackPeer();
+    const hasCollectiveCoverage = (state.coverageCount || 0) >= PETALS_COMPONENTS.length;
+    if (state.ready || hasLocalLayers || hasReachablePeer || hasRelayCandidate || hasCollectiveCoverage) {
+      return { ready: true, state };
+    }
+    onProgress?.(state, performance.now() - startedAt);
+    await new Promise(resolve => setTimeout(resolve, pollMs));
+  }
+  return { ready: false, state: getPuduStageState() };
+}
+
 function setPuduInvocationCooldown(until) {
   puduInvocationState.cooldownUntil = Math.max(puduInvocationState.cooldownUntil, until || 0);
 }
@@ -3047,7 +3087,7 @@ function broadcastPuduRoomEvent(role, payload) {
 async function invokePuduSummon(prompt) {
   const remaining = getPuduCooldownRemainingMs();
   if (remaining > 0) {
-    showPuduInvocationOverlay({ notice: `El pudú aún descansa. Puedes volver a invocarlo en ${formatCooldownMs(remaining)}.` });
+    showPuduInvocationOverlay({ notice: 'El pudu ya esta reuniendo otra respuesta para la sala.' });
     return { blocked: true, reason: 'cooldown' };
   }
   const startedAt = Date.now();
@@ -3066,6 +3106,7 @@ async function invokePuduSummon(prompt) {
   broadcastPuduRoomEvent('pudu_notice', noticePayload);
   handleIncomingPuduChatEvent('pudu_notice', noticePayload, myNickname, peerId);
   showRouteBanner(`🦌 @pudu ha sido invocado en ${formatRoomLabel(roomName)}...`);
+  showPuduInvocationOverlay({ notice: getPuduPendingText(getPuduStageState()) });
   const result = await runPetalsInference(prompt, {
     specialEvent: true,
     promptOverride: prompt,
@@ -3073,7 +3114,7 @@ async function invokePuduSummon(prompt) {
   puduInvocationState.active = false;
   if (!result) return { blocked: true, reason: 'empty' };
   if (result.blocked) {
-    showPuduInvocationOverlay({ notice: result.text || getPuduStageState().progressText });
+    showPuduInvocationOverlay({ notice: result.text || getPuduPendingText(getPuduStageState()) });
     return result;
   }
   const payload = {
@@ -3464,7 +3505,18 @@ function getReportedCollectiveState() {
       reported.coverageCount = peer.collectiveCoverageCount || 0;
       reported.modelLabel = peer.collectiveModelLabel || reported.modelLabel;
     }
-    if (peer.collectiveReady) reported.ready = true;
+    if (peer.collectiveReady) {
+      reported.ready = true;
+      reported.stageId = peer.collectiveStageId || reported.stageId;
+      reported.stageLabel = peer.collectiveStageLabel || reported.stageLabel;
+      reported.modelLabel = peer.collectiveModelLabel || reported.modelLabel;
+    }
+    if (!reported.stageId && peer.collectiveStageId) {
+      reported.stageId = peer.collectiveStageId;
+      reported.stageLabel = peer.collectiveStageLabel || reported.stageLabel;
+      reported.modelLabel = peer.collectiveModelLabel || reported.modelLabel;
+    }
+    reported.simulated = reported.simulated || !!peer.collectiveSimulated;
   }
   return reported;
 }
@@ -3704,19 +3756,13 @@ function getPuduStageState() {
 
   let progressText = '';
   if (!activeStageView) {
-    if (missingPeers > 0) {
-      progressText = `Faltan ${missingPeers} celulares y ${Math.ceil(missingCollectiveTPS)} tok/s colectivos para despertar a ${formatRoomLabel(roomName)}.`;
-    } else {
-      progressText = `La sala ya tiene quorum parcial, pero faltan ${missingShards} shards reales para completar SmolLM2-1.7B-Q8.`;
-    }
+    progressText = `El pudu esta reuniendo su respuesta en ${formatRoomLabel(roomName)}.`;
   } else if (!ready) {
-    progressText = missingShards > 0
-      ? `El ${activeStageView.label} ya sostiene ${metrics.collectiveTPS} tok/s. Faltan ${missingShards} shards para completar la colmena de esta sala.`
-      : `La colmena de ${formatRoomLabel(roomName)} esta sincronizando sus ultimos nodos Petals...`;
+    progressText = `El ${activeStageView.label} esta reuniendo su respuesta en ${formatRoomLabel(roomName)}.`;
   } else if (nextStage) {
-    progressText = `La colmena de ${formatRoomLabel(roomName)} se ha creado. ${peerCount}/${nextStage.minPeers} celulares · ${metrics.collectiveTPS}/${nextStage.minCollectiveTPS} tok/s hacia ${nextStage.label}.`;
+    progressText = `La colmena de ${formatRoomLabel(roomName)} ya responde y sigue creciendo hacia ${nextStage.label}.`;
   } else {
-    progressText = `El ${activeStageView.label} ya habla desde esta sala con ${metrics.collectiveTPS} tok/s colectivos y ${metrics.coreSize} nodos criticos.`;
+    progressText = `El ${activeStageView.label} ya responde desde esta sala.`;
   }
 
   return {
@@ -4025,7 +4071,7 @@ function trimPetalsTokenWindow(tokenIds, maxTokens = 224) {
 }
 
 async function generatePetalsTextFromMessages(messages, options = {}) {
-  if (!petalsActive || !petalsTokenizer) throw new Error('La colmena aun no tiene sesiones Petals activas.');
+  if (!petalsActive || !petalsTokenizer) throw new Error('El pudu sigue reuniendo su respuesta en esta sala.');
   const stageState = getPuduStageState();
   const stageId = stageState.activeStage?.id || 'brote';
   const maxChars = options.maxChars || (stageId === 'sabio' ? 160 : 72);
@@ -4043,7 +4089,7 @@ async function generatePetalsTextFromMessages(messages, options = {}) {
   const coverageOk = await waitForPetalsCoverage(
     options.coverageTimeoutMs || (stageState.activeStage?.minPeers >= 10 ? 30000 : 20000)
   );
-  if (!coverageOk) throw new Error('La colmena perdio cobertura completa.');
+  if (!coverageOk) throw new Error('El pudu sigue reuniendo su respuesta en esta sala.');
 
   for (let i = 0; i < limit; i++) {
     const result = await petalsForwardPass(allTokenIds);
@@ -4541,7 +4587,7 @@ async function runSimulationCollectivePrompt(messages, options = {}) {
   const stageState = getPuduStageState();
   const stage = stageState.activeStage || PUDU_HIVE_STAGES[0];
   const ready = await ensureRoomSimulationVoice(stageState);
-  if (!ready || !engine) throw new Error('La voz simulada del pudu aun no esta lista.');
+  if (!ready || !engine) throw new Error('El pudu sigue reuniendo su respuesta en esta sala.');
   let fullResponse = '';
   let tokenCount = 0;
   const chunks = await engine.chat.completions.create({
@@ -4628,17 +4674,30 @@ async function runPetalsInference(userMessage, options = {}) {
   const aiMsgEl = options.specialEvent ? createDetachedAssistantMessage() : addMessageToUI("assistant", null, true);
   const startTime = performance.now();
   let fullResponse = "", tokenCount = 0;
-  const stageState = getPuduStageState();
-  const stage = stageState.activeStage || PUDU_HIVE_STAGES[0];
+  let stageState = getPuduStageState();
+  let stage = stageState.activeStage || PUDU_HIVE_STAGES[0];
   const contentEl = aiMsgEl.querySelector('.msg-content');
+  const metaEl = aiMsgEl.querySelector('.msg-meta');
   aiMsgEl.querySelector('.typing-indicator')?.remove();
 
   if (!stageState.ready) {
-    contentEl.textContent = stageState.progressText;
-    const metaEl = aiMsgEl.querySelector('.msg-meta');
-    if (metaEl) metaEl.textContent = `Colmena incompleta · ${stageState.coverageCount}/${PETALS_COMPONENTS.length} shards`;
-    isGenerating = false;
-    return { text: stageState.progressText, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'pending' };
+    contentEl.textContent = getPuduPendingText(stageState);
+    if (metaEl) metaEl.textContent = 'Colmena reuniendo respuesta';
+    const readiness = await waitForPuduResponseWindow({
+      timeoutMs: shouldServeSimulatedCollective() ? 22000 : 14000,
+      pollMs: 500,
+      onProgress: nextState => {
+        contentEl.textContent = getPuduPendingText(nextState);
+      },
+    });
+    stageState = readiness.state || getPuduStageState();
+    stage = stageState.activeStage || stage;
+    if (!readiness.ready && !stageState.ready) {
+      contentEl.textContent = getPuduPendingText(stageState);
+      if (metaEl) metaEl.textContent = 'Colmena reuniendo respuesta';
+      isGenerating = false;
+      return { text: contentEl.textContent, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'pending' };
+    }
   }
 
   if (shouldServeSimulatedCollective()) {
@@ -4648,9 +4707,9 @@ async function runPetalsInference(userMessage, options = {}) {
       try {
         simResult = await runSimulationCollectiveInference(aiMsgEl, stage, startTime, options);
       } catch (err) {
-        contentEl.textContent = `[Pudu Sim Error: ${err.message}]`;
+        contentEl.textContent = getPuduPendingText(stageState);
         const errorMeta = aiMsgEl.querySelector('.msg-meta');
-        if (errorMeta) errorMeta.textContent = 'Colmena simulada · error';
+        if (errorMeta) errorMeta.textContent = 'Colmena simulada · reuniendo respuesta';
         simResult = { text: contentEl.textContent, model: currentModelLabel || stage.modelLabel, meta: errorMeta?.textContent || '', error: err };
       }
       isGenerating = false;
@@ -4670,8 +4729,8 @@ async function runPetalsInference(userMessage, options = {}) {
     uplinkCandidateId = pickPetalsFallbackPeer();
     const mobileRelayFirst = isMobile && !!uplinkCandidateId;
     contentEl.textContent = mobileRelayFirst
-      ? '⏳ El pudu encontro guardian por relay y sigue abriendo el puente directo...'
-      : '⟳ Buscando una ruta viva hacia el pudu...';
+      ? 'El pudu ya encontro una ruta para hilar la respuesta desde esta sala...'
+      : 'El pudu esta buscando el mejor hilo de la sala...';
     for (const [pid] of petalsReadyPeers) {
       const p = peers.get(pid);
       if (p && (!p.conn || p.conn.connectionState !== 'connected')) initiateWebRTC(pid);
@@ -4689,13 +4748,12 @@ async function runPetalsInference(userMessage, options = {}) {
   if (!hasLocalLayers && !hasReachablePeer) {
     uplinkCandidateId = pickPetalsFallbackPeer();
     if (!uplinkCandidateId) {
-      contentEl.textContent = 'La colmena existe, pero este nodo aun no encuentra un guardian reachable para enrutar tu pregunta.';
-      const metaEl = aiMsgEl.querySelector('.msg-meta');
-      if (metaEl) metaEl.textContent = 'Pudu uplink pendiente';
+      contentEl.textContent = getPuduPendingText(stageState);
+      if (metaEl) metaEl.textContent = 'Colmena reuniendo respuesta';
       isGenerating = false;
-      return { text: contentEl.textContent, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'uplink-pending' };
+      return { text: contentEl.textContent, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'pending' };
     }
-    contentEl.textContent = '⏳ El pudu sigue ahi: subiendo la pregunta por relay mientras abre el puente directo dentro de esta sala...';
+    contentEl.textContent = 'El pudu esta enviando tu pregunta por la mejor ruta disponible en esta sala...';
   }
 
   if (!hasLocalLayers) {
@@ -4711,9 +4769,9 @@ async function runPetalsInference(userMessage, options = {}) {
     ])).filter(Boolean);
     const uplinkPeerId = uplinkCandidates[0];
     if (!uplinkPeerId) {
-      contentEl.textContent = 'No hay un nodo guardian disponible para recibir la pregunta.';
+      contentEl.textContent = getPuduPendingText(stageState);
       isGenerating = false;
-      return { text: contentEl.textContent, model: stage.modelLabel, meta: 'Sin guardian', blocked: true, route: 'no-guardian' };
+      return { text: contentEl.textContent, model: stage.modelLabel, meta: 'Colmena reuniendo respuesta', blocked: true, route: 'pending' };
     }
 
     const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
@@ -4781,11 +4839,10 @@ async function runPetalsInference(userMessage, options = {}) {
       }, 2500 * (retryIndex + 1));
     }
     const result = await resultPromise;
-    const text = result?.text || '[La colmena no pudo responder a tiempo]';
+    const text = result?.text || getPuduPendingText(stageState);
     contentEl.textContent = text;
     tokenCount = text.trim().split(/\s+/).filter(Boolean).length;
     const ms = performance.now() - startTime;
-    const metaEl = aiMsgEl.querySelector('.msg-meta');
     const metaTransport = result?.viaTransport || lastTransport;
     const metaText = `${result?.model || stage.modelLabel} · ${metaTransport === 'direct' ? 'uplink directo' : 'uplink relay'}${result?.partial ? ' · parcial' : ''} · ${Math.round(ms)}ms`;
     if (metaEl) metaEl.textContent = metaText;
@@ -4807,11 +4864,11 @@ async function runPetalsInference(userMessage, options = {}) {
 
   try {
     const coverageOk = await waitForPetalsCoverage(stage.minPeers >= 10 ? 30000 : 20000);
-    if (!coverageOk) throw new Error('La colmena perdio cobertura completa.');
+    if (!coverageOk) throw new Error('El pudu sigue reuniendo su respuesta en esta sala.');
     while (tokenCount < stage.maxTokens) {
       const result = await petalsForwardPass(allTokenIds);
       if (!result || result.tokenId === undefined) { 
-        if (fullResponse.length === 0) fullResponse = '[La colmena se quedo sin ruta P2P]';
+        if (fullResponse.length === 0) fullResponse = getPuduPendingText(stageState);
         break; 
       }
 
@@ -4838,7 +4895,10 @@ async function runPetalsInference(userMessage, options = {}) {
       // Safety: cap context at 256 tokens to keep mobile responsive
       if (allTokenIds.length > 256) allTokenIds = trimPetalsTokenWindow(allTokenIds, 224);
     }
-  } catch(e) { contentEl.textContent += '\n[P2P Error: ' + e.message + ']'; }
+  } catch(e) {
+    console.warn('[Pudu petals local]', e.message);
+    contentEl.textContent = fullResponse.trim() || getPuduPendingText(stageState);
+  }
 
   if (!fullResponse || !fullResponse.trim()) {
     fullResponse = '[El pudu guardo silencio por un momento]';
@@ -4847,7 +4907,6 @@ async function runPetalsInference(userMessage, options = {}) {
 
   const ms = performance.now() - startTime;
   localTPS = Math.round((tokenCount / (ms / 1000)) * 10) / 10;
-  const metaEl = aiMsgEl.querySelector('.msg-meta');
   const metaText = `${stage.modelLabel} · ${petalsMyLayers.length} shards · ${localTPS} tok/s · ${Math.round(ms)}ms`;
   if (metaEl) metaEl.textContent = metaText;
 
@@ -4931,7 +4990,7 @@ async function handlePetalsTensor(fromId, m, dc = null) {
   } catch (err) {
     console.error("[Petals] Tensor routing error:", err);
     // Send dummy error token back to resolve pending states without timing out 15000ms
-    const errorToken = { tokenId: 0, tokenStr: `\n[ONNX Error: ${err.message}]` };
+    const errorToken = { tokenId: 0, tokenStr: getPuduPendingText(getPuduStageState()) };
     if (dc && dc.readyState === 'open') {
       dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, errorToken));
     } else {
@@ -5178,7 +5237,7 @@ async function initEngine() {
     inferenceMode = 'federated';
     isModelLoading = false;
     showModelProgress(false);
-    updateInitStatus('Esperando mas celulares para despertar al pudu…');
+          updateInitStatus('El pudu esta reuniendo su voz colectiva…');
     return;
   }
   isModelLoading = true;
@@ -6424,7 +6483,7 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
       const result = await generatePetalsTextFromMessages(signal.messages, { maxTokens: signal.max_tokens || 200 });
       text = result.text;
     }
-    if (!text.trim()) throw new Error('La colmena no genero texto en el uplink relay.');
+    if (!text.trim()) throw new Error('El pudu sigue reuniendo su respuesta en esta sala.');
     if (virtualId) {
       const vnick = masqueradedPeers.get(virtualId)?.nickname || virtualId;
       const stage = getPuduStageState().activeStage;
@@ -6433,7 +6492,8 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
     publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text, model: getPuduStageState().activeStage?.modelLabel || 'SmolLM2-1.7B-Q8 · Web-Petals', tps: localTPS }}, virtualId);
     reputation.addInference();
   } catch (e) {
-    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: "Error: " + e.message }}, virtualId);
+    console.warn('[Pudu uplink relay]', e.message);
+    publishSignal(fromId, { type: "moe_fallback_res", reqId, payload: { text: getPuduPendingText(getPuduStageState()) }}, virtualId);
   }
   isGenerating = false;
 }
@@ -6701,14 +6761,14 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
        } catch(e) { 
            console.error("Simulated Petals Layer Error", e);
            if (rConn?.dc?.readyState === "open") {
-               rConn.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, { tokenId: 0, tokenStr: `[Error: ${e.message}]` }));
+              rConn.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, 0, { tokenId: 0, tokenStr: getPuduPendingText(getPuduStageState()) }));
            }
        }
        return;
     }
     if (m.type === MSG.MOE_REQ || m.type === MSG.TOK_REQ || m.type === MSG.CONSENSUS_REQ) {
        if (engine && (m.payload?.messages || m.payload?.hash)) {
-          if (isGenerating) { if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(m.type===MSG.CONSENSUS_REQ?MSG.CONSENSUS_RES:MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta (sim).', model: null })); return; }
+         if (isGenerating) { if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(m.type===MSG.CONSENSUS_REQ?MSG.CONSENSUS_RES:MSG.TOK_RES, m.reqId, m.seq, { text: 'El pudu ya esta reuniendo otra respuesta para esta sala.', model: null })); return; }
           isGenerating = true;
           try {
              const resType = m.type === MSG.CONSENSUS_REQ ? MSG.CONSENSUS_RES : MSG.TOK_END;
@@ -6717,7 +6777,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
              let fullR = "", seqC = 0;
              for await (const chunk of chunks) { const token = chunk.choices[0]?.delta?.content || ""; fullR += token; if (token && rConn?.dc?.readyState === "open" && m.type !== MSG.CONSENSUS_REQ) rConn.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token })); }
              if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(resType, m.reqId, seqC, { text: fullR, model: currentModelId, tps: vp.tps }));
-          } catch(e) { if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(m.type===MSG.CONSENSUS_REQ?MSG.CONSENSUS_RES:MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); }
+         } catch(e) { if (rConn?.dc?.readyState === "open") rConn.dc.send(encodeMsg(m.type===MSG.CONSENSUS_REQ?MSG.CONSENSUS_RES:MSG.TOK_RES, m.reqId, m.seq, { text: getPuduPendingText(getPuduStageState()), model: null })); }
           isGenerating = false;
        }
     } else if (m.type === MSG.HELLO) {
@@ -6859,14 +6919,14 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
           }
           reputation.addInference();
         } catch (e) {
-          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null }));
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: getPuduPendingText(getPuduStageState()), model: null }));
         }
         isGenerating = false;
         break;
       }
       if (m.payload?.petalsHive && STRICT_PUDU_HIVE && petalsActive && petalsMyLayers.length > 0 && petalsTokenizer && Array.isArray(m.payload.messages)) {
         if (isGenerating) {
-          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null }));
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'El pudu ya esta reuniendo otra respuesta para esta sala.', model: null }));
           break;
         }
         isGenerating = true;
@@ -6892,7 +6952,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
           }
           reputation.addInference();
         } catch(e) {
-          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null }));
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: getPuduPendingText(getPuduStageState()), model: null }));
         }
         isGenerating = false;
         break;
@@ -6945,7 +7005,7 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
           reputation.addInference();
         } catch(e) { 
            const originalRequester = peers.get(m.payload?.originalRequester || fromId);
-           if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null })); 
+           if (originalRequester?.dc?.readyState === "open") originalRequester.dc.send(encodeMsg(resType, m.reqId, m.seq, { text: getPuduPendingText(getPuduStageState()), model: null })); 
         }
         isGenerating = false;
       }
@@ -6994,7 +7054,7 @@ function addMessageToUI(role, content, streaming = false) {
   const headerTxt = isUser
     ? (myNickname !== 'Anonymous' ? myNickname : 'You')
     : (STRICT_PUDU_HIVE
-      ? `${puduState?.activeStage?.label || 'Pudu Dormido'}`
+      ? `${puduState?.activeStage?.label || 'Pudu del Bosque'}`
       : `AI · ${ROLE_LABELS[myRole] || myRole}`);
   div.innerHTML = `<div class="msg-avatar ${avClass}">${avText}</div><div class="msg-body"><div class="msg-header">${headerTxt}</div>${streaming ? '' : `<div class="msg-content">${content || ''}</div>`}<div class="msg-meta"></div></div>`;
   if (streaming) {
@@ -7100,8 +7160,8 @@ function updatePuduHiveUI() {
   const stageList = document.getElementById('pudu-stage-list');
 
   const stage = state.activeStage;
-  const displayName = stage ? `${stage.emoji} ${stage.label}` : 'Dormido';
-  const displayModel = stage ? `${stage.modelLabel} · ${stage.note}` : 'Esperando quorum biologico';
+  const displayName = getPuduNeutralStageName(state);
+  const displayModel = getPuduNeutralModelLabel(state);
   name.textContent = displayName;
   model.textContent = displayModel;
   avatar.classList.toggle('awake', state.ready);
@@ -7118,7 +7178,7 @@ function updatePuduHiveUI() {
   const peerGoal = state.nextStage?.minPeers || state.activeStage?.minPeers || PUDU_HIVE_STAGES[0].minPeers;
   peerEl.textContent = `${state.peerCount} / ${peerGoal}`;
   covEl.textContent = `${state.coverageCount} / ${PETALS_COMPONENTS.length} · nucleo ${Math.max(1, state.coreSize || 0)}`;
-  readyEl.textContent = state.ready ? 'La colmena se ha creado' : (stage ? 'Sincronizando' : 'Faltan celulares');
+  readyEl.textContent = state.ready ? 'Respondiendo' : 'Hilando';
   latencyEl.textContent = `${getPuduLatencyLabel()} · ${Math.round(state.collectiveTPS || 0)} tok/s`;
 
   stageList.innerHTML = PUDU_HIVE_STAGES.map(stageCfg => {
@@ -7134,10 +7194,7 @@ function updatePuduHiveUI() {
   if (state.ready) {
     setPuduChatAvailability(true, `Habla con ${stage.label} en #${roomName}…`);
   } else {
-    const missingLabel = state.missingPeers > 0
-      ? `Faltan ${state.missingPeers} celulares para despertar al pudu…`
-      : `Faltan ${state.missingShards} shards para completar la colmena…`;
-    setPuduChatAvailability(false, missingLabel);
+    setPuduChatAvailability(false, 'Invoca a @pudu y la colmena respondera cuando termine de hilar la respuesta…');
   }
   syncPuduPresenceWithHive(state);
 }
