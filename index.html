@@ -2990,6 +2990,57 @@ function getPuduPendingText(state = getPuduStageState()) {
   return `El pudu esta reuniendo su respuesta desde ${formatRoomLabel(roomName)}.`;
 }
 
+function shouldShowPuduTechnicalUI() {
+  return !!isSimulateMode || !!IS_HOST_EMBED || new URL(location.href).searchParams.get('puduDebug') === '1';
+}
+
+function toPuduHandle(name = '') {
+  const base = (name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!base || base === 'anonymous') return 'viajero';
+  return base;
+}
+
+function maybeBuildDirectPuduReply(prompt = '', requesterName = myNickname) {
+  const clean = (prompt || '').trim();
+  if (!clean) return null;
+  const normalized = clean
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  let body = null;
+  if (/\b(donde vives|de donde eres|en que lugar vives|donde esta tu casa)\b/.test(normalized)) {
+    body = 'vivo entre los bosques lluviosos del sur de Chile.';
+  } else if (/\b(te gusta el maqui|te gusta la maqui|te gusta maqui)\b/.test(normalized)) {
+    body = 'si, el maqui me gusta: da alimento, sombra y memoria al bosque.';
+  } else if (/\b(como estas|como te sientes|que tal estas|todo bien)\b/.test(normalized)) {
+    body = 'estoy bien, oliendo lluvia, musgo y hojas del sur de Chile.';
+  } else if (/\b(quien eres|que eres|que animal eres|como te llamas|cual es tu nombre)\b/.test(normalized)) {
+    body = 'soy Pudu, un guardian pequeno del bosque del sur de Chile.';
+  } else if (/\b(vives en chile|eres de chile)\b/.test(normalized)) {
+    body = 'si, mi voz nace entre lluvias, arrayanes y bosques del sur de Chile.';
+  }
+  if (!body) return null;
+  return `Respuesta a @${toPuduHandle(requesterName)}: ${body}`;
+}
+
+function finalizePuduReplyText(prompt = '', rawText = '', requesterName = myNickname) {
+  const direct = maybeBuildDirectPuduReply(prompt, requesterName);
+  if (direct) return direct;
+  let cleaned = normalizePuduCollectiveText(rawText || '', true)
+    .replace(/^lo siento,?\s*/i, '')
+    .replace(/^no puedo responder en nombre de pudu\.?\s*/i, '')
+    .replace(/^mi respuesta debe ser mas limitada y directa\.?\s*/i, '')
+    .trim();
+  if (!cleaned) cleaned = 'te respondo desde el bosque en cuanto termine de hilar mejor la idea.';
+  if (/^(respuesta a\s*@|@\w+)/i.test(cleaned)) return cleaned;
+  return `Respuesta a @${toPuduHandle(requesterName)}: ${cleaned}`;
+}
+
 function clarifyPuduPromptIntent(prompt = '') {
   const clean = (prompt || '').trim();
   if (!clean) return clean;
@@ -3052,7 +3103,11 @@ function showPuduInvocationOverlay(payload = {}) {
   puduSummon3D.visible = true;
   puduSummon3D.petting = Math.max(0.05, puduSummon3D.petting);
   puduSummon3D.caption.textContent = payload.text || payload.notice || payload.caption || '🦌 El pudú se acerca entre la niebla.';
-  puduSummon3D.meta.textContent = payload.meta || [payload.stageLabel, payload.route].filter(Boolean).join(' · ') || 'Evento místico · colmena del bosque';
+  const metaText = shouldShowPuduTechnicalUI()
+    ? (payload.meta || [payload.stageLabel, payload.route].filter(Boolean).join(' · ') || 'Evento místico · colmena del bosque')
+    : '';
+  puduSummon3D.meta.textContent = metaText;
+  puduSummon3D.meta.style.display = metaText ? 'block' : 'none';
   puduSummon3D.overlay.style.display = 'block';
   puduSummon3D.overlay.classList.add('active');
   puduSummon3D.overlay.setAttribute('aria-hidden', 'false');
@@ -3074,7 +3129,7 @@ function handleIncomingPuduChatEvent(role, content, senderNick = null, senderId 
   if (role === 'pudu_notice') {
     setPuduInvocationCooldown(payload.cooldownUntil || 0);
     const invoker = payload.requester || senderNick || 'Alguien';
-    if (payload.kind === 'summon') {
+    if (payload.kind === 'summon' && shouldShowPuduTechnicalUI()) {
       showPuduInvocationOverlay({ notice: `${invoker} llamó al pudú. La colmena ya está reuniendo su voz.` });
     }
     return true;
@@ -3095,8 +3150,9 @@ function broadcastPuduRoomEvent(role, payload) {
 async function invokePuduSummon(prompt) {
   const remaining = getPuduCooldownRemainingMs();
   if (remaining > 0) {
-    showPuduInvocationOverlay({ notice: 'El pudu ya esta reuniendo otra respuesta para la sala.' });
-    return { blocked: true, reason: 'cooldown' };
+    const cooldownText = `Respuesta a @${toPuduHandle(myNickname)}: voy de a una; dame un instante.`;
+    showPuduInvocationOverlay({ text: cooldownText, meta: '' });
+    return { blocked: true, reason: 'cooldown', text: cooldownText };
   }
   const startedAt = Date.now();
   const cooldownUntil = startedAt + PUDU_SUMMON_COOLDOWN_MS;
@@ -3113,8 +3169,10 @@ async function invokePuduSummon(prompt) {
   };
   broadcastPuduRoomEvent('pudu_notice', noticePayload);
   handleIncomingPuduChatEvent('pudu_notice', noticePayload, myNickname, peerId);
-  showRouteBanner(`🦌 @pudu ha sido invocado en ${formatRoomLabel(roomName)}...`);
-  showPuduInvocationOverlay({ notice: getPuduPendingText(getPuduStageState()) });
+  if (shouldShowPuduTechnicalUI()) {
+    showRouteBanner(`🦌 @pudu ha sido invocado en ${formatRoomLabel(roomName)}...`);
+    showPuduInvocationOverlay({ notice: getPuduPendingText(getPuduStageState()) });
+  }
   const result = await runPetalsInference(prompt, {
     specialEvent: true,
     promptOverride: prompt,
@@ -3122,17 +3180,20 @@ async function invokePuduSummon(prompt) {
   puduInvocationState.active = false;
   if (!result) return { blocked: true, reason: 'empty' };
   if (result.blocked) {
-    showPuduInvocationOverlay({ notice: result.text || getPuduPendingText(getPuduStageState()) });
+    if (shouldShowPuduTechnicalUI()) {
+      showPuduInvocationOverlay({ notice: result.text || getPuduPendingText(getPuduStageState()) });
+    }
     return result;
   }
+  const finalText = finalizePuduReplyText(prompt, result.text, myNickname);
   const payload = {
     kind: 'response',
     requester: myNickname,
     requesterId: peerId,
     roomName,
-    text: result.text,
+    text: finalText,
     model: result.model,
-    meta: result.meta,
+    meta: shouldShowPuduTechnicalUI() ? result.meta : '',
     route: result.route,
     stageLabel: getPuduStageState().activeStage?.label || 'Pudu',
     timestamp: Date.now(),
@@ -3140,7 +3201,7 @@ async function invokePuduSummon(prompt) {
   };
   broadcastPuduRoomEvent('pudu_event', payload);
   handleIncomingPuduChatEvent('pudu_event', payload, myNickname, peerId);
-  return result;
+  return { ...result, text: finalText, meta: payload.meta };
 }
 
 const puduSummon3D = {
@@ -5851,6 +5912,7 @@ function selectConsensusResponse(reqId, idx, isAuto = false) {
 }
 
 function showRouteBanner(text) {
+  if (STRICT_PUDU_HIVE && !shouldShowPuduTechnicalUI()) return;
   const msgs = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'route-banner';
