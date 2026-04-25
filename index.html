@@ -1303,6 +1303,14 @@ body.host-embed #welcome-banner,
 body.host-embed #room-toast {
   display: none !important;
 }
+body.host-embed #bg-img,
+body.host-embed #bg-overlay,
+body.host-embed #three-canvas,
+body.host-embed #text3d-canvas,
+body.host-embed #flash-overlay,
+body.host-embed #mesh-indicator {
+  display: none !important;
+}
 body.host-embed #app {
   width: 100%;
   margin: 0;
@@ -1350,14 +1358,473 @@ body.host-embed #pudu-hive-section .pudu-card {
   #pudu3d-bubble { width: min(92vw, 560px); bottom: 10vh; padding: 16px 18px; }
   #pudu3d-caption { font-size: clamp(17px, 5vw, 24px); }
 }
+
+/* ── PUDU CHAT v12 PRO SHELL ─────────────────────────────────────────── */
+body.pudu-pro-shell::before {
+  display: none;
+}
+body.pudu-pro-shell {
+  background: #050814;
+}
+#bg-img,
+#bg-overlay,
+#three-canvas,
+#text3d-canvas,
+#flash-overlay,
+#mesh-indicator {
+  position: fixed;
+  inset: 0;
+}
+#bg-img {
+  z-index: -3;
+  background:
+    linear-gradient(rgba(5, 8, 20, 0.18), rgba(5, 8, 20, 0.52)),
+    url('https://media-cldnry.s-nbcnews.com/image/upload/t_social_share_1024x768_scale,f_auto,q_auto:best/rockcms/2024-11/Pudu-Argentina-207469.jpg') center/cover no-repeat;
+  filter: blur(3px) saturate(1.28) brightness(0.62);
+  transform: scale(1.05);
+}
+#bg-overlay {
+  z-index: -2;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(0,229,255,0.11), transparent 28%),
+    radial-gradient(circle at 80% 18%, rgba(177,107,255,0.14), transparent 26%),
+    linear-gradient(to bottom, rgba(5,8,20,0.46), rgba(15,10,30,0.22) 42%, rgba(5,8,20,0.62));
+  pointer-events: none;
+}
+#three-canvas {
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#text3d-canvas {
+  z-index: 515;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#flash-overlay {
+  z-index: 516;
+  pointer-events: none;
+  background: rgba(0,229,255,0);
+  transition: background .12s ease;
+}
+#mesh-indicator {
+  top: auto;
+  inset: auto 16px 88px auto;
+  z-index: 118;
+  width: auto;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(10,14,25,0.74);
+  border: 1px solid rgba(0,229,255,0.22);
+  backdrop-filter: blur(18px);
+  color: rgba(255,255,255,0.58);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: all .25s ease;
+  pointer-events: none;
+}
+#mesh-indicator.active {
+  color: #b7ffe5;
+  border-color: rgba(74,222,128,0.32);
+  box-shadow: 0 0 18px rgba(74,222,128,0.14);
+}
+#status-bar {
+  width: min(100%, 1460px);
+  margin: 0 auto;
+  background: rgba(10,14,25,0.82);
+  border-bottom: 1px solid rgba(0,229,255,0.12);
+  backdrop-filter: blur(24px);
+}
+#app {
+  width: min(100%, 1460px);
+  height: calc(100vh - 50px);
+  margin: 0 auto 14px;
+  border-radius: 26px;
+  overflow: hidden;
+  border: 1px solid rgba(0,229,255,0.12);
+  background: rgba(8, 12, 24, 0.74);
+  box-shadow: 0 32px 80px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.02) inset;
+  backdrop-filter: blur(24px);
+}
+@supports (height: 100dvh) {
+  #app {
+    height: calc(100dvh - 50px);
+  }
+}
+#room-bar {
+  position: relative;
+  z-index: 20;
+  min-height: 74px;
+  padding: 12px 18px 12px 58px;
+  background: rgba(10,14,25,0.94);
+  border-bottom: none;
+  backdrop-filter: blur(28px);
+  box-shadow: 0 2px 20px rgba(0,229,255,.1);
+}
+#room-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary), #4ade80);
+  opacity: .82;
+}
+#sidebar-toggle {
+  position: absolute;
+  top: 16px;
+  left: 12px;
+  bottom: auto;
+  z-index: 30;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: rgba(0,229,255,.15);
+  border: 1px solid rgba(0,229,255,.4);
+  color: #fff;
+  font-size: 13px;
+  font-family: var(--font-title);
+  letter-spacing: 1px;
+  box-shadow: none;
+}
+#sidebar-toggle:hover {
+  background: rgba(0,229,255,.3);
+  transform: scale(1.03);
+}
+#rooms-sidebar {
+  position: relative;
+  top: auto;
+  left: auto;
+  bottom: auto;
+  width: 300px;
+  border-radius: 0;
+  border: none;
+  border-right: 1px solid rgba(0,229,255,.14);
+  background: rgba(10,14,25,.94);
+  box-shadow: none;
+  backdrop-filter: blur(28px);
+  transform: none;
+}
+#main {
+  position: relative;
+  background: linear-gradient(180deg, rgba(8,12,24,0.34), rgba(8,10,18,0.48));
+}
+#messages {
+  padding: 24px 30px 18px;
+  gap: 16px;
+}
+.message {
+  max-width: min(840px, 72%);
+  width: auto;
+  margin: 0;
+  gap: 12px;
+}
+.message.user-msg {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.message.assistant-msg {
+  align-self: flex-start;
+}
+.msg-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  font-size: 15px;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+}
+.msg-body {
+  padding: 13px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(20,24,40,0.95);
+  box-shadow: 2px 4px 0 rgba(0,0,0,.4), 0 10px 32px rgba(0,0,0,.22);
+}
+.message.user-msg .msg-body {
+  background: linear-gradient(135deg, #0072ff 0%, #00e5ff 100%);
+  color: #fff;
+  border-color: rgba(255,255,255,0.18);
+  border-bottom-right-radius: 6px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+.message.assistant-msg .msg-body {
+  border-bottom-left-radius: 6px;
+}
+.msg-header {
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.62);
+}
+.message.user-msg .msg-header,
+.message.user-msg .msg-meta {
+  text-align: right;
+  color: rgba(255,255,255,0.78);
+}
+.msg-content {
+  font-size: 15px;
+  line-height: 1.62;
+  font-weight: 650;
+}
+.msg-meta {
+  margin-top: 8px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.42);
+}
+#input-area {
+  position: relative;
+  z-index: 20;
+  padding: 14px 18px 18px;
+  background: rgba(10,14,25,.95);
+  border-top: 1px solid rgba(0,229,255,.14);
+  backdrop-filter: blur(28px);
+}
+#input-area::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,229,255,.5), transparent);
+}
+#input-row {
+  gap: 12px;
+  max-width: none;
+}
+#chat-input {
+  border-radius: 16px;
+  border: 1px solid rgba(0,229,255,.28);
+  background: rgba(0,229,255,.05);
+  padding: 14px 18px;
+  font-size: 15px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+#chat-input:focus {
+  border-color: rgba(0,229,255,.52);
+  box-shadow: 0 0 0 4px rgba(0,229,255,.1);
+}
+#send-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0072ff 0%, #00e5ff 100%);
+  box-shadow: 0 4px 15px rgba(0,229,255,.3);
+}
+#send-btn:hover {
+  box-shadow: 0 6px 25px rgba(0,229,255,.45);
+  transform: translateY(-2px);
+}
+#init-overlay {
+  z-index: 1000;
+  background: rgba(5, 8, 20, 0.72);
+  backdrop-filter: blur(26px);
+}
+.init-card {
+  position: relative;
+  overflow: hidden;
+  width: min(92vw, 420px);
+  padding: 30px 24px 28px;
+  border-radius: 22px;
+  border: 2px solid rgba(0,229,255,.42);
+  background: rgba(10,14,25,.9);
+  box-shadow: 0 0 40px rgba(0,229,255,.2), 0 0 80px rgba(177,107,255,.12), inset 0 1px 0 rgba(255,255,255,.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.init-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary), #ffd700);
+}
+.init-pudu-wrap {
+  position: relative;
+  width: 136px;
+  height: 136px;
+  display: grid;
+  place-items: center;
+}
+.init-pudu-ring {
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,229,255,.55);
+  opacity: 0;
+  animation: puduInitRing 2.8s ease-out infinite;
+}
+.init-pudu-ring:nth-child(2) {
+  border-color: rgba(177,107,255,.5);
+  animation-delay: .9s;
+}
+.init-pudu-ring:nth-child(3) {
+  border-color: rgba(74,222,128,.45);
+  animation-delay: 1.8s;
+}
+@keyframes puduInitRing {
+  0% { opacity: .7; transform: scale(.64); }
+  100% { opacity: 0; transform: scale(1.55); }
+}
+.init-pudu-svg {
+  width: 128px;
+  height: 128px;
+  filter: drop-shadow(0 0 20px rgba(0,229,255,.6)) drop-shadow(0 0 10px rgba(177,107,255,.45));
+  animation: puduInitFloat 4s ease-in-out infinite;
+}
+@keyframes puduInitFloat {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-12px) rotate(2deg); }
+}
+.init-logo {
+  font-family: var(--font-title);
+  font-size: clamp(30px, 7vw, 42px);
+  letter-spacing: 4px;
+  background: linear-gradient(135deg, #00e5ff 0%, #b16bff 48%, #ffd700 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 10px rgba(0,229,255,.4));
+}
+.init-subtitle {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: rgba(0,229,255,.72);
+  text-transform: uppercase;
+  text-align: center;
+}
+.init-status {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,.78);
+  text-align: center;
+  max-width: 320px;
+}
+.init-progress {
+  width: min(260px, 70vw);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+}
+.init-progress-fill {
+  border-radius: inherit;
+}
+#pudu3d-overlay {
+  z-index: 520;
+}
+#pudu3d-vignette {
+  background: radial-gradient(ellipse at center, transparent 18%, rgba(5, 8, 20, 0.72) 100%);
+}
+#pudu3d-bubble {
+  width: min(92vw, 780px);
+  bottom: 7vh;
+  border-radius: 30px;
+  border: 2px solid rgba(255,255,255,.18);
+  background: rgba(10,12,24,.86);
+  box-shadow: 0 24px 42px rgba(0,0,0,.36), 0 0 22px rgba(0,229,255,.08);
+}
+#pudu3d-caption {
+  font-family: var(--font-title);
+  letter-spacing: .5px;
+  text-shadow: 0 0 20px rgba(0,229,255,.14), 2px 2px 0 rgba(0,0,0,.22);
+}
+#pudu3d-meta {
+  color: #9dd7ff;
+}
+@media (max-width: 900px) {
+  #app {
+    margin-bottom: 0;
+    border-radius: 0;
+    width: 100%;
+    height: calc(100vh - 44px);
+  }
+  @supports (height: 100dvh) {
+    #app {
+      height: calc(100dvh - 44px);
+    }
+  }
+  #room-bar {
+    padding: 12px 12px 12px 58px;
+  }
+  #messages {
+    padding: 16px 16px 14px;
+  }
+  .message {
+    max-width: 92%;
+  }
+  #mesh-indicator {
+    bottom: 86px;
+    right: 12px;
+    font-size: 10px;
+    padding: 7px 10px;
+  }
+}
 </style>
 </head>
 <body>
 
+<div id="bg-img" aria-hidden="true"></div>
+<div id="bg-overlay" aria-hidden="true"></div>
+<canvas id="three-canvas" aria-hidden="true"></canvas>
+<canvas id="text3d-canvas" aria-hidden="true"></canvas>
+<div id="flash-overlay" aria-hidden="true"></div>
+<div id="mesh-indicator" aria-hidden="true">🕸 bosque</div>
+
 <div id="init-overlay">
-  <div class="init-logo">PUDU MIND</div>
-  <div class="init-status" id="init-status">Despertando la colmena…</div>
-  <div class="init-progress"><div class="init-progress-fill" id="init-progress-fill"></div></div>
+  <div class="init-card">
+    <div class="init-pudu-wrap" aria-hidden="true">
+      <div class="init-pudu-ring"></div>
+      <div class="init-pudu-ring"></div>
+      <div class="init-pudu-ring"></div>
+      <svg class="init-pudu-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="bodG" cx="50%" cy="40%"><stop offset="0%" stop-color="#c8a46e"/><stop offset="100%" stop-color="#8b5e3c"/></radialGradient>
+          <radialGradient id="faceG" cx="50%" cy="40%"><stop offset="0%" stop-color="#ddb87a"/><stop offset="100%" stop-color="#a0713f"/></radialGradient>
+        </defs>
+        <ellipse cx="100" cy="136" rx="46" ry="38" fill="url(#bodG)"/>
+        <rect x="65" y="158" width="12" height="26" rx="6" fill="#8b5e3c"/>
+        <rect x="82" y="162" width="12" height="22" rx="6" fill="#8b5e3c"/>
+        <rect x="106" y="162" width="12" height="22" rx="6" fill="#8b5e3c"/>
+        <rect x="123" y="158" width="12" height="26" rx="6" fill="#8b5e3c"/>
+        <ellipse cx="71" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="88" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="112" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="129" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="148" cy="130" rx="10" ry="7" fill="#e8d4b0"/>
+        <ellipse cx="100" cy="80" rx="34" ry="32" fill="url(#faceG)"/>
+        <ellipse cx="72" cy="52" rx="10" ry="18" fill="#c8a46e" transform="rotate(-15 72 52)"/>
+        <ellipse cx="128" cy="52" rx="10" ry="18" fill="#c8a46e" transform="rotate(15 128 52)"/>
+        <ellipse cx="72" cy="52" rx="6" ry="12" fill="#f0c8a0" transform="rotate(-15 72 52)"/>
+        <ellipse cx="128" cy="52" rx="6" ry="12" fill="#f0c8a0" transform="rotate(15 128 52)"/>
+        <ellipse cx="86" cy="78" rx="9" ry="10" fill="#1a0a00"/>
+        <ellipse cx="114" cy="78" rx="9" ry="10" fill="#1a0a00"/>
+        <ellipse cx="88" cy="75" rx="3" ry="3.5" fill="white" opacity=".85"/>
+        <ellipse cx="116" cy="75" rx="3" ry="3.5" fill="white" opacity=".85"/>
+        <ellipse cx="100" cy="93" rx="5" ry="3.5" fill="#c06040"/>
+        <path d="M 88 100 Q 100 96 112 100" stroke="#1a0a00" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <polygon points="100,108 103,116 111,116 105,121 107,129 100,124 93,129 95,121 89,116 97,116" fill="#ffd700" opacity=".9"/>
+      </svg>
+    </div>
+    <div class="init-logo">PUDU CHAT</div>
+    <div class="init-subtitle">bosque mágico nativo · red p2p</div>
+    <div class="init-status" id="init-status">Despertando la colmena…</div>
+    <div class="init-progress"><div class="init-progress-fill" id="init-progress-fill"></div></div>
+  </div>
 </div>
 
 <div class="welcome-banner" id="welcome-banner"></div>
@@ -1911,6 +2378,7 @@ function applyRoom(name, options = {}) {
   history.replaceState(null, '', url.toString());
   console.log(`[Room] Joined room: ${roomName} (namespace: ${CONFIG.appNamespace})`);
   renderRoomDirectory();
+  updateMeshIndicator();
 }
 
 function showRoomBanner(text) {
@@ -2004,6 +2472,7 @@ function updateRoomMembersUI() {
   if (counterEl) counterEl.textContent = String(count);
   renderRoomDirectory();
   ensureRoomCapacity();
+  updateMeshIndicator();
   postHostEmbedStatus('room-members');
 }
 
@@ -3116,6 +3585,7 @@ function showPuduInvocationOverlay(payload = {}) {
   puduSummon3D.hideAt = performance.now() + (payload.text ? 12000 : 3600);
   puduPresence.thinkingUntil = payload.text ? 0 : performance.now() + 1800;
   puduPresence.speakingUntil = payload.text ? performance.now() + Math.min(9600, 2200 + text.length * 28) : puduPresence.speakingUntil;
+  if (payload.text) spawnPuduSpeechCloud(payload.text);
   if (payload.text) maybeSpeakPudu(payload.text);
   if (!puduSummon3D.raf) puduSummon3D.raf = requestAnimationFrame(animatePuduSummonScene);
 }
@@ -3441,6 +3911,327 @@ function animatePuduSummonScene(now) {
   if (puduSummon3D.tail) puduSummon3D.tail.rotation.y = Math.sin(now / 260) * (0.24 + puduSummon3D.petting * 0.18);
   puduSummon3D.renderer.render(puduSummon3D.scene, puduSummon3D.camera);
   puduSummon3D.raf = requestAnimationFrame(animatePuduSummonScene);
+}
+
+const PUDU_PRO_BG_IMAGE = 'https://media-cldnry.s-nbcnews.com/image/upload/t_social_share_1024x768_scale,f_auto,q_auto:best/rockcms/2024-11/Pudu-Argentina-207469.jpg';
+const puduProBackground = {
+  initialized: false,
+  renderer: null,
+  scene: null,
+  camera: null,
+  shapes: [],
+  rings: [],
+  stars: [],
+  frame: 0,
+  mobileLite: false,
+};
+const puduSpeechCloud3D = {
+  initialized: false,
+  renderer: null,
+  scene: null,
+  camera: null,
+  groups: [],
+  frame: 0,
+};
+
+function updateMeshIndicator() {
+  const el = document.getElementById('mesh-indicator');
+  if (!el || IS_HOST_EMBED) return;
+  const roomLabel = formatRoomLabel(roomName);
+  const members = getRoomMemberCount();
+  const relayConnected = [...relayMap.values()].filter(entry => entry.status === 'connected').length;
+  const relayTotal = relayMap.size || 0;
+  el.textContent = `🕸 ${roomLabel} · ${members}/${ROOM_CAPACITY} · ${relayConnected}/${relayTotal} relays`;
+  el.classList.toggle('active', members > 1 || relayConnected > 0);
+}
+
+function initPuduProBackground() {
+  if (IS_HOST_EMBED || puduProBackground.initialized || !window.THREE) return;
+  const canvas = document.getElementById('three-canvas');
+  if (!canvas) return;
+  puduProBackground.mobileLite = isMobile || window.innerWidth <= 900;
+  const quality = puduProBackground.mobileLite ? 0.78 : 1;
+  const orbCount = puduProBackground.mobileLite ? 24 : 56;
+  const ringCount = puduProBackground.mobileLite ? 4 : 7;
+  const starCount = puduProBackground.mobileLite ? 12 : 24;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, puduProBackground.mobileLite ? 1.2 : 1.5));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(64, window.innerWidth / Math.max(window.innerHeight, 1), 0.1, 600);
+  camera.position.set(0, 4.8, 18);
+  camera.lookAt(0, 4.5, 0);
+  puduProBackground.renderer = renderer;
+  puduProBackground.scene = scene;
+  puduProBackground.camera = camera;
+
+  const geometries = [
+    new THREE.SphereGeometry(0.22, 8, 8),
+    new THREE.OctahedronGeometry(0.28, 0),
+    new THREE.TetrahedronGeometry(0.24, 0),
+  ];
+  const colors = ['#00e5ff', '#b16bff', '#4ade80', '#ffd700', '#0072ff', '#ff84b7'];
+  for (let i = 0; i < orbCount; i++) {
+    const geometry = geometries[i % geometries.length];
+    const material = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(colors[i % colors.length]),
+      transparent: true,
+      opacity: 0.64,
+      wireframe: i % 4 === 0,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    const ox = (Math.random() - 0.5) * 44 * quality;
+    const oy = (Math.random() - 0.5) * 26 * quality;
+    const oz = (Math.random() - 0.5) * 28 * quality;
+    mesh.position.set(ox, oy, oz);
+    mesh.userData = {
+      ox, oy, oz,
+      phase: Math.random() * Math.PI * 2,
+      baseScale: 0.7 + Math.random() * 0.7,
+      rotX: (Math.random() - 0.5) * 0.04,
+      rotY: (Math.random() - 0.5) * 0.04,
+      rotZ: (Math.random() - 0.5) * 0.02,
+    };
+    scene.add(mesh);
+    puduProBackground.shapes.push(mesh);
+  }
+  for (let i = 0; i < ringCount; i++) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1, 0.05, 6, 42),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(colors[i % colors.length]),
+        transparent: true,
+        opacity: 0,
+      }),
+    );
+    ring.userData = {
+      phase: i * Math.PI * 2 / Math.max(ringCount, 1),
+      speed: 0.75 + Math.random() * 0.35,
+    };
+    ring.position.set((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 10, 0);
+    scene.add(ring);
+    puduProBackground.rings.push(ring);
+  }
+  const starGeo = new THREE.OctahedronGeometry(0.14, 0);
+  for (let i = 0; i < starCount; i++) {
+    const star = new THREE.Mesh(
+      starGeo,
+      new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.8 }),
+    );
+    const ox = (Math.random() - 0.5) * 38;
+    const oy = (Math.random() - 0.5) * 22;
+    const oz = (Math.random() - 0.5) * 20;
+    star.position.set(ox, oy, oz);
+    star.userData = { ox, oy, oz, phase: Math.random() * Math.PI * 2 };
+    scene.add(star);
+    puduProBackground.stars.push(star);
+  }
+
+  const resize = () => {
+    if (!puduProBackground.renderer || !puduProBackground.camera) return;
+    puduProBackground.renderer.setSize(window.innerWidth, window.innerHeight);
+    puduProBackground.camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+    puduProBackground.camera.updateProjectionMatrix();
+  };
+  resize();
+  window.addEventListener('resize', resize, { passive: true });
+
+  const animate = () => {
+    puduProBackground.frame = requestAnimationFrame(animate);
+    if (!puduProBackground.initialized || !puduProBackground.renderer || !puduProBackground.scene || !puduProBackground.camera) return;
+    const tx = puduPresence.tiltX || 0;
+    const ty = puduPresence.tiltY || 0;
+    const now = performance.now() * 0.001;
+    puduProBackground.camera.position.x += (((tx * 14)) - puduProBackground.camera.position.x) * 0.05;
+    puduProBackground.camera.position.y += ((4.8 - ty * 10) - puduProBackground.camera.position.y) * 0.05;
+    puduProBackground.camera.position.z += ((18 - Math.abs(tx) * 2.2) - puduProBackground.camera.position.z) * 0.03;
+    puduProBackground.camera.lookAt(tx * 2.4, 4.2 - ty * 1.3, 0);
+
+    for (const shape of puduProBackground.shapes) {
+      const data = shape.userData;
+      shape.position.x = data.ox + Math.sin(now * 0.45 + data.phase) * 1.6 + tx * 3.4;
+      shape.position.y = data.oy + Math.cos(now * 0.38 + data.phase) * 1.2 - ty * 2.1;
+      shape.position.z = data.oz + Math.sin(now * 0.22 + data.phase) * 0.6;
+      const scale = data.baseScale * (0.82 + 0.18 * Math.sin(now * 1.8 + data.phase));
+      shape.scale.setScalar(scale);
+      shape.rotation.x += data.rotX + ty * 0.008;
+      shape.rotation.y += data.rotY + tx * 0.01;
+      shape.rotation.z += data.rotZ;
+      shape.material.opacity = 0.32 + 0.26 * Math.abs(Math.sin(now * 1.4 + data.phase));
+    }
+    for (const ring of puduProBackground.rings) {
+      const phase = ring.userData.phase + now * ring.userData.speed;
+      const scale = 1.4 + 2.3 * Math.abs(Math.sin(phase));
+      ring.scale.setScalar(scale);
+      ring.material.opacity = 0.24 * Math.abs(Math.sin(phase));
+      ring.rotation.x += 0.012;
+      ring.rotation.z += 0.009;
+    }
+    for (const star of puduProBackground.stars) {
+      const phase = now * 3 + star.userData.phase;
+      star.position.x = star.userData.ox + tx * 1.8;
+      star.position.y = star.userData.oy - ty * 1.4;
+      star.material.opacity = 0.38 + 0.5 * Math.abs(Math.sin(phase));
+      star.rotation.y += 0.04;
+      star.rotation.z += 0.03;
+    }
+    puduProBackground.renderer.render(puduProBackground.scene, puduProBackground.camera);
+  };
+
+  puduProBackground.initialized = true;
+  animate();
+}
+
+function initPuduSpeechCloud3D() {
+  if (IS_HOST_EMBED || puduSpeechCloud3D.initialized || !window.THREE) return;
+  const canvas = document.getElementById('text3d-canvas');
+  if (!canvas) return;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.1 : 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, window.innerWidth / Math.max(window.innerHeight, 1), 0.1, 200);
+  camera.position.set(0, 0, 12);
+  scene.add(new THREE.DirectionalLight(0xffffff, 2.2));
+  const rim = new THREE.PointLight(0x00ffff, 1.8, 30);
+  rim.position.set(-5, 3, 3);
+  scene.add(rim);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+  puduSpeechCloud3D.renderer = renderer;
+  puduSpeechCloud3D.scene = scene;
+  puduSpeechCloud3D.camera = camera;
+
+  const resize = () => {
+    if (!puduSpeechCloud3D.renderer || !puduSpeechCloud3D.camera) return;
+    puduSpeechCloud3D.renderer.setSize(window.innerWidth, window.innerHeight);
+    puduSpeechCloud3D.camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+    puduSpeechCloud3D.camera.updateProjectionMatrix();
+  };
+  window.addEventListener('resize', resize, { passive: true });
+
+  const animate = () => {
+    puduSpeechCloud3D.frame = requestAnimationFrame(animate);
+    if (!puduSpeechCloud3D.initialized || !puduSpeechCloud3D.renderer || !puduSpeechCloud3D.scene || !puduSpeechCloud3D.camera) return;
+    const tx = puduPresence.tiltX || 0;
+    const ty = puduPresence.tiltY || 0;
+    puduSpeechCloud3D.camera.position.x += ((tx * 0.16) - puduSpeechCloud3D.camera.position.x) * 0.06;
+    puduSpeechCloud3D.camera.position.y += ((-ty * 0.11) - puduSpeechCloud3D.camera.position.y) * 0.06;
+    puduSpeechCloud3D.camera.rotation.z += ((-tx * 0.014) - puduSpeechCloud3D.camera.rotation.z) * 0.05;
+    puduSpeechCloud3D.camera.lookAt(puduSpeechCloud3D.camera.position.x * 0.1, puduSpeechCloud3D.camera.position.y * 0.1, 0);
+
+    for (let i = puduSpeechCloud3D.groups.length - 1; i >= 0; i--) {
+      const entry = puduSpeechCloud3D.groups[i];
+      entry.age += 0.016;
+      let alive = false;
+      for (const mesh of entry.group.children) {
+        const data = mesh.userData;
+        if (data.life <= 0) continue;
+        alive = true;
+        mesh.position.x += data.vx + tx * data.gyroMultX * 0.006;
+        mesh.position.y += data.vy - ty * data.gyroMultY * 0.005;
+        mesh.position.z += data.vz + Math.sin(entry.age * 1.8 + data.phase) * 0.003;
+        mesh.rotation.x += data.rx + ty * 0.004;
+        mesh.rotation.y += data.ry + tx * 0.005;
+        mesh.rotation.z += Math.sin((data.phase += 0.055)) * 0.004;
+        data.life -= data.decay;
+        const opacity = Math.max(0, data.life);
+        mesh.material.opacity = opacity * 0.92;
+        mesh.scale.setScalar(0.45 + opacity * 0.72);
+      }
+      if (!alive) {
+        puduSpeechCloud3D.scene.remove(entry.group);
+        puduSpeechCloud3D.groups.splice(i, 1);
+      }
+    }
+    puduSpeechCloud3D.renderer.render(puduSpeechCloud3D.scene, puduSpeechCloud3D.camera);
+  };
+
+  puduSpeechCloud3D.initialized = true;
+  animate();
+}
+
+function getPuduSpeechCharWidth(char) {
+  if ('ilI1|'.includes(char)) return 0.28;
+  if ('mwMW'.includes(char)) return 0.55;
+  if (char === ' ') return 0.22;
+  return 0.38;
+}
+
+function spawnPuduSpeechCloud(text) {
+  const clean = buildPuduExcerpt(text, 52);
+  if (!clean || !window.THREE || IS_HOST_EMBED) return;
+  initPuduSpeechCloud3D();
+  if (!puduSpeechCloud3D.initialized) return;
+  const group = new THREE.Group();
+  const hue = 0.55 + Math.random() * 0.08;
+  const depth = 0.22;
+  const letterH = 0.52;
+  const startX = 1.1;
+  const startY = 0.8 + Math.random() * 0.6;
+  let cursorX = startX;
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+    const width = getPuduSpeechCharWidth(ch);
+    if (ch === ' ') {
+      cursorX += width + 0.07;
+      continue;
+    }
+    const geo = new THREE.BoxGeometry(width * 0.9, letterH, depth);
+    const mat = new THREE.MeshPhongMaterial({
+      color: new THREE.Color().setHSL(hue + (i / Math.max(clean.length, 1)) * 0.06, 0.9, 0.56),
+      emissive: new THREE.Color().setHSL(hue, 0.8, 0.12),
+      shininess: 110,
+      transparent: true,
+      opacity: 0.92,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(
+      cursorX + width * 0.5,
+      startY + Math.sin(i * 0.5 + Math.random()) * 0.12,
+      (Math.random() - 0.5) * 0.3,
+    );
+    mesh.rotation.set(
+      (Math.random() - 0.5) * 0.06,
+      (Math.random() - 0.5) * 0.1,
+      (Math.random() - 0.5) * 0.08,
+    );
+    mesh.userData = {
+      vx: 0.018 + Math.random() * 0.01,
+      vy: 0.02 + Math.random() * 0.012,
+      vz: (Math.random() - 0.5) * 0.006,
+      rx: (Math.random() - 0.5) * 0.022,
+      ry: (Math.random() - 0.5) * 0.025,
+      life: 1,
+      decay: 0.007 + Math.random() * 0.004,
+      gyroMultX: 0.7 + Math.random() * 0.5,
+      gyroMultY: 0.6 + Math.random() * 0.4,
+      phase: Math.random() * Math.PI * 2,
+    };
+    group.add(mesh);
+    cursorX += width + 0.07;
+  }
+  puduSpeechCloud3D.scene.add(group);
+  puduSpeechCloud3D.groups.push({ group, age: 0 });
+  while (puduSpeechCloud3D.groups.length > 8) {
+    const old = puduSpeechCloud3D.groups.shift();
+    puduSpeechCloud3D.scene.remove(old.group);
+  }
+}
+
+function initPuduProShell() {
+  document.body.classList.add('pudu-pro-shell');
+  const bg = document.getElementById('bg-img');
+  if (bg && !bg.dataset.ready) {
+    bg.style.backgroundImage = `linear-gradient(rgba(5, 8, 20, 0.18), rgba(5, 8, 20, 0.52)), url('${PUDU_PRO_BG_IMAGE}')`;
+    bg.dataset.ready = 'true';
+  }
+  updateMeshIndicator();
+  setTimeout(() => {
+    initPuduProBackground();
+    initPuduSpeechCloud3D();
+  }, 120);
 }
 
 // ── DISTRIBUTED INFERENCE STATE ─────────────────────────────────────────
@@ -7311,6 +8102,7 @@ function updateRelayUI() {
     hStatus.textContent = `${prefix} · ${ok}/${Math.max(total, 1)} relays`;
     hStatus.classList.toggle('offline', ok === 0);
   }
+  updateMeshIndicator();
   postHostEmbedStatus('relay-ui');
 }
 function updateScoreUI(score, avgRTT) {
@@ -7726,6 +8518,7 @@ async function boot() {
   initPuduPresence();
   setupNicknameUI();
   setupModals();
+  initPuduProShell();
   document.getElementById('petals-activate-btn').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
   document.getElementById('petals-fab').addEventListener('click', () => petalsActivate().catch(err => console.warn('[Petals] activation failed:', err.message)));
   connectToRelays(); updateRelayUI(); updateTierUI(); updateHiveUI(); updateRoomMembersUI();
