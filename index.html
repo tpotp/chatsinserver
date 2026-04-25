@@ -4717,7 +4717,9 @@ async function runPetalsInference(userMessage, options = {}) {
     }
   }
 
-  const hasLocalLayers = !!petalsActive && petalsMyLayers.length > 0;
+  const reportedCollective = getReportedCollectiveState();
+  const roomUsesSimulatedCollective = !!reportedCollective.simulated && !shouldServeSimulatedCollective();
+  const hasLocalLayers = !roomUsesSimulatedCollective && !!petalsActive && petalsMyLayers.length > 0;
   let hasReachablePeer = false;
   let uplinkCandidateId = null;
   for (const [pid] of petalsReadyPeers) {
@@ -6361,7 +6363,7 @@ function publishPresence() {
     collectiveStageId: collectiveState.activeStage?.id || null,
     collectiveStageLabel: collectiveState.activeStage?.label || null,
     collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
-    collectiveSimulated: false,
+    collectiveSimulated: !!hiveSimulation.active,
     hostEmbed: IS_HOST_EMBED,
     // Flag so peers know this is a real node, not a simulator virtual peer
     isSimNode: false,
@@ -6700,7 +6702,7 @@ function setupDC(dc, remoteId, myVirtualId = null) {
       collectiveStageId: collectiveState.activeStage?.id || null,
       collectiveStageLabel: collectiveState.activeStage?.label || null,
       collectiveModelLabel: collectiveState.activeStage?.modelLabel || null,
-      collectiveSimulated: false,
+      collectiveSimulated: !!hiveSimulation.active,
       hostEmbed: IS_HOST_EMBED,
     }));
       if (petalsActive) {
