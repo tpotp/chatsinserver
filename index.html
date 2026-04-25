@@ -1774,6 +1774,318 @@ body.pudu-pro-shell {
     padding: 7px 10px;
   }
 }
+
+/* ── FAITHFUL PUDU CHAT v12 PUBLIC SURFACE ────────────────────────────── */
+body.pudu-pro-shell:not(.host-embed) {
+  overflow: hidden;
+}
+body.pudu-pro-shell:not(.host-embed) #status-bar,
+body.pudu-pro-shell:not(.host-embed) #sidebar,
+body.pudu-pro-shell:not(.host-embed) #mobile-pudu-panel {
+  display: none !important;
+}
+body.pudu-pro-shell:not(.host-embed) #app {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+}
+body.pudu-pro-shell:not(.host-embed) #main {
+  position: absolute;
+  inset: 0 0 0 var(--sidebar-w, 280px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+body.pudu-pro-shell:not(.host-embed) #room-bar {
+  position: relative;
+  z-index: 20;
+  background: rgba(10, 14, 25, 0.95);
+  border-bottom: 1px solid transparent;
+  background-clip: padding-box;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  backdrop-filter: blur(28px);
+  box-shadow: 0 2px 20px rgba(0, 229, 255, 0.10);
+  transform: translate3d(calc(var(--pudu-chat-drift-x, 0px) * 0.4), calc(var(--pudu-chat-drift-y, 0px) * 0.35), 0);
+}
+body.pudu-pro-shell:not(.host-embed) #room-bar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary), var(--peer-online));
+  opacity: .82;
+}
+body.pudu-pro-shell:not(.host-embed) #rooms-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--sidebar-w, 280px);
+  background: rgba(10, 14, 25, 0.95);
+  border-right: 1px solid rgba(0, 229, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 25;
+  transform: none;
+  backdrop-filter: blur(28px);
+}
+body.pudu-pro-shell:not(.host-embed) .sidebar-header {
+  padding: 16px 16px 10px;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.10);
+}
+body.pudu-pro-shell:not(.host-embed) .sidebar-title {
+  font-family: var(--font-title);
+  font-size: 18px;
+  letter-spacing: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+body.pudu-pro-shell:not(.host-embed) .sidebar-subtitle {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+body.pudu-pro-shell:not(.host-embed) .sidebar-rooms {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body.pudu-pro-shell:not(.host-embed) .sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid rgba(0, 229, 255, 0.10);
+  flex-shrink: 0;
+}
+body.pudu-pro-shell:not(.host-embed) #sidebar-toggle {
+  position: fixed;
+  top: 12px;
+  left: 10px;
+  z-index: 32;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.15);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  color: #fff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  font-family: var(--font-title);
+  letter-spacing: 1px;
+  backdrop-filter: blur(10px);
+}
+body.pudu-pro-shell:not(.host-embed) #messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+  transform: translate3d(var(--pudu-chat-drift-x, 0px), var(--pudu-chat-drift-y, 0px), 0);
+}
+body.pudu-pro-shell:not(.host-embed) #input-area {
+  position: relative;
+  z-index: 20;
+  background: rgba(10, 14, 25, 0.95);
+  border-top: 1px solid rgba(0, 229, 255, 0.2);
+  padding: 14px 18px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  backdrop-filter: blur(28px);
+  flex-shrink: 0;
+  transform: translate3d(calc(var(--pudu-chat-drift-x, 0px) * 0.35), calc(var(--pudu-chat-drift-y, 0px) * 0.25), 0);
+}
+body.pudu-pro-shell:not(.host-embed) #input-area::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.5), transparent);
+}
+body.pudu-pro-shell:not(.host-embed) #chat-input {
+  flex: 1;
+  background: rgba(0, 229, 255, 0.05);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 16px;
+  padding: 14px 20px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: .3px;
+  resize: none;
+  max-height: 100px;
+}
+body.pudu-pro-shell:not(.host-embed) #chat-input:focus {
+  border-color: var(--accent-primary);
+  background: rgba(0, 229, 255, 0.10);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+}
+body.pudu-pro-shell:not(.host-embed) #chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+body.pudu-pro-shell:not(.host-embed) #send-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0072ff 0%, #00e5ff 100%);
+  border: none;
+  box-shadow: 0 4px 15px rgba(0, 229, 255, 0.3);
+}
+body.pudu-pro-shell:not(.host-embed) #send-btn:hover {
+  box-shadow: 0 6px 25px rgba(0, 229, 255, 0.5);
+  transform: translateY(-2px);
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row {
+  display: flex;
+  flex-direction: column;
+  max-width: 75%;
+  animation: bubbleIn .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.me {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.other {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .msg-avatar,
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .msg-header {
+  display: none !important;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .msg-sender {
+  font-family: var(--font-title);
+  font-size: clamp(12px, 1.2vw, 14px);
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
+  padding: 0 6px;
+  text-transform: uppercase;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.other .msg-sender {
+  color: var(--accent-primary);
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.me .msg-sender {
+  color: rgba(255, 255, 255, 0.6);
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .msg-content,
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .typing-indicator {
+  padding: clamp(12px, 1.5vw, 16px) clamp(16px, 2vw, 22px);
+  border-radius: 18px;
+  font-size: clamp(16px, 1.8vw, 18px);
+  line-height: 1.5;
+  word-break: break-word;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.me .msg-content {
+  background: linear-gradient(135deg, #0072ff 0%, #00e5ff 100%);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 2px 4px 0 rgba(0, 0, 0, 0.4), 0 4px 15px rgba(0, 229, 255, 0.3);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.other .msg-content,
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .typing-indicator {
+  background: rgba(20, 24, 40, 0.95);
+  color: #e2e8f0;
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(177, 107, 255, 0.5);
+  box-shadow: 2px 4px 0 rgba(0, 0, 0, 0.4), 0 0 20px rgba(177, 107, 255, 0.15);
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row .msg-meta {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.42);
+  padding: 0 6px;
+  margin-top: 2px;
+  letter-spacing: 1px;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .fed-pill,
+body.pudu-pro-shell:not(.host-embed) #messages .moe-pill,
+body.pudu-pro-shell:not(.host-embed) #messages .pipeline-pill {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.me .fed-pill,
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.me .moe-pill,
+body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row.me .pipeline-pill {
+  align-self: flex-end;
+}
+body.pudu-pro-shell:not(.host-embed) #pudu3d-bubble {
+  width: min(88vw, 560px);
+  bottom: 3.5vh;
+  padding: 24px 26px 20px;
+  border-radius: 28px;
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.6), 0 0 24px rgba(0, 229, 255, 0.16);
+}
+body.pudu-pro-shell:not(.host-embed) #pudu3d-bubble::before {
+  left: 42%;
+}
+body.pudu-pro-shell:not(.host-embed) #pudu3d-caption {
+  font-size: clamp(18px, 4vw, 30px);
+  line-height: 1.34;
+}
+@media (max-width: 600px) {
+  body.pudu-pro-shell:not(.host-embed) #rooms-sidebar {
+    width: min(240px, calc(100vw - 24px));
+    transform: translateX(-100%);
+  }
+  body.pudu-pro-shell:not(.host-embed) #rooms-sidebar.open {
+    transform: translateX(0);
+  }
+  body.pudu-pro-shell:not(.host-embed) #main {
+    inset: 0;
+  }
+  body.pudu-pro-shell:not(.host-embed) #room-bar {
+    padding: 12px 16px 12px 68px;
+    gap: 10px;
+  }
+  body.pudu-pro-shell:not(.host-embed) #sidebar-toggle {
+    display: inline-flex;
+  }
+  body.pudu-pro-shell:not(.host-embed) #messages {
+    padding: 14px 16px 10px;
+  }
+  body.pudu-pro-shell:not(.host-embed) #messages .message.msg-row {
+    max-width: 86%;
+  }
+  body.pudu-pro-shell:not(.host-embed) #pudu3d-bubble {
+    width: min(90vw, 560px);
+    bottom: 2.8vh;
+    padding: 20px 20px 16px;
+  }
+}
 </style>
 </head>
 <body>
@@ -2047,7 +2359,7 @@ body.pudu-pro-shell {
     <div id="messages"></div>
     <div id="input-area">
       <div id="input-row">
-        <textarea id="chat-input" rows="1" placeholder="Ask the Hive Mind…" autofocus></textarea>
+        <textarea id="chat-input" rows="1" placeholder="escribe algo, habitante del bosque..." autofocus></textarea>
         <button id="send-btn" title="Send">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -3146,6 +3458,169 @@ function buildPuduExcerpt(text, maxLen = 110) {
   return firstSentence.length > maxLen ? `${firstSentence.slice(0, maxLen - 1).trim()}…` : firstSentence;
 }
 
+const PUDU_GLB_URL = 'https://chatp2p-bice.vercel.app/objetos3d/pudu.glb';
+let puduFxAudioCtx = null;
+let puduFxAudioReady = false;
+let puduSoftMotionAttempted = false;
+
+function getPuduAudioCtx() {
+  if (!puduFxAudioCtx) puduFxAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (puduFxAudioCtx.state === 'suspended') puduFxAudioCtx.resume().catch(() => {});
+  return puduFxAudioCtx;
+}
+
+function unlockPuduFxAudio() {
+  if (puduFxAudioReady) return;
+  try {
+    const ac = getPuduAudioCtx();
+    const buf = ac.createBuffer(1, 1, 22050);
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    src.connect(ac.destination);
+    src.start(0);
+    puduFxAudioReady = true;
+  } catch (error) {}
+}
+
+function playPuduTone(freq, dur, type = 'triangle', vol = 0.18, delay = 0, portamento = null) {
+  try {
+    const ac = getPuduAudioCtx();
+    const t = ac.currentTime + delay;
+    const osc = ac.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (portamento) osc.frequency.exponentialRampToValueAtTime(portamento, t + dur * 0.7);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(vol, t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  } catch (error) {}
+}
+
+function playPuduMeow(pitch = 1.0, style = 'normal') {
+  try {
+    const ac = getPuduAudioCtx();
+    const master = ac.createGain();
+    master.gain.setValueAtTime(0, ac.currentTime);
+    master.gain.linearRampToValueAtTime(0.22, ac.currentTime + 0.03);
+    master.connect(ac.destination);
+    const carrier = ac.createOscillator();
+    carrier.type = 'triangle';
+    const base = 200 * pitch;
+    if (style === 'normal') {
+      carrier.frequency.setValueAtTime(base, ac.currentTime);
+      carrier.frequency.linearRampToValueAtTime(base * 1.5, ac.currentTime + 0.12);
+      carrier.frequency.exponentialRampToValueAtTime(base * 0.7, ac.currentTime + 0.55);
+    } else {
+      carrier.frequency.setValueAtTime(base * 1.8, ac.currentTime);
+      carrier.frequency.exponentialRampToValueAtTime(base * 0.9, ac.currentTime + 0.18);
+    }
+    const harm = ac.createOscillator();
+    harm.type = 'sawtooth';
+    harm.frequency.value = base * 2.76;
+    const harmGain = ac.createGain();
+    harmGain.gain.setValueAtTime(0.08, ac.currentTime);
+    harmGain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.3);
+    harm.connect(harmGain);
+    harmGain.connect(master);
+    harm.start();
+    harm.stop(ac.currentTime + 0.35);
+    const env = ac.createGain();
+    env.gain.setValueAtTime(0, ac.currentTime);
+    env.gain.linearRampToValueAtTime(1, ac.currentTime + 0.04);
+    env.gain.setValueAtTime(0.7, ac.currentTime + 0.3);
+    env.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.7);
+    carrier.connect(env);
+    env.connect(master);
+    carrier.start();
+    carrier.stop(ac.currentTime + 0.75);
+    master.gain.setValueAtTime(master.gain.value, ac.currentTime + 0.7);
+    master.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.8);
+  } catch (error) {}
+}
+
+function playPuduEntrySound() {
+  try {
+    [[82.4, 2.2], [110, 1.8], [164.8, 1.4], [220, 1.0], [329.6, 0.7]].forEach(([f, d], i) => {
+      playPuduTone(f, d, 'sawtooth', 0.16, i * 0.07);
+    });
+    setTimeout(() => playPuduMeow(0.8, 'normal'), 450);
+  } catch (error) {}
+}
+
+function spawnRipple(x, y) {
+  const ripple = document.createElement('div');
+  ripple.className = 'ripple';
+  ripple.style.left = `${x}px`;
+  ripple.style.top = `${y}px`;
+  document.body.appendChild(ripple);
+  setTimeout(() => ripple.remove(), 900);
+}
+
+function spawnStars(x, y) {
+  const emojis = ['✨', '✦', '💫', '⚡', '🔥', '🌟', '🦌', '🌿'];
+  for (let i = 0; i < 6; i++) {
+    const star = document.createElement('div');
+    star.className = 'star-particle';
+    star.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    star.style.left = `${x + (Math.random() - 0.5) * 80}px`;
+    star.style.top = `${y + (Math.random() - 0.5) * 45}px`;
+    star.style.fontSize = `${14 + Math.random() * 12}px`;
+    document.body.appendChild(star);
+    setTimeout(() => star.remove(), 900);
+  }
+}
+
+async function loadGLTFLoader() {
+  if (window.__PUDU_GLTFLoaderCls) return window.__PUDU_GLTFLoaderCls;
+  return new Promise(resolve => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.min.js';
+    script.onload = () => {
+      window.__PUDU_GLTFLoaderCls = (window.THREE && window.THREE.GLTFLoader) || null;
+      resolve(window.__PUDU_GLTFLoaderCls);
+    };
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+}
+
+function nextPuduNeonColor() {
+  const palette = [0x00e5ff, 0xb16bff, 0x4ade80, 0xffd700, 0x0072ff];
+  return palette[Math.floor(Math.random() * palette.length)];
+}
+
+function applyWireframeStyle(model) {
+  if (!model || !window.THREE) return;
+  const meshes = [];
+  model.traverse(child => {
+    if (child.isMesh && !child.userData?.isWireframe) meshes.push(child);
+  });
+  for (const mesh of meshes) {
+    const color = nextPuduNeonColor();
+    mesh.material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.15,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const wireMat = new THREE.MeshBasicMaterial({
+      color,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const wireMesh = new THREE.Mesh(mesh.geometry.clone(), wireMat);
+    wireMesh.userData = { isWireframe: true };
+    mesh.add(wireMesh);
+  }
+}
+
 function maybeSpeakPudu(text) {
   if (!puduPresence.voiceEnabled || !puduPresence.speechUnlocked || !('speechSynthesis' in window)) return;
   const spoken = buildPuduExcerpt(text, 160);
@@ -3255,6 +3730,30 @@ async function togglePuduMotion() {
   puduPresence.motionEnabled = true;
   updatePuduControlButtons();
   setPuduWhisper('Movimiento activado: el chat respira contigo.', 2400);
+}
+
+async function softlyEnablePuduMotion() {
+  if (puduPresence.motionEnabled || puduSoftMotionAttempted) return;
+  puduSoftMotionAttempted = true;
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const orientationPermission = await DeviceOrientationEvent.requestPermission();
+      if (orientationPermission !== 'granted') return;
+    }
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      const motionPermission = await DeviceMotionEvent.requestPermission();
+      if (motionPermission !== 'granted') return;
+    }
+  } catch (error) {
+    return;
+  }
+  if (!puduPresence.sensorBound) {
+    window.addEventListener('deviceorientation', handlePuduOrientation, { passive: true });
+    window.addEventListener('devicemotion', handlePuduMotion, { passive: true });
+    puduPresence.sensorBound = true;
+  }
+  puduPresence.motionEnabled = true;
+  updatePuduControlButtons();
 }
 
 function togglePuduVoice() {
@@ -3395,6 +3894,9 @@ function initPuduPresence() {
   for (const avatar of document.querySelectorAll('.pudu-avatar')) bindPuduAvatar(avatar);
   for (const btn of document.querySelectorAll('.pudu-motion-btn')) btn.addEventListener('click', togglePuduMotion);
   for (const btn of document.querySelectorAll('.pudu-voice-btn')) btn.addEventListener('click', togglePuduVoice);
+  document.addEventListener('touchstart', () => { unlockPuduFxAudio(); softlyEnablePuduMotion(); }, { once: true, passive: true });
+  document.addEventListener('mousedown', () => { unlockPuduFxAudio(); softlyEnablePuduMotion(); }, { once: true });
+  document.addEventListener('keydown', () => { unlockPuduFxAudio(); softlyEnablePuduMotion(); }, { once: true });
   window.addEventListener('mousemove', (event) => {
     if (puduPresence.motionEnabled || window.innerWidth <= 768) return;
     const nx = (event.clientX / Math.max(window.innerWidth, 1)) - 0.5;
@@ -3461,6 +3963,10 @@ function getPuduPendingText(state = getPuduStageState()) {
 
 function shouldShowPuduTechnicalUI() {
   return !!isSimulateMode || !!IS_HOST_EMBED || new URL(location.href).searchParams.get('puduDebug') === '1';
+}
+
+function shouldRenderAmbientChatNarration() {
+  return shouldShowPuduTechnicalUI() || !document.body.classList.contains('pudu-pro-shell');
 }
 
 function toPuduHandle(name = '') {
@@ -3560,6 +4066,11 @@ function buildPuduPromptMessages(prompt = '') {
 }
 
 function showPuduInvocationOverlay(payload = {}) {
+  const isIntermediateNotice = !payload.text && !!(payload.notice || payload.caption);
+  if (isIntermediateNotice && !shouldShowPuduTechnicalUI()) {
+    puduPresence.thinkingUntil = performance.now() + 1800;
+    return;
+  }
   initPuduSummonScene();
   const text = buildPuduExcerpt(payload.text || payload.caption || payload.notice || '', 320);
   if (text) setPuduWhisper(text, payload.text ? 6400 : 2800);
@@ -3568,9 +4079,12 @@ function showPuduInvocationOverlay(payload = {}) {
     else if (payload.notice) puduPresence.thinkingUntil = performance.now() + 2000;
     return;
   }
+  unlockPuduFxAudio();
   puduSummon3D.payload = payload;
   puduSummon3D.visible = true;
   puduSummon3D.petting = Math.max(0.05, puduSummon3D.petting);
+  puduSummon3D.entryMode = ['left', 'right', 'fall', 'spiral'][Math.floor(Math.random() * 4)];
+  puduSummon3D.entrySeed = Math.random() * Math.PI * 2;
   puduSummon3D.caption.textContent = payload.text || payload.notice || payload.caption || '🦌 El pudú se acerca entre la niebla.';
   const metaText = shouldShowPuduTechnicalUI()
     ? (payload.meta || [payload.stageLabel, payload.route].filter(Boolean).join(' · ') || 'Evento místico · colmena del bosque')
@@ -3583,8 +4097,14 @@ function showPuduInvocationOverlay(payload = {}) {
   puduSummon3D.canvas.style.pointerEvents = 'auto';
   puduSummon3D.shownAt = performance.now();
   puduSummon3D.hideAt = performance.now() + (payload.text ? 12000 : 3600);
+  puduSummon3D.lastFrameAt = 0;
   puduPresence.thinkingUntil = payload.text ? 0 : performance.now() + 1800;
   puduPresence.speakingUntil = payload.text ? performance.now() + Math.min(9600, 2200 + text.length * 28) : puduPresence.speakingUntil;
+  const fxX = window.innerWidth * 0.5;
+  const fxY = window.innerHeight * 0.68;
+  spawnRipple(fxX, fxY);
+  spawnStars(fxX, fxY);
+  playPuduEntrySound();
   if (payload.text) spawnPuduSpeechCloud(payload.text);
   if (payload.text) maybeSpeakPudu(payload.text);
   if (!puduSummon3D.raf) puduSummon3D.raf = requestAnimationFrame(animatePuduSummonScene);
@@ -3684,6 +4204,7 @@ const puduSummon3D = {
   scene: null,
   camera: null,
   model: null,
+  mixer: null,
   muzzle: null,
   eyes: [],
   ears: [],
@@ -3699,6 +4220,12 @@ const puduSummon3D = {
   dragging: false,
   pointerX: 0,
   pointerY: 0,
+  glbLoading: false,
+  glbReady: false,
+  usingGLB: false,
+  lastFrameAt: 0,
+  entryMode: 'left',
+  entrySeed: 0,
 };
 
 function buildPuduSummonModel() {
@@ -3798,6 +4325,50 @@ function buildPuduSummonModel() {
   return root;
 }
 
+async function warmPuduSummonGLB() {
+  if (!puduSummon3D.scene || !window.THREE || puduSummon3D.glbLoading || puduSummon3D.glbReady) return;
+  puduSummon3D.glbLoading = true;
+  try {
+    const GLTFLoader = await loadGLTFLoader();
+    if (!GLTFLoader) return;
+    new GLTFLoader().load(PUDU_GLB_URL, (gltf) => {
+      try {
+        const glbScene = gltf.scene;
+        const box = new THREE.Box3().setFromObject(glbScene);
+        const size = box.getSize(new THREE.Vector3());
+        const scale = 2.6 / Math.max(size.x || 1, size.y || 1, size.z || 1);
+        glbScene.scale.setScalar(scale);
+        glbScene.position.sub(box.getCenter(new THREE.Vector3()).multiplyScalar(scale));
+        glbScene.position.y = -0.18;
+        glbScene._baseY = -0.18;
+        applyWireframeStyle(glbScene);
+        if (puduSummon3D.model && puduSummon3D.scene) puduSummon3D.scene.remove(puduSummon3D.model);
+        puduSummon3D.model = glbScene;
+        puduSummon3D.muzzle = null;
+        puduSummon3D.eyes = [];
+        puduSummon3D.ears = [];
+        puduSummon3D.paws = [];
+        puduSummon3D.tail = null;
+        puduSummon3D.scene.add(glbScene);
+        if (gltf.animations && gltf.animations.length) {
+          puduSummon3D.mixer = new THREE.AnimationMixer(glbScene);
+          gltf.animations.forEach(clip => puduSummon3D.mixer.clipAction(clip).play());
+        }
+        puduSummon3D.usingGLB = true;
+        puduSummon3D.glbReady = true;
+      } catch (error) {
+        console.warn('[Pudu summon GLB]', error.message);
+      } finally {
+        puduSummon3D.glbLoading = false;
+      }
+    }, undefined, () => {
+      puduSummon3D.glbLoading = false;
+    });
+  } catch (error) {
+    puduSummon3D.glbLoading = false;
+  }
+}
+
 function initPuduSummonScene() {
   if (puduSummon3D.initialized || !window.THREE) return;
   const overlay = document.getElementById('pudu3d-overlay');
@@ -3824,6 +4395,7 @@ function initPuduSummonScene() {
   puduSummon3D.scene.add(fillLight);
   puduSummon3D.model = buildPuduSummonModel();
   if (puduSummon3D.model) puduSummon3D.scene.add(puduSummon3D.model);
+  warmPuduSummonGLB();
   const resize = () => {
     if (!puduSummon3D.renderer || !puduSummon3D.camera) return;
     puduSummon3D.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -3832,9 +4404,14 @@ function initPuduSummonScene() {
   };
   window.addEventListener('resize', resize, { passive: true });
   const touchPudu = (clientX, clientY) => {
+    unlockPuduFxAudio();
+    softlyEnablePuduMotion();
     puduSummon3D.pointerX = clientX;
     puduSummon3D.pointerY = clientY;
     puduSummon3D.petting = Math.min(1, puduSummon3D.petting + 0.22);
+    playPuduMeow(0.92 + Math.random() * 0.28, 'chirp');
+    spawnRipple(clientX, clientY);
+    spawnStars(clientX, clientY);
     if (navigator.vibrate) navigator.vibrate(10);
     setPuduWhisper('El pudú siente tus caricias y responde desde la colmena.', 1800);
   };
@@ -3852,9 +4429,16 @@ function initPuduSummonScene() {
   canvas.addEventListener('pointercancel', stopDragging);
   canvas.addEventListener('touchstart', (event) => {
     if (!puduSummon3D.visible || !event.touches.length) return;
+    puduSummon3D.dragging = true;
     const touch = event.touches[0];
     touchPudu(touch.clientX, touch.clientY);
   }, { passive: true });
+  canvas.addEventListener('touchmove', (event) => {
+    if (!puduSummon3D.visible || !puduSummon3D.dragging || !event.touches.length) return;
+    const touch = event.touches[0];
+    touchPudu(touch.clientX, touch.clientY);
+  }, { passive: true });
+  canvas.addEventListener('touchend', () => { puduSummon3D.dragging = false; }, { passive: true });
   puduSummon3D.initialized = true;
 }
 
@@ -3874,6 +4458,8 @@ function animatePuduSummonScene(now) {
     animatePuduSummonScene(now);
     return;
   }
+  const delta = puduSummon3D.lastFrameAt ? Math.min(0.05, (now - puduSummon3D.lastFrameAt) / 1000) : 0.016;
+  puduSummon3D.lastFrameAt = now;
   const t = (now - puduSummon3D.shownAt) / 1000;
   const intro = Math.min(1, t / 0.85);
   const easedIntro = 1 - Math.pow(1 - intro, 3);
@@ -3882,16 +4468,33 @@ function animatePuduSummonScene(now) {
   const bob = Math.sin(now / 420) * 0.08;
   const tiltX = puduPresence.tiltX * 0.35;
   const tiltY = puduPresence.tiltY * 0.28;
+  if (puduSummon3D.mixer) puduSummon3D.mixer.update(delta);
   puduSummon3D.petting *= 0.93;
+  const pointerInfluenceX = Number.isFinite(puduSummon3D.pointerX) ? (((puduSummon3D.pointerX / Math.max(window.innerWidth, 1)) - 0.5) * 0.42) : 0;
+  const pointerInfluenceY = Number.isFinite(puduSummon3D.pointerY) ? (((puduSummon3D.pointerY / Math.max(window.innerHeight, 1)) - 0.5) * -0.26) : 0;
+  let baseX = 0;
+  let baseY = -0.18;
+  if (puduSummon3D.entryMode === 'right') {
+    baseX = 3.6 - easedIntro * 3.6;
+  } else if (puduSummon3D.entryMode === 'fall') {
+    baseY = 1.9 - easedIntro * 2.08 + Math.sin(intro * Math.PI) * 0.18;
+    baseX = Math.sin(now / 540 + puduSummon3D.entrySeed) * 0.12;
+  } else if (puduSummon3D.entryMode === 'spiral') {
+    const spiral = (1 - intro) * 2.4;
+    baseX = -2.4 + easedIntro * 2.4 + Math.cos(now / 260 + puduSummon3D.entrySeed) * spiral * 0.5;
+    baseY = -0.12 + Math.sin(now / 240 + puduSummon3D.entrySeed) * spiral * 0.22;
+  } else {
+    baseX = -3.6 + easedIntro * 3.6;
+  }
 
-  puduSummon3D.model.position.x = -3.6 + easedIntro * 3.6 + Math.sin(now / 930) * 0.08;
-  puduSummon3D.model.position.y = -0.18 + bob + puduSummon3D.petting * 0.06;
-  puduSummon3D.model.rotation.y = 0.24 + tiltX * 0.8 + Math.sin(now / 1200) * 0.05;
-  puduSummon3D.model.rotation.z = tiltX * -0.16 + puduSummon3D.petting * 0.08;
-  puduSummon3D.model.rotation.x = tiltY * 0.12;
+  puduSummon3D.model.position.x = baseX + Math.sin(now / 930) * 0.08 + pointerInfluenceX * 0.55;
+  puduSummon3D.model.position.y = baseY + bob + puduSummon3D.petting * 0.06 + pointerInfluenceY * 0.32;
+  puduSummon3D.model.rotation.y = 0.24 + tiltX * 0.8 + Math.sin(now / 1200) * 0.05 + pointerInfluenceX * 0.32;
+  puduSummon3D.model.rotation.z = tiltX * -0.16 + puduSummon3D.petting * 0.08 - pointerInfluenceX * 0.22;
+  puduSummon3D.model.rotation.x = tiltY * 0.12 + pointerInfluenceY * -0.16;
   if (puduSummon3D.model.userData?.head) {
-    puduSummon3D.model.userData.head.rotation.y = tiltX * 0.5;
-    puduSummon3D.model.userData.head.rotation.x = tiltY * 0.28;
+    puduSummon3D.model.userData.head.rotation.y = tiltX * 0.5 + pointerInfluenceX * 0.42;
+    puduSummon3D.model.userData.head.rotation.x = tiltY * 0.28 + pointerInfluenceY * -0.28;
     const auraScale = 1.03 + (speaking ? 0.12 : 0.04) + puduSummon3D.petting * 0.08;
     puduSummon3D.model.userData.aura.scale.set(auraScale, auraScale * 0.82, auraScale);
     puduSummon3D.model.userData.aura.material.opacity = 0.16 + (speaking ? 0.12 : 0.04) + puduSummon3D.petting * 0.14;
@@ -3909,6 +4512,9 @@ function animatePuduSummonScene(now) {
     paw.rotation.x = Math.sin(now / 360 + index * 0.8) * (speaking ? 0.12 : 0.05);
   }
   if (puduSummon3D.tail) puduSummon3D.tail.rotation.y = Math.sin(now / 260) * (0.24 + puduSummon3D.petting * 0.18);
+  puduSummon3D.camera.position.x += ((tiltX * 0.9) + pointerInfluenceX * 0.8 - puduSummon3D.camera.position.x) * 0.06;
+  puduSummon3D.camera.position.y += ((0.55 - tiltY * 0.45) + pointerInfluenceY * 0.55 - puduSummon3D.camera.position.y) * 0.06;
+  puduSummon3D.camera.lookAt(pointerInfluenceX * 0.5, 0.16 + pointerInfluenceY * 0.3, 0);
   puduSummon3D.renderer.render(puduSummon3D.scene, puduSummon3D.camera);
   puduSummon3D.raf = requestAnimationFrame(animatePuduSummonScene);
 }
@@ -7920,7 +8526,7 @@ function addMessageToUI(role, content, streaming = false) {
   const msgs = document.getElementById('messages');
   const div = document.createElement('div');
   const isUser = role === 'user';
-  div.className = `message ${isUser ? 'user-msg' : 'assistant-msg'}`;
+  div.className = `message msg-row ${isUser ? 'me user-msg' : 'other assistant-msg'}`;
   const avClass = isUser ? 'user-av' : 'ai-av';
   const puduState = STRICT_PUDU_HIVE ? getPuduStageState() : null;
   const avText = isUser ? 'U' : (STRICT_PUDU_HIVE ? (puduState?.activeStage?.emoji || '🦌') : 'AI');
@@ -7929,9 +8535,15 @@ function addMessageToUI(role, content, streaming = false) {
     : (STRICT_PUDU_HIVE
       ? `${puduState?.activeStage?.label || 'Pudu del Bosque'}`
       : `AI · ${ROLE_LABELS[myRole] || myRole}`);
-  div.innerHTML = `<div class="msg-avatar ${avClass}">${avText}</div><div class="msg-body"><div class="msg-header">${headerTxt}</div>${streaming ? '' : `<div class="msg-content">${content || ''}</div>`}<div class="msg-meta"></div></div>`;
+  div.innerHTML = `
+    <div class="msg-avatar ${avClass}">${avText}</div>
+    <div class="msg-sender">${headerTxt}</div>
+    <div class="msg-body">
+      ${streaming ? '' : `<div class="msg-content msg-bubble">${content || ''}</div>`}
+      <div class="msg-meta"></div>
+    </div>`;
   if (streaming) {
-    div.querySelector('.msg-body').innerHTML = `<div class="msg-header">${headerTxt}</div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div><div class="msg-content"></div><div class="msg-meta"></div>`;
+    div.querySelector('.msg-body').innerHTML = `<div class="typing-indicator msg-bubble"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div><div class="msg-content"></div><div class="msg-meta"></div>`;
   }
   msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight; 
   if (!streaming && content) processRAGVector(content);
@@ -8016,7 +8628,9 @@ function setPuduChatAvailability(enabled, placeholder) {
   btn.dataset.puduReady = enabled ? 'true' : 'false';
   input.style.opacity = enabled ? '1' : '0.9';
   btn.style.opacity = enabled ? '1' : '0.9';
-  input.placeholder = placeholder;
+  input.placeholder = document.body.classList.contains('pudu-pro-shell') && enabled
+    ? 'escribe algo, habitante del bosque...'
+    : placeholder;
 }
 
 function updatePuduHiveUI() {
@@ -8067,7 +8681,7 @@ function updatePuduHiveUI() {
   if (state.ready) {
     setPuduChatAvailability(true, `Habla con ${stage.label} en #${roomName}…`);
   } else {
-    setPuduChatAvailability(false, 'Invoca a @pudu y la colmena respondera cuando termine de hilar la respuesta…');
+    setPuduChatAvailability(false, 'invoca a @pudu y espera su voz...');
   }
   syncPuduPresenceWithHive(state);
 }
@@ -8253,7 +8867,9 @@ function reconnectForNewRoom() {
   publishPresence();
   document.getElementById('messages').innerHTML = '';
   chatHistory.length = 0;
-  addMessageToUI('assistant', `🏠 Entraste a ${formatRoomLabel(roomName)}. Comparte el enlace para sumar mas pudúes.`);
+  if (shouldRenderAmbientChatNarration()) {
+    addMessageToUI('assistant', `🏠 Entraste a ${formatRoomLabel(roomName)}. Comparte el enlace para sumar mas pudúes.`);
+  }
   updatePeerListUI(); updateHiveUI(); updateRoomMembersUI();
 }
 
@@ -8622,7 +9238,9 @@ async function boot() {
     '',
     `💡 Comandos: /colmena [N] · /hss · /dsim`,
   ].filter(Boolean);
-  addMessageToUI('assistant', bootLines.join('\n'));
+  if (shouldRenderAmbientChatNarration()) {
+    addMessageToUI('assistant', bootLines.join('\n'));
+  }
 
   updateBenchmarkSidebar();
 
