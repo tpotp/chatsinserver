@@ -1222,19 +1222,12 @@ window.sendMessage=function(){
   const inp=document.getElementById('chat-input');let txt=inp.value.trim();if(!txt)return;
   txt=filtrarGarabatos(txt);const msgId=uid(),room=rooms.get(currentRoomId);if(!room)return;
   
-  const isPudubot = txt.toLowerCase().startsWith('@pudubot ');
-
   const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:pubKeyHex,ts:Date.now(),hops:0,payload:{text:txt,name:myName}};
   room.seenMsgIds.add(msgId);const sent=broadcastP2P(currentRoomId,msg);
   addMsgToVS(currentRoomId,msgId,myName,txt,true,Date.now());
   try{add3DText(txt,true);spawnStars(innerWidth-80,innerHeight-80);spawnRipple(innerWidth-80,innerHeight-80);playSendSound();}catch(e){}
   if(sent===0)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
   inp.value='';inp.style.height='auto';
-
-  if (isPudubot) {
-      const prompt = txt.trim().substring(9).trim();
-      sendPudubotRequest(prompt);
-  }
 };
 
 let myTypingTO=null,myTypingSent=false;
@@ -1247,7 +1240,15 @@ function setupInput(){
 let discoveryDone=false,discoveryTimer=null;
 function finishDiscoveryAndEnter(){
   if(discoveryDone)return;discoveryDone=true;clearTimeout(discoveryTimer);
-  const best=findBestRoom();if(best){currentRoomId=best;rooms.get(best).users.add(pubKeyHex);}else{const newId=createRoom();rooms.get(newId).users.add(pubKeyHex);currentRoomId=newId;}
+  const urlParams = new URLSearchParams(window.location.search);
+  const roomParam = urlParams.get('room');
+  if (roomParam) {
+    if(!rooms.has(roomParam)) rooms.set(roomParam,{roomId:roomParam,roomName:roomParam,users:new Set(),peers:new Map(),msgArchive:[],msgEls:{},seenMsgIds:new Set(),reactions:{},typingPeers:new Set(),typTO:null,vsOffset:0});
+    currentRoomId=roomParam;
+    rooms.get(roomParam).users.add(pubKeyHex);
+  } else {
+    const best=findBestRoom();if(best){currentRoomId=best;rooms.get(best).users.add(pubKeyHex);}else{const newId=createRoom();rooms.get(newId).users.add(pubKeyHex);currentRoomId=newId;}
+  }
   signAndPublish({type:'hello',roomId:currentRoomId,roomName:rooms.get(currentRoomId).roomName,from:pubKeyHex,name:myName,ts:Date.now()});enterChatScreen();
 }
 
@@ -2810,7 +2811,7 @@ function deactivateLiteMode() {
   if (btn) { btn.textContent = '⚡ LITE'; btn.style.color = 'rgba(0,229,255,0.8)'; btn.style.borderColor = 'rgba(0,229,255,0.4)'; }
   addSystemMsgVS(currentRoomId, '✨ Animaciones 3D reactivadas 🦌');
 }
-function toggleLiteMode() {
+window.toggleLiteMode = function() {
   if (liteMode) deactivateLiteMode(); else activateLiteMode(false);
 }
 // Auto-detección desactivada — el usuario elige el modo en la pantalla de entrada
@@ -3333,7 +3334,7 @@ const CircuitRelay = (() => {
 
 const HIVE_NAMESPACE = 'p2p-hive-public';
 const HIVE_TIMEOUT_MS = 45000;
-const TRIGGER_REGEX = /^@pudubot\b/i;
+const TRIGGER_REGEX = /^@pudu(?:bot)?\b/i;
 
 // peerId: primeros 12 chars de pubKeyHex, igual que index.html
 let peerId = null;
@@ -3554,10 +3555,24 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
       }
 
       if (!responseText) {
-        const wc = hiveWorkers.size;
-        responseText = wc === 0
-          ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app en tu computador para despertar la colmena* 🌿'
-          : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
+        if (typeof webLLMReady !== 'undefined' && webLLMReady && typeof webLLMEngine !== 'undefined' && webLLMEngine) {
+           _updateThinkMsg(roomId, thinkId, '🧠 Colmena no lista · el Pudú reflexiona localmente...');
+           try {
+             const localRes = await webLLMEngine.chat.completions.create({
+               messages: [ { role: 'system', content: systemPrompt }, { role: 'user', content: question } ],
+               max_tokens: 200, temperature: 0.7,
+             });
+             responseText = localRes.choices?.[0]?.message?.content || '...';
+             try{ window.pudu3dState='talking'; add3DText(responseText, false); playMsgReceive(); }catch(e){}
+           } catch(e) {
+             responseText = '❌ Error al usar cerebros locales: ' + e.message;
+           }
+        } else {
+           const wc = hiveWorkers.size;
+           responseText = wc === 0
+             ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app/sim.html en tu computador para despertar la colmena* 🌿'
+             : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
+        }
       }
 
       _updateThinkMsg(roomId, thinkId, responseText);
