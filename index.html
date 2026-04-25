@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>RosoCHACHAtoP2P-LLM — Distributed Hive Mind</title>
+<title>aRosoCHACHAtoP2P-LLM — Distributed Hive Mind</title>
 <meta name="description" content="Browser-based peer-to-peer distributed edge routing with 5-tier hardware classification. Zero-install, zero-server AI inference.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -276,9 +276,9 @@ body::before {
 .pudu-deer {
   position: absolute;
   left: 50%;
-  bottom: 10px;
-  width: 62px;
-  height: 62px;
+  bottom: 6px;
+  width: 70px;
+  height: 70px;
   transform:
     translateX(-50%)
     translateY(var(--pudu-breath-shift))
@@ -434,6 +434,19 @@ body::before {
 @keyframes puduSpark {
   from { opacity: 0.95; transform: translate(-50%, -50%) scale(0.25); }
   to { opacity: 0; transform: translate(-50%, -50%) scale(2.4); }
+}
+@keyframes puduFloat {
+  0%,100% { transform: translateX(-50%) translateY(0) rotate(-1deg); }
+  50%      { transform: translateX(-50%) translateY(-8px) rotate(1deg); }
+}
+/* Aplica la animación al pudu-deer dentro del avatar del sidebar */
+.pudu-avatar .pudu-deer {
+  animation: puduFloat 4s ease-in-out infinite;
+}
+/* Ring pulsante alrededor del avatar cuando está activo */
+@keyframes ringOut {
+  0%   { opacity: 0.8; transform: scale(0.6); }
+  100% { opacity: 0;   transform: scale(1.6); }
 }
 .pudu-stage-name { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: #d9ffe7; }
 .pudu-stage-model { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
@@ -738,52 +751,76 @@ body::before {
 .room-card:not(.active) .room-active-dot {
   background: rgba(255,255,255,0.16); box-shadow: none;
 }
+/* ══ PUDÚ 3D OVERLAY — estilo v12 completo ══ */
 #pudu3d-overlay {
   position: fixed;
-  left: 0; right: 0;
-  top: 0; bottom: 0;
-  z-index: 500; display: none;
+  inset: 0;
+  z-index: 500;
+  display: none;
   pointer-events: none;
+  overflow: hidden;
+}
+#pudu3d-overlay.active {
+  display: block;
 }
 #pudu3d-vignette {
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 50% 40%, rgba(0,255,180,0.04) 0%, rgba(0,0,0,0.55) 100%);
+  background: radial-gradient(ellipse at center, transparent 20%, rgba(5,8,20,0.70) 100%);
   opacity: 0;
-  transition: opacity 0.4s ease;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
 }
 #pudu3d-overlay.active #pudu3d-vignette { opacity: 1; }
 #pudu3d-canvas {
   position: absolute;
+  bottom: 0;
   left: 0;
-  top: 0;
-  /* NO CSS width/height — Three.js setSize() controls them via inline style
-     so the browser never rescales the canvas and causes blur */
+  width: 100% !important;
+  height: 100% !important;
   pointer-events: auto;
 }
-/* Caption appears below pudú, above the chat input area */
+/* Caption estilo v12 — texto arriba del pudú */
 #pudu3d-bubble {
   position: absolute;
+  bottom: 90px;
   left: 50%;
-  top: calc(65% - 2px);
-  transform: translateX(-50%) translateY(8px);
+  transform: translateX(-50%);
   width: min(90vw, 700px);
   padding: 12px 20px; border-radius: 16px;
-  border: 1px solid rgba(0,229,255,0.22);
+  border: 1px solid rgba(0,229,255,0.28);
   background: rgba(4, 10, 24, 0.82);
   backdrop-filter: blur(18px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.38);
-  opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.48), 0 0 24px rgba(0,229,255,0.10);
+  opacity: 0; transition: opacity 0.4s ease;
   pointer-events: none;
+  z-index: 10;
 }
 #pudu3d-overlay.active #pudu3d-bubble {
-  opacity: 1; transform: translateX(-50%) translateY(0);
+  opacity: 1;
 }
 #pudu3d-caption {
-  font-size: clamp(14px, 1.8vw, 22px); line-height: 1.45; font-weight: 700; color: #e8fff8;
-  text-shadow: 0 0 14px rgba(0,229,255,0.18);
+  font-family: 'Fredoka', 'Nunito', cursive;
+  font-size: clamp(16px, 3.5vw, 28px);
+  letter-spacing: 2px;
+  line-height: 1.3;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 20px #00e5ff, 0 0 40px rgba(177,107,255,0.6), 2px 2px 0 rgba(0,0,0,0.5);
+  text-transform: uppercase;
+  text-align: center;
 }
 #pudu3d-meta {
-  margin-top: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #66ccff;
+  margin-top: 6px; font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #66ccff; text-align: center;
+}
+/* Asegura que el input nunca quede bloqueado por el overlay del pudú */
+#input-area {
+  position: relative;
+  z-index: 600 !important;
+}
+@media (max-width: 600px) {
+  #pudu3d-bubble { bottom: 80px; padding: 10px 14px; }
+  #pudu3d-caption { font-size: clamp(14px, 5vw, 22px); }
 }
 
 /* ── Consensus Card ──────────────────────────────────────────── */
@@ -1441,22 +1478,24 @@ body:not(.debug-mode) .message.user-msg .msg-body {
 }
 
 /* Textura de bosque en el fondo (gradiente animado cuando no hay Three.js) */
-body:not(.debug-mode)::before {
-  content: '';
+/* ── Fondo bosque nativo estilo v12 ── */
+#bg-img {
   position: fixed;
   inset: 0;
   z-index: 0;
-  /* Foto real de bosque nativo chileno vía unsplash */
-  background-image: url('https://images.unsplash.com/photo-1448375240586-882707db888b?w=1600&q=80&auto=format&fit=crop');
-  background-size: cover;
-  background-position: center 30%;
-  filter: brightness(0.52) saturate(1.3);
-  animation: bgForestPulse 14s ease-in-out infinite alternate;
+  background: url('https://media-cldnry.s-nbcnews.com/image/upload/t_social_share_1024x768_scale,f_auto,q_auto:best/rockcms/2024-11/Pudu-Argentina-207469.jpg') center/cover no-repeat;
+  filter: blur(3px) saturate(1.4) brightness(0.65);
+  transform: scale(1.04);
 }
-@keyframes bgForestPulse {
-  0%  { filter: brightness(0.48) saturate(1.2); }
-  50% { filter: brightness(0.56) saturate(1.4); }
-  100%{ filter: brightness(0.50) saturate(1.3); }
+#bg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(to bottom, rgba(5,8,20,0.5) 0%, rgba(15,10,30,0.3) 40%, rgba(5,8,20,0.6) 100%);
+  pointer-events: none;
+}
+body:not(.debug-mode)::before {
+  content: none;
 }
 
 /* Pudú ambient — canvas fullscreen en el fondo */
@@ -1509,6 +1548,10 @@ body.debug-mode #pudu-whisper-float { display: none; }
 </style>
 </head>
 <body>
+
+<!-- ── Fondo bosque mágico estilo v12 ── -->
+<div id="bg-img" aria-hidden="true"></div>
+<div id="bg-overlay" aria-hidden="true"></div>
 
 <div id="init-overlay">
   <div class="init-logo">PUDU MIND</div>
@@ -2754,16 +2797,34 @@ const PUDU_AVATAR_TEMPLATE = `
     <span class="pudu-orbit"></span>
     <span class="pudu-forest-glow"></span>
     <span class="pudu-deer">
-      <span class="pudu-ear pudu-ear-left"></span>
-      <span class="pudu-ear pudu-ear-right"></span>
-      <span class="pudu-face">
-        <span class="pudu-eye pudu-eye-left"><span class="pudu-eye-pupil"></span></span>
-        <span class="pudu-eye pudu-eye-right"><span class="pudu-eye-pupil"></span></span>
-        <span class="pudu-snout">
-          <span class="pudu-nose"></span>
-          <span class="pudu-mouth"></span>
-        </span>
-      </span>
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;filter:drop-shadow(0 0 14px rgba(0,229,255,0.55)) drop-shadow(0 0 7px rgba(177,107,255,0.4))">
+        <defs>
+          <radialGradient id="bodGav" cx="50%" cy="40%"><stop offset="0%" stop-color="#c8a46e"/><stop offset="100%" stop-color="#8b5e3c"/></radialGradient>
+          <radialGradient id="faceGav" cx="50%" cy="40%"><stop offset="0%" stop-color="#ddb87a"/><stop offset="100%" stop-color="#a0713f"/></radialGradient>
+        </defs>
+        <ellipse cx="100" cy="136" rx="46" ry="38" fill="url(#bodGav)"/>
+        <rect x="65" y="158" width="12" height="26" rx="6" fill="#8b5e3c"/>
+        <rect x="82" y="162" width="12" height="22" rx="6" fill="#8b5e3c"/>
+        <rect x="106" y="162" width="12" height="22" rx="6" fill="#8b5e3c"/>
+        <rect x="123" y="158" width="12" height="26" rx="6" fill="#8b5e3c"/>
+        <ellipse cx="71" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="88" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="112" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="129" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
+        <ellipse cx="148" cy="130" rx="10" ry="7" fill="#e8d4b0"/>
+        <ellipse cx="100" cy="80" rx="34" ry="32" fill="url(#faceGav)"/>
+        <ellipse cx="72" cy="52" rx="10" ry="18" fill="#c8a46e" transform="rotate(-15 72 52)"/>
+        <ellipse cx="128" cy="52" rx="10" ry="18" fill="#c8a46e" transform="rotate(15 128 52)"/>
+        <ellipse cx="72" cy="52" rx="6" ry="12" fill="#f0c8a0" transform="rotate(-15 72 52)"/>
+        <ellipse cx="128" cy="52" rx="6" ry="12" fill="#f0c8a0" transform="rotate(15 128 52)"/>
+        <ellipse cx="86" cy="78" rx="9" ry="10" fill="#1a0a00"/>
+        <ellipse cx="114" cy="78" rx="9" ry="10" fill="#1a0a00"/>
+        <ellipse cx="88" cy="75" rx="3" ry="3.5" fill="white" opacity=".85"/>
+        <ellipse cx="116" cy="75" rx="3" ry="3.5" fill="white" opacity=".85"/>
+        <ellipse cx="100" cy="93" rx="5" ry="3.5" fill="#c06040"/>
+        <path d="M 88 100 Q 100 96 112 100" stroke="#1a0a00" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <polygon points="100,108 103,116 111,116 105,121 107,129 100,124 93,129 95,121 89,116 97,116" fill="#ffd700" opacity=".9"/>
+      </svg>
     </span>
     <span class="pudu-touch-ring"></span>
   </span>`;
@@ -3547,15 +3608,15 @@ function initPuduSummonScene() {
   puduSummon3D.renderer.setClearColor(0x000000, 0);
   puduSummon3D.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   // Canvas is 65% of window height
-  const cW = window.innerWidth, cH = Math.floor(window.innerHeight * 0.65);
+  const cW = window.innerWidth, cH = window.innerHeight;
   puduSummon3D.renderer.setSize(cW, cH);
-  // Explicitly set CSS pixel dimensions so the browser NEVER rescales the canvas (prevents blur)
+  // Explicitly set CSS pixel dimensions
   canvas.style.width  = cW + 'px';
   canvas.style.height = cH + 'px';
   puduSummon3D.scene = new T.Scene();
-  puduSummon3D.camera = new T.PerspectiveCamera(48, cW / Math.max(cH, 1), 0.1, 100);
-  puduSummon3D.camera.position.set(0, 0.45, 5.8);
-  puduSummon3D.camera.lookAt(0, 0.15, 0);
+  puduSummon3D.camera = new T.PerspectiveCamera(55, cW / Math.max(cH, 1), 0.1, 100);
+  puduSummon3D.camera.position.set(0, 1.8, 7);
+  puduSummon3D.camera.lookAt(0, 0, 0);
 
   // Iluminación minimal — el wireframe no necesita mucha luz
   puduSummon3D.scene.add(new T.AmbientLight(0xffffff, 1.6));
@@ -3605,7 +3666,7 @@ function initPuduSummonScene() {
 
   const resize = () => {
     if (!puduSummon3D.renderer || !puduSummon3D.camera) return;
-    const nW = window.innerWidth, nH = Math.floor(window.innerHeight * 0.65);
+    const nW = window.innerWidth, nH = window.innerHeight;
     puduSummon3D.renderer.setSize(nW, nH);
     canvas.style.width  = nW + 'px';
     canvas.style.height = nH + 'px';
