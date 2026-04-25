@@ -2990,6 +2990,14 @@ function getPuduPendingText(state = getPuduStageState()) {
   return `El pudu esta reuniendo su respuesta desde ${formatRoomLabel(roomName)}.`;
 }
 
+function clarifyPuduPromptIntent(prompt = '') {
+  const clean = (prompt || '').trim();
+  if (!clean) return clean;
+  const protectiveIntent = /\b(cuid|prote|restaur|reforest|sanar|regener|bosque|agua|incend|natur|fauna|flora|ecosist|arbol|r[ií]o|rios|humedal)\b/i.test(clean);
+  if (!protectiveIntent) return clean;
+  return `${clean}\n\nContexto: el usuario esta pidiendo ayuda para proteger, restaurar o cuidar la naturaleza de forma positiva; no esta pidiendo dano, tala ni destruccion.`;
+}
+
 async function waitForPuduResponseWindow({ timeoutMs = 16000, pollMs = 500, onProgress = null } = {}) {
   const startedAt = performance.now();
   let state = getPuduStageState();
@@ -3017,7 +3025,7 @@ function buildPuduPromptMessages(prompt = '') {
     .slice(-10)
     .filter(msg => msg && (msg.role === 'user' || msg.role === 'assistant'))
     .map(msg => ({ role: msg.role, content: msg.content }));
-  const cleanPrompt = (prompt || '').trim();
+  const cleanPrompt = clarifyPuduPromptIntent(prompt);
   if (!cleanPrompt) return injectPuduSystemPrompt(recent);
   let replaced = false;
   for (let i = recent.length - 1; i >= 0; i--) {
