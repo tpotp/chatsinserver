@@ -739,52 +739,50 @@ body::before {
   background: rgba(255,255,255,0.16); box-shadow: none;
 }
 #pudu3d-overlay {
-  position: fixed;
-  left: 0; right: 0;
-  top: 0; bottom: 0;
-  z-index: 500; display: none;
+  position: fixed; inset: 0; z-index: 500; display: none;
   pointer-events: none;
 }
 #pudu3d-vignette {
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 50% 40%, rgba(0,255,180,0.04) 0%, rgba(0,0,0,0.55) 100%);
+  background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0.08), rgba(0,0,0,0.82));
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.35s ease;
 }
 #pudu3d-overlay.active #pudu3d-vignette { opacity: 1; }
 #pudu3d-canvas {
-  position: absolute;
-  left: 0; right: 0;
-  top: 0;
-  /* Only top 65% — leaves room bar + input visible below */
-  height: 65%;
-  width: 100%;
+  position: absolute; inset: 0; width: 100%; height: 100%;
   pointer-events: auto;
 }
-/* Caption appears below pudú, above the chat input area */
 #pudu3d-bubble {
-  position: absolute;
-  left: 50%;
-  top: calc(65% - 2px);
-  transform: translateX(-50%) translateY(8px);
-  width: min(90vw, 700px);
-  padding: 12px 20px; border-radius: 16px;
-  border: 1px solid rgba(0,229,255,0.22);
-  background: rgba(4, 10, 24, 0.82);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.38);
+  position: absolute; left: 50%; bottom: 8vh; transform: translateX(-50%) translateY(18px);
+  width: min(88vw, 760px);
+  padding: 18px 22px; border-radius: 28px;
+  border: 2px solid rgba(255,255,255,0.18);
+  background: rgba(10,12,24,0.84);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 24px 42px rgba(0,0,0,0.36);
   opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease;
   pointer-events: none;
 }
 #pudu3d-overlay.active #pudu3d-bubble {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
+#pudu3d-bubble::before {
+  content: '';
+  position: absolute; left: 50%; bottom: -18px; transform: translateX(-50%);
+  width: 44px; height: 24px;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  background: rgba(10,12,24,0.84);
+  border-left: 2px solid rgba(255,255,255,0.18);
+  border-right: 2px solid rgba(255,255,255,0.18);
+  border-bottom: 2px solid rgba(255,255,255,0.18);
+}
 #pudu3d-caption {
-  font-size: clamp(14px, 1.8vw, 22px); line-height: 1.45; font-weight: 700; color: #e8fff8;
-  text-shadow: 0 0 14px rgba(0,229,255,0.18);
+  font-size: clamp(18px, 2.3vw, 29px); line-height: 1.45; font-weight: 800; color: #f7fffd;
+  text-shadow: 0 0 18px rgba(0,229,255,0.12);
 }
 #pudu3d-meta {
-  margin-top: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #66ccff;
+  margin-top: 10px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #9dd7ff;
 }
 
 /* ── Consensus Card ──────────────────────────────────────────── */
@@ -1447,37 +1445,42 @@ body:not(.debug-mode)::before {
   position: fixed;
   inset: 0;
   z-index: 0;
-  /* Foto real de bosque nativo chileno vía unsplash */
-  background-image: url('https://images.unsplash.com/photo-1448375240586-882707db888b?w=1600&q=80&auto=format&fit=crop');
-  background-size: cover;
-  background-position: center 30%;
-  filter: brightness(0.52) saturate(1.3);
+  background:
+    radial-gradient(ellipse at 30% 60%, rgba(20,80,40,0.55) 0%, transparent 55%),
+    radial-gradient(ellipse at 70% 30%, rgba(10,40,80,0.45) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 90%, rgba(60,20,100,0.35) 0%, transparent 45%),
+    linear-gradient(180deg, #040818 0%, #060e1e 35%, #041210 65%, #020a06 100%);
   animation: bgForestPulse 14s ease-in-out infinite alternate;
 }
 @keyframes bgForestPulse {
-  0%  { filter: brightness(0.48) saturate(1.2); }
-  50% { filter: brightness(0.56) saturate(1.4); }
-  100%{ filter: brightness(0.50) saturate(1.3); }
+  0%  { opacity: 0.85; }
+  50% { opacity: 1; }
+  100%{ opacity: 0.9; }
 }
 
-/* Pudú ambient — canvas fullscreen en el fondo */
+/* Pudú ambient — siempre visible, centrado, como v12 */
 #pudu-ambient-wrap {
-  display: none; /* ya no usamos wrap, el canvas es directo */
-}
-body.debug-mode #pudu-ambient-wrap { display: none; }
-
-/* El canvas del ambient pudú — fullscreen z-index bajo */
-#pudu-ambient-canvas {
   position: fixed;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 1;
   pointer-events: none;
+  opacity: 0.22;
+  transition: opacity 0.6s ease;
+  filter: blur(0.5px);
+}
+#pudu-ambient-wrap.has-messages { opacity: 0.08; }
+body.debug-mode #pudu-ambient-wrap { display: none; }
+
+/* El canvas del ambient pudú */
+#pudu-ambient-canvas {
+  width: 340px;
+  height: 340px;
+  display: block;
 }
 @media (max-width: 480px) {
-  #pudu-ambient-canvas { width: 100% !important; height: 100% !important; }
+  #pudu-ambient-canvas { width: 240px; height: 240px; }
 }
 
 /* Partículas de bosque flotantes */
@@ -3412,148 +3415,103 @@ const puduSummon3D = {
 
 function buildPuduSummonModel() {
   if (!window.THREE) return null;
-  const T = window.THREE;
-  const root = new T.Group();
+  const root = new THREE.Group();
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0x8c6239, emissive: 0x1f130a, shininess: 60 });
+  const accentMat = new THREE.MeshPhongMaterial({ color: 0xd9ae79, emissive: 0x24170b, shininess: 45 });
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x64ffd0, transparent: true, opacity: 0.22 });
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0x8cf5ff, wireframe: true, transparent: true, opacity: 0.35 });
 
-  // ── Materiales estilo v12: wireframe cyan-verde + ojos grandes expresivos ──
-  const wireMat   = new T.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.72 });
-  const wireMat2  = new T.MeshBasicMaterial({ color: 0x44ffaa, wireframe: true, transparent: true, opacity: 0.55 });
-  const wirePurp  = new T.MeshBasicMaterial({ color: 0xcc88ff, wireframe: true, transparent: true, opacity: 0.45 });
-  const wireGold  = new T.MeshBasicMaterial({ color: 0xffd700, wireframe: true, transparent: true, opacity: 0.65 });
-  const glowMat   = new T.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.06 });
-  const glowBlue  = new T.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.08 });
-
-  // Aura exterior — halo amarillo giratorio como v12
-  const haloGeo = new T.TorusGeometry(1.62, 0.022, 8, 54);
-  const halo    = new T.Mesh(haloGeo, new T.MeshBasicMaterial({ color: 0xffdd00, transparent: true, opacity: 0.55 }));
-  halo.rotation.x = Math.PI / 2;
-  root.add(halo);
-  root.userData.halo = halo;
-
-  // Halo interior rosa
-  const halo2 = new T.Mesh(new T.TorusGeometry(1.38, 0.016, 6, 42),
-    new T.MeshBasicMaterial({ color: 0xff66cc, transparent: true, opacity: 0.38 }));
-  halo2.rotation.x = Math.PI / 2;
-  halo2.rotation.z = 0.4;
-  root.add(halo2);
-  root.userData.halo2 = halo2;
-
-  // Esfera glow exterior
-  const aura = new T.Mesh(new T.SphereGeometry(1.55, 18, 13), glowMat);
-  aura.scale.set(1.12, 0.88, 1);
+  const aura = new THREE.Mesh(new THREE.SphereGeometry(1.55, 18, 14), glowMat);
+  aura.scale.set(1.15, 0.86, 1);
   root.add(aura);
-  root.userData.aura = aura;
-  const auraWire = new T.Mesh(new T.SphereGeometry(1.55, 12, 9), wireMat.clone());
-  auraWire.material.opacity = 0.22;
+  const auraWire = new THREE.Mesh(new THREE.SphereGeometry(1.55, 12, 10), wireMat);
   auraWire.scale.copy(aura.scale);
   root.add(auraWire);
-  root.userData.auraWire = auraWire;
 
-  // Cuerpo principal wireframe cyan
-  const body = new T.Mesh(new T.SphereGeometry(0.84, 20, 14), wireMat);
-  body.scale.set(1, 0.80, 1.08);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.82, 22, 16), bodyMat);
+  body.scale.set(1, 0.82, 1.08);
   root.add(body);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.48, 18, 14), accentMat);
+  chest.position.set(0, -0.12, 0.28);
+  chest.scale.set(0.95, 0.66, 0.86);
+  root.add(chest);
 
-  // Cuerpo sólido interior sutilísimo
-  const bodyFill = new T.Mesh(new T.SphereGeometry(0.82, 16, 12), glowMat.clone());
-  bodyFill.scale.copy(body.scale);
-  root.add(bodyFill);
-
-  // Vientre — wireframe morado/rosa
-  const belly = new T.Mesh(new T.SphereGeometry(0.50, 16, 12), wirePurp);
-  belly.position.set(0, -0.11, 0.30);
-  belly.scale.set(0.92, 0.62, 0.84);
-  root.add(belly);
-
-  // Cabeza
-  const head = new T.Group();
-  head.position.set(0, 0.82, 0.66);
+  const head = new THREE.Group();
+  head.position.set(0, 0.8, 0.68);
   root.add(head);
-  root.userData.head = head;
-  head.add(new T.Mesh(new T.SphereGeometry(0.54, 20, 14), wireMat2));
-
-  // Hocico
-  const muzzle = new T.Mesh(new T.SphereGeometry(0.23, 16, 12), wireMat.clone());
-  muzzle.material.opacity = 0.55;
-  muzzle.position.set(0, -0.09, 0.40); muzzle.scale.set(1.18, 0.70, 0.90);
+  const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.52, 22, 16), bodyMat.clone());
+  head.add(headMesh);
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 14), accentMat.clone());
+  muzzle.position.set(0, -0.08, 0.38);
+  muzzle.scale.set(1.2, 0.72, 0.92);
   head.add(muzzle);
-  root.userData.muzzle = muzzle;
+  puduSummon3D.muzzle = muzzle;
 
-  // Nariz rosada
-  const nose = new T.Mesh(new T.SphereGeometry(0.065, 8, 6),
-    new T.MeshBasicMaterial({ color: 0xff88bb, transparent: true, opacity: 0.88 }));
-  nose.position.set(0, -0.06, 0.60);
-  head.add(nose);
+  const eyeGeo = new THREE.SphereGeometry(0.085, 12, 10);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x101418 });
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.17, 0.08, 0.41);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
+  rightEye.position.set(0.17, 0.08, 0.41);
+  head.add(leftEye, rightEye);
+  puduSummon3D.eyes = [leftEye, rightEye];
 
-  // ── Ojos grandes y expresivos (estilo v12) ──
-  const eyeWhiteM = new T.MeshBasicMaterial({ color: 0xffffff });
-  const eyeBlueM  = new T.MeshBasicMaterial({ color: 0x22aaff });
-  const eyePupilM = new T.MeshBasicMaterial({ color: 0x080c12 });
-  const eyeShineM = new T.MeshBasicMaterial({ color: 0xffffff });
+  const earGeo = new THREE.SphereGeometry(0.18, 14, 10);
+  const leftEar = new THREE.Mesh(earGeo, accentMat.clone());
+  leftEar.position.set(-0.32, 0.32, 0.04);
+  leftEar.scale.set(0.55, 1.22, 0.42);
+  leftEar.rotation.z = 0.34;
+  const rightEar = new THREE.Mesh(earGeo, accentMat.clone());
+  rightEar.position.set(0.32, 0.32, 0.04);
+  rightEar.scale.set(0.55, 1.22, 0.42);
+  rightEar.rotation.z = -0.34;
+  head.add(leftEar, rightEar);
+  puduSummon3D.ears = [leftEar, rightEar];
 
-  function makeEye(xPos) {
-    const eg = new T.Group();
-    eg.position.set(xPos, 0.10, 0.42);
-    const white = new T.Mesh(new T.SphereGeometry(0.115, 12, 10), eyeWhiteM);
-    const iris  = new T.Mesh(new T.SphereGeometry(0.092, 10, 8), eyeBlueM);
-    iris.position.z = 0.028;
-    const pupil = new T.Mesh(new T.SphereGeometry(0.055, 8, 6), eyePupilM);
-    pupil.position.z = 0.058;
-    const shine = new T.Mesh(new T.SphereGeometry(0.022, 6, 5), eyeShineM);
-    shine.position.set(0.030, 0.032, 0.075);
-    eg.add(white, iris, pupil, shine);
-    return eg;
-  }
-  const lEye = makeEye(-0.185);
-  const rEye = makeEye( 0.185);
-  head.add(lEye, rEye);
-  root.userData.eyes = [lEye, rEye];
+  const hornGeo = new THREE.CylinderGeometry(0.018, 0.04, 0.2, 6);
+  const hornMat = new THREE.MeshPhongMaterial({ color: 0xf6cf6a, emissive: 0x3a2508, shininess: 80 });
+  const hornL = new THREE.Mesh(hornGeo, hornMat);
+  hornL.position.set(-0.14, 0.42, -0.02);
+  hornL.rotation.z = 0.22;
+  const hornR = new THREE.Mesh(hornGeo, hornMat.clone());
+  hornR.position.set(0.14, 0.42, -0.02);
+  hornR.rotation.z = -0.22;
+  head.add(hornL, hornR);
 
-  // Orejas
-  const earG = new T.SphereGeometry(0.20, 14, 10);
-  const lEar = new T.Mesh(earG, wireGold.clone());
-  lEar.position.set(-0.33, 0.36, 0.04); lEar.scale.set(0.52, 1.26, 0.40); lEar.rotation.z = 0.36;
-  const rEar = new T.Mesh(earG, wireGold.clone());
-  rEar.position.set( 0.33, 0.36, 0.04); rEar.scale.set(0.52, 1.26, 0.40); rEar.rotation.z = -0.36;
-  head.add(lEar, rEar);
-  root.userData.ears = [lEar, rEar];
-
-  // Cuernitos dorados
-  const hornG = new T.CylinderGeometry(0.020, 0.046, 0.22, 6);
-  const hL = new T.Mesh(hornG, wireGold); hL.position.set(-0.14, 0.44, -0.03); hL.rotation.z = 0.24;
-  const hR = new T.Mesh(hornG, wireGold.clone()); hR.position.set(0.14, 0.44, -0.03); hR.rotation.z = -0.24;
-  head.add(hL, hR);
-
-  // Patas con color morado-cyan alternado
-  const legG  = new T.CylinderGeometry(0.085, 0.090, 0.50, 9);
-  const hoofG = new T.SphereGeometry(0.095, 9, 7);
-  root.userData.paws = [];
-  [[-0.29,-0.58,0.28],[0.29,-0.58,0.28],[-0.29,-0.58,-0.28],[0.29,-0.58,-0.28]].forEach((pos, i) => {
-    const leg = new T.Group();
-    const mat = i % 2 === 0 ? wirePurp.clone() : wireMat.clone();
-    leg.add(new T.Mesh(legG, mat));
-    const hoof = new T.Mesh(hoofG, wireGold.clone());
-    hoof.position.set(0, -0.30, 0.04); hoof.scale.set(1.06, 0.54, 1.14);
-    leg.add(hoof);
-    leg.position.set(...pos);
+  const legGeo = new THREE.CylinderGeometry(0.08, 0.085, 0.48, 10);
+  const hoofGeo = new THREE.SphereGeometry(0.09, 10, 8);
+  const legPositions = [
+    [-0.28, -0.56, 0.26],
+    [0.28, -0.56, 0.26],
+    [-0.28, -0.56, -0.26],
+    [0.28, -0.56, -0.26],
+  ];
+  puduSummon3D.paws = [];
+  for (const [x, y, z] of legPositions) {
+    const leg = new THREE.Group();
+    const upper = new THREE.Mesh(legGeo, new THREE.MeshPhongMaterial({ color: 0x6d4627, emissive: 0x1a0f07 }));
+    const hoof = new THREE.Mesh(hoofGeo, hornMat.clone());
+    hoof.position.set(0, -0.28, 0.04);
+    hoof.scale.set(1.08, 0.56, 1.16);
+    leg.add(upper, hoof);
+    leg.position.set(x, y, z);
     root.add(leg);
-    root.userData.paws.push(leg);
-  });
+    puduSummon3D.paws.push(leg);
+  }
 
-  // Cola
-  const tail = new T.Mesh(new T.SphereGeometry(0.12, 10, 8),
-    new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.65 }));
-  tail.position.set(0, 0.14, -0.76); tail.scale.set(1, 0.70, 0.70);
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), new THREE.MeshPhongMaterial({ color: 0xf4e9dd, emissive: 0x1d1613 }));
+  tail.position.set(0, 0.12, -0.74);
+  tail.scale.set(1, 0.72, 0.72);
   root.add(tail);
-  root.userData.tail = tail;
+  puduSummon3D.tail = tail;
 
-  root.position.set(-3.6, -0.30, 0);
+  root.userData = { head, aura, auraWire };
+  root.position.set(-3.6, -0.22, 0);
   return root;
 }
 
 function initPuduSummonScene() {
   if (puduSummon3D.initialized || !window.THREE) return;
-  const T = window.THREE;
   const overlay = document.getElementById('pudu3d-overlay');
   const canvas = document.getElementById('pudu3d-canvas');
   if (!overlay || !canvas) return;
@@ -3561,68 +3519,27 @@ function initPuduSummonScene() {
   puduSummon3D.canvas = canvas;
   puduSummon3D.caption = document.getElementById('pudu3d-caption');
   puduSummon3D.meta = document.getElementById('pudu3d-meta');
-  puduSummon3D.renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  puduSummon3D.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   puduSummon3D.renderer.setClearColor(0x000000, 0);
   puduSummon3D.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  // Canvas is 65% of window height
-  const cW = window.innerWidth, cH = Math.floor(window.innerHeight * 0.65);
-  puduSummon3D.renderer.setSize(cW, cH);
-  puduSummon3D.scene = new T.Scene();
-  puduSummon3D.camera = new T.PerspectiveCamera(48, cW / Math.max(cH, 1), 0.1, 100);
-  puduSummon3D.camera.position.set(0, 0.45, 5.8);
-  puduSummon3D.camera.lookAt(0, 0.15, 0);
-
-  // Iluminación minimal — el wireframe no necesita mucha luz
-  puduSummon3D.scene.add(new T.AmbientLight(0xffffff, 1.6));
-  const kl = new T.DirectionalLight(0x88ffee, 1.2); kl.position.set(-3, 4, 5); puduSummon3D.scene.add(kl);
-  const fl = new T.PointLight(0xffcc66, 1.4, 18); fl.position.set(3, 1.5, 4); puduSummon3D.scene.add(fl);
-  puduSummon3D.fillLight = fl;
-
-  // Partículas geométricas flotantes estilo v12
-  const geomParticles = [];
-  const pColors = [0xffdd00, 0xff4488, 0x44ffaa, 0x4488ff, 0xff8844, 0xcc88ff, 0xffffff, 0x00ffee];
-  const pGeos = [
-    new T.BoxGeometry(0.12, 0.12, 0.12),
-    new T.TetrahedronGeometry(0.1),
-    new T.OctahedronGeometry(0.09),
-    new T.BoxGeometry(0.14, 0.14, 0.014), // flat square/diamond
-  ];
-  for (let i = 0; i < 55; i++) {
-    const geo = pGeos[i % pGeos.length];
-    const mat = new T.MeshBasicMaterial({
-      color: pColors[i % pColors.length],
-      transparent: true,
-      opacity: 0.55 + Math.random() * 0.3,
-      wireframe: i % 3 === 0
-    });
-    const mesh = new T.Mesh(geo, mat);
-    // Spread across full scene width (beyond camera view)
-    mesh.position.set(
-      (Math.random() - 0.5) * 14,
-      (Math.random() - 0.5) * 7,
-      (Math.random() - 0.5) * 5 - 1
-    );
-    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    mesh.userData = {
-      vx: (Math.random() - 0.5) * 0.006,
-      vy: (Math.random() - 0.5) * 0.004,
-      rx: (Math.random() - 0.5) * 0.025,
-      ry: (Math.random() - 0.5) * 0.025,
-      phase: Math.random() * Math.PI * 2
-    };
-    puduSummon3D.scene.add(mesh);
-    geomParticles.push(mesh);
-  }
-  puduSummon3D.geomParticles = geomParticles;
-
+  puduSummon3D.renderer.setSize(window.innerWidth, window.innerHeight);
+  puduSummon3D.scene = new THREE.Scene();
+  puduSummon3D.camera = new THREE.PerspectiveCamera(48, window.innerWidth / Math.max(window.innerHeight, 1), 0.1, 100);
+  puduSummon3D.camera.position.set(0, 0.55, 6.4);
+  puduSummon3D.camera.lookAt(0, 0.2, 0);
+  puduSummon3D.scene.add(new THREE.AmbientLight(0xffffff, 1.28));
+  const keyLight = new THREE.DirectionalLight(0x7af2ff, 1.3);
+  keyLight.position.set(-3, 4, 6);
+  puduSummon3D.scene.add(keyLight);
+  const fillLight = new THREE.PointLight(0xffcb7a, 1.8, 15);
+  fillLight.position.set(3.2, 1.4, 3.5);
+  puduSummon3D.scene.add(fillLight);
   puduSummon3D.model = buildPuduSummonModel();
   if (puduSummon3D.model) puduSummon3D.scene.add(puduSummon3D.model);
-
   const resize = () => {
     if (!puduSummon3D.renderer || !puduSummon3D.camera) return;
-    const nW = window.innerWidth, nH = Math.floor(window.innerHeight * 0.65);
-    puduSummon3D.renderer.setSize(nW, nH);
-    puduSummon3D.camera.aspect = nW / Math.max(nH, 1);
+    puduSummon3D.renderer.setSize(window.innerWidth, window.innerHeight);
+    puduSummon3D.camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
     puduSummon3D.camera.updateProjectionMatrix();
   };
   window.addEventListener('resize', resize, { passive: true });
@@ -3673,90 +3590,37 @@ function animatePuduSummonScene(now) {
   const intro = Math.min(1, t / 0.85);
   const easedIntro = 1 - Math.pow(1 - intro, 3);
   const speaking = performance.now() < puduPresence.speakingUntil;
+  const mouth = speaking ? 0.42 + (Math.sin(now / 85) * 0.5 + 0.5) * 0.45 : 0.18 + puduSummon3D.petting * 0.18;
   const bob = Math.sin(now / 420) * 0.08;
   const tiltX = puduPresence.tiltX * 0.35;
   const tiltY = puduPresence.tiltY * 0.28;
   puduSummon3D.petting *= 0.93;
 
-  const ud = puduSummon3D.model.userData;
-
-  // Entrada desde la izquierda
   puduSummon3D.model.position.x = -3.6 + easedIntro * 3.6 + Math.sin(now / 930) * 0.08;
-  puduSummon3D.model.position.y = -0.28 + bob + puduSummon3D.petting * 0.06;
-  puduSummon3D.model.rotation.y = 0.18 + tiltX * 0.8 + Math.sin(now / 1200) * 0.05;
+  puduSummon3D.model.position.y = -0.18 + bob + puduSummon3D.petting * 0.06;
+  puduSummon3D.model.rotation.y = 0.24 + tiltX * 0.8 + Math.sin(now / 1200) * 0.05;
   puduSummon3D.model.rotation.z = tiltX * -0.16 + puduSummon3D.petting * 0.08;
   puduSummon3D.model.rotation.x = tiltY * 0.12;
-
-  // Cabeza
-  if (ud.head) {
-    ud.head.rotation.y = tiltX * 0.5 + Math.sin(now / 1800) * 0.06;
-    ud.head.rotation.x = tiltY * 0.28;
+  if (puduSummon3D.model.userData?.head) {
+    puduSummon3D.model.userData.head.rotation.y = tiltX * 0.5;
+    puduSummon3D.model.userData.head.rotation.x = tiltY * 0.28;
+    const auraScale = 1.03 + (speaking ? 0.12 : 0.04) + puduSummon3D.petting * 0.08;
+    puduSummon3D.model.userData.aura.scale.set(auraScale, auraScale * 0.82, auraScale);
+    puduSummon3D.model.userData.aura.material.opacity = 0.16 + (speaking ? 0.12 : 0.04) + puduSummon3D.petting * 0.14;
+    puduSummon3D.model.userData.auraWire.material.opacity = 0.18 + puduSummon3D.petting * 0.12;
   }
-
-  // Halos girando
-  if (ud.halo)  ud.halo.rotation.z  = now / 1200;
-  if (ud.halo2) ud.halo2.rotation.z = -(now / 900);
-
-  // Aura pulsa con voz
-  if (ud.aura) {
-    const auraS = 1.03 + (speaking ? 0.14 : 0.04) + puduSummon3D.petting * 0.08;
-    ud.aura.scale.set(auraS * 1.12, auraS * 0.88, auraS);
-    ud.aura.material.opacity = 0.05 + (speaking ? 0.08 : 0.02) + puduSummon3D.petting * 0.12;
+  if (puduSummon3D.muzzle) {
+    puduSummon3D.muzzle.scale.y = 0.72 + mouth * 0.42;
+    puduSummon3D.muzzle.position.y = -0.08 - mouth * 0.03;
   }
-  if (ud.auraWire) {
-    ud.auraWire.material.opacity = 0.16 + Math.sin(now / 600) * 0.06 + puduSummon3D.petting * 0.10;
+  for (const eye of puduSummon3D.eyes) eye.scale.y = 0.85 + Math.sin(now / 720) * 0.02;
+  for (const [index, ear] of puduSummon3D.ears.entries()) {
+    ear.rotation.z = (index === 0 ? 0.34 : -0.34) + Math.sin(now / 680 + index) * 0.03 + puduSummon3D.petting * (index === 0 ? -0.08 : 0.08);
   }
-
-  // Boca (muzzle)
-  if (ud.muzzle) {
-    const mouth = speaking ? 0.42 + (Math.sin(now / 85) * 0.5 + 0.5) * 0.45 : 0.18 + puduSummon3D.petting * 0.18;
-    ud.muzzle.scale.y = 0.72 + mouth * 0.42;
-    ud.muzzle.position.y = -0.09 - mouth * 0.03;
+  for (const [index, paw] of puduSummon3D.paws.entries()) {
+    paw.rotation.x = Math.sin(now / 360 + index * 0.8) * (speaking ? 0.12 : 0.05);
   }
-
-  // Ojos expresivos — parpadeo
-  if (ud.eyes) {
-    const blink = Math.sin(now / 720);
-    for (const eye of ud.eyes) eye.scale.y = blink < -0.92 ? 0.15 : 1;
-  }
-
-  // Orejas
-  if (ud.ears) {
-    ud.ears[0].rotation.z = 0.36 + Math.sin(now / 680) * 0.05 + puduSummon3D.petting * -0.08;
-    ud.ears[1].rotation.z = -0.36 - Math.sin(now / 680) * 0.05 + puduSummon3D.petting * 0.08;
-  }
-
-  // Patas
-  if (ud.paws) {
-    for (const [i, paw] of ud.paws.entries()) {
-      paw.rotation.x = Math.sin(now / 360 + i * 0.8) * (speaking ? 0.14 : 0.05);
-    }
-  }
-
-  // Cola waggle
-  if (ud.tail) ud.tail.rotation.y = Math.sin(now / 260) * (0.28 + puduSummon3D.petting * 0.18);
-
-  // Luz fill pulsa
-  if (puduSummon3D.fillLight) {
-    puduSummon3D.fillLight.intensity = 1.2 + Math.sin(now / 700) * 0.4;
-  }
-
-  // Partículas geométricas flotando
-  if (puduSummon3D.geomParticles) {
-    for (const p of puduSummon3D.geomParticles) {
-      p.position.x += p.userData.vx;
-      p.position.y += p.userData.vy;
-      p.rotation.x += p.userData.rx;
-      p.rotation.y += p.userData.ry;
-      // Wrap around
-      if (p.position.x > 8)  p.position.x = -8;
-      if (p.position.x < -8) p.position.x = 8;
-      if (p.position.y > 4.5)  p.position.y = -4.5;
-      if (p.position.y < -4.5) p.position.y = 4.5;
-      p.material.opacity = 0.35 + Math.sin(now / 800 + p.userData.phase) * 0.25;
-    }
-  }
-
+  if (puduSummon3D.tail) puduSummon3D.tail.rotation.y = Math.sin(now / 260) * (0.24 + puduSummon3D.petting * 0.18);
   puduSummon3D.renderer.render(puduSummon3D.scene, puduSummon3D.camera);
   puduSummon3D.raf = requestAnimationFrame(animatePuduSummonScene);
 }
@@ -8675,7 +8539,7 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
     }
   }
 
-  /* ── Pudú ambiental Three.js permanente — estilo wireframe v12 ── */
+  /* ── Pudú ambiental Three.js permanente ── */
   function initAmbientPudu() {
     var canvas = document.getElementById('pudu-ambient-canvas');
     if (!canvas || !window.THREE) return;
@@ -8688,146 +8552,127 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
     renderer.setSize(W, H);
 
     var scene = new T.Scene();
-    var camera = new T.PerspectiveCamera(52, W / H, 0.1, 100);
-    camera.position.set(0, 0.3, 7.2);
-    camera.lookAt(0, 0.1, 0);
+    var camera = new T.PerspectiveCamera(46, W / H, 0.1, 100);
+    camera.position.set(0, 0.4, 7.5);
+    camera.lookAt(0, 0.2, 0);
 
-    /* luces minimal — wireframe no necesita mucho */
-    scene.add(new T.AmbientLight(0xffffff, 1.8));
-    var kl = new T.DirectionalLight(0x88ffee, 1.0); kl.position.set(-2, 5, 4); scene.add(kl);
-    var fl = new T.PointLight(0xffcc44, 1.2, 22); fl.position.set(3, 2, 5); scene.add(fl);
+    /* luces */
+    scene.add(new T.AmbientLight(0x204030, 1.4));
+    var kl = new T.DirectionalLight(0x66ffcc, 1.1); kl.position.set(-2, 5, 4); scene.add(kl);
+    var fl = new T.PointLight(0xffd066, 1.6, 20); fl.position.set(3, 2, 4); scene.add(fl);
+    var bl = new T.PointLight(0x0066ff, 0.8, 18); bl.position.set(-3, -1, 3); scene.add(bl);
 
-    /* materiales wireframe colores v12 */
-    var wCyan   = function() { return new T.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.65 }); };
-    var wGreen  = function() { return new T.MeshBasicMaterial({ color: 0x44ffaa, wireframe: true, transparent: true, opacity: 0.50 }); };
-    var wPurp   = function() { return new T.MeshBasicMaterial({ color: 0xcc88ff, wireframe: true, transparent: true, opacity: 0.42 }); };
-    var wGold   = function() { return new T.MeshBasicMaterial({ color: 0xffd700, wireframe: true, transparent: true, opacity: 0.58 }); };
-    var glow    = function(c) { return new T.MeshBasicMaterial({ color: c||0x00ffcc, transparent: true, opacity: 0.05 }); };
+    /* materiales */
+    var bodyMat   = new T.MeshPhongMaterial({ color: 0x7a5230, emissive: 0x1a0c05, shininess: 55, transparent: true, opacity: 0.82 });
+    var accentMat = new T.MeshPhongMaterial({ color: 0xc99960, emissive: 0x200f04, shininess: 40, transparent: true, opacity: 0.82 });
+    var wireMat   = new T.MeshBasicMaterial({ color: 0x64ffcc, wireframe: true, transparent: true, opacity: 0.18 });
+    var glowMat   = new T.MeshBasicMaterial({ color: 0x44ffaa, transparent: true, opacity: 0.08 });
 
-    /* ── modelo pudú wireframe ── */
+    /* ── construir modelo pudú completo ── */
     var root = new T.Group();
 
-    /* halos */
-    var halo = new T.Mesh(new T.TorusGeometry(1.58, 0.020, 7, 52),
-      new T.MeshBasicMaterial({ color: 0xffdd00, transparent: true, opacity: 0.42 }));
-    halo.rotation.x = Math.PI / 2;
-    root.add(halo);
-    var halo2 = new T.Mesh(new T.TorusGeometry(1.32, 0.014, 6, 38),
-      new T.MeshBasicMaterial({ color: 0xff66cc, transparent: true, opacity: 0.30 }));
-    halo2.rotation.x = Math.PI / 2; halo2.rotation.z = 0.5;
-    root.add(halo2);
-
-    /* aura */
-    var aura = new T.Mesh(new T.SphereGeometry(1.60, 16, 11), glow(0x00ffcc));
-    aura.scale.set(1.12, 0.88, 1); root.add(aura);
-    var auraWire = new T.Mesh(new T.SphereGeometry(1.60, 10, 8), wCyan());
-    auraWire.material.opacity = 0.16; auraWire.scale.copy(aura.scale); root.add(auraWire);
+    /* aura glowing sphere */
+    var aura = new T.Mesh(new T.SphereGeometry(1.7, 16, 12), glowMat.clone());
+    aura.scale.set(1.1, 0.88, 1);
+    root.add(aura);
+    var auraWire = new T.Mesh(new T.SphereGeometry(1.7, 10, 8), wireMat.clone());
+    auraWire.scale.copy(aura.scale);
+    root.add(auraWire);
 
     /* cuerpo */
-    var body = new T.Mesh(new T.SphereGeometry(0.86, 18, 13), wCyan());
-    body.scale.set(1, 0.80, 1.08); root.add(body);
-    root.add(new T.Mesh(new T.SphereGeometry(0.84, 12, 9), glow(0x00ffcc)));
-
-    /* vientre */
-    var belly = new T.Mesh(new T.SphereGeometry(0.50, 14, 10), wPurp());
-    belly.position.set(0, -0.11, 0.30); belly.scale.set(0.92, 0.62, 0.84); root.add(belly);
+    var body = new T.Mesh(new T.SphereGeometry(0.88, 20, 14), bodyMat.clone());
+    body.scale.set(1, 0.80, 1.1);
+    root.add(body);
+    var chest = new T.Mesh(new T.SphereGeometry(0.50, 16, 12), accentMat.clone());
+    chest.position.set(0, -0.10, 0.30);
+    chest.scale.set(0.92, 0.62, 0.84);
+    root.add(chest);
 
     /* cabeza */
     var head = new T.Group();
-    head.position.set(0, 0.84, 0.68); root.add(head);
-    head.add(new T.Mesh(new T.SphereGeometry(0.54, 18, 13), wGreen()));
+    head.position.set(0, 0.86, 0.72);
+    root.add(head);
+    head.add(new T.Mesh(new T.SphereGeometry(0.54, 20, 14), bodyMat.clone()));
+    var muzzle = new T.Mesh(new T.SphereGeometry(0.23, 16, 12), accentMat.clone());
+    muzzle.position.set(0, -0.09, 0.40); muzzle.scale.set(1.18, 0.70, 0.90);
+    head.add(muzzle);
 
-    /* hocico */
-    var muzzle = new T.Mesh(new T.SphereGeometry(0.23, 14, 10), wCyan());
-    muzzle.position.set(0, -0.09, 0.40); muzzle.scale.set(1.18, 0.70, 0.90); head.add(muzzle);
-
-    /* nariz */
-    head.add(function(){ var n=new T.Mesh(new T.SphereGeometry(0.065,8,6),
-      new T.MeshBasicMaterial({color:0xff88bb,transparent:true,opacity:0.85}));
-      n.position.set(0,-0.06,0.60); return n; }());
-
-    /* ojos grandes expresivos */
-    function mkEye(x) {
-      var g = new T.Group(); g.position.set(x, 0.10, 0.42);
-      g.add(new T.Mesh(new T.SphereGeometry(0.112,12,10), new T.MeshBasicMaterial({color:0xffffff})));
-      var iris=new T.Mesh(new T.SphereGeometry(0.088,10,8),new T.MeshBasicMaterial({color:0x22aaff})); iris.position.z=0.03; g.add(iris);
-      var pupil=new T.Mesh(new T.SphereGeometry(0.052,8,6),new T.MeshBasicMaterial({color:0x080c12})); pupil.position.z=0.06; g.add(pupil);
-      var shine=new T.Mesh(new T.SphereGeometry(0.020,6,5),new T.MeshBasicMaterial({color:0xffffff})); shine.position.set(0.028,0.030,0.075); g.add(shine);
-      return g;
-    }
-    var lEye = mkEye(-0.185), rEye = mkEye(0.185);
+    /* ojos */
+    var eyeG = new T.SphereGeometry(0.09, 10, 8);
+    var eyeM = new T.MeshBasicMaterial({ color: 0x0d1116 });
+    var lEye = new T.Mesh(eyeG, eyeM); lEye.position.set(-0.18, 0.09, 0.43);
+    var rEye = new T.Mesh(eyeG, eyeM.clone()); rEye.position.set(0.18, 0.09, 0.43);
     head.add(lEye, rEye);
 
+    /* brillo ojo */
+    var sparkM = new T.MeshBasicMaterial({ color: 0xffffff });
+    var sparkG = new T.SphereGeometry(0.025, 6, 6);
+    [lEye, rEye].forEach(function(e) {
+      var sp = new T.Mesh(sparkG, sparkM.clone());
+      sp.position.set(0.032, 0.034, 0.07);
+      e.add(sp);
+    });
+
     /* orejas */
-    var earG = new T.SphereGeometry(0.20, 12, 8);
-    var lEar = new T.Mesh(earG, wGold()); lEar.position.set(-0.33,0.36,0.04); lEar.scale.set(0.52,1.26,0.40); lEar.rotation.z=0.36;
-    var rEar = new T.Mesh(earG, wGold()); rEar.position.set(0.33,0.36,0.04); rEar.scale.set(0.52,1.26,0.40); rEar.rotation.z=-0.36;
+    var earG = new T.SphereGeometry(0.19, 12, 8);
+    var lEar = new T.Mesh(earG, accentMat.clone());
+    lEar.position.set(-0.33, 0.34, 0.06); lEar.scale.set(0.52, 1.24, 0.40); lEar.rotation.z = 0.36;
+    var rEar = new T.Mesh(earG, accentMat.clone());
+    rEar.position.set(0.33, 0.34, 0.06); rEar.scale.set(0.52, 1.24, 0.40); rEar.rotation.z = -0.36;
     head.add(lEar, rEar);
 
     /* cuernitos */
-    var hornG = new T.CylinderGeometry(0.020,0.046,0.22,6);
-    var hL=new T.Mesh(hornG,wGold()); hL.position.set(-0.14,0.44,-0.03); hL.rotation.z=0.24;
-    var hR=new T.Mesh(hornG,wGold()); hR.position.set(0.14,0.44,-0.03); hR.rotation.z=-0.24;
+    var hornG = new T.CylinderGeometry(0.02, 0.045, 0.22, 6);
+    var hornM = new T.MeshPhongMaterial({ color: 0xf0c850, emissive: 0x301e04, shininess: 90, transparent: true, opacity: 0.82 });
+    var hL = new T.Mesh(hornG, hornM); hL.position.set(-0.14, 0.44, -0.02); hL.rotation.z = 0.24;
+    var hR = new T.Mesh(hornG, hornM.clone()); hR.position.set(0.14, 0.44, -0.02); hR.rotation.z = -0.24;
     head.add(hL, hR);
 
     /* patas */
-    var legG=new T.CylinderGeometry(0.085,0.090,0.50,9), hoofG=new T.SphereGeometry(0.095,9,7);
+    var legG = new T.CylinderGeometry(0.085, 0.09, 0.50, 9);
+    var hoofG = new T.SphereGeometry(0.095, 9, 7);
     var paws = [];
-    [[-0.29,-0.58,0.28],[0.29,-0.58,0.28],[-0.29,-0.58,-0.28],[0.29,-0.58,-0.28]].forEach(function(pos,i){
-      var leg=new T.Group();
-      leg.add(new T.Mesh(legG, i%2===0 ? wPurp() : wCyan()));
-      var hoof=new T.Mesh(hoofG,wGold()); hoof.position.set(0,-0.30,0.04); hoof.scale.set(1.06,0.54,1.14); leg.add(hoof);
-      leg.position.set(pos[0],pos[1],pos[2]); root.add(leg); paws.push(leg);
+    [[-0.29,-0.58,0.28],[0.29,-0.58,0.28],[-0.29,-0.58,-0.28],[0.29,-0.58,-0.28]].forEach(function(pos) {
+      var leg = new T.Group();
+      var up = new T.Mesh(legG, new T.MeshPhongMaterial({ color: 0x5a3a1e, emissive: 0x180d06, transparent: true, opacity: 0.82 }));
+      var hoof = new T.Mesh(hoofG, hornM.clone());
+      hoof.position.set(0, -0.29, 0.04); hoof.scale.set(1.06, 0.54, 1.14);
+      leg.add(up, hoof);
+      leg.position.set(pos[0], pos[1], pos[2]);
+      root.add(leg);
+      paws.push(leg);
     });
 
     /* cola */
-    var tail=new T.Mesh(new T.SphereGeometry(0.12,10,8),
-      new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.60}));
-    tail.position.set(0,0.14,-0.76); tail.scale.set(1,0.70,0.70); root.add(tail);
+    var tail = new T.Mesh(new T.SphereGeometry(0.12, 10, 8), new T.MeshPhongMaterial({ color: 0xf0e0d0, emissive: 0x14100c, transparent: true, opacity: 0.82 }));
+    tail.position.set(0, 0.14, -0.76); tail.scale.set(1, 0.70, 0.70);
+    root.add(tail);
 
-    root.position.set(0, -0.32, 0);
+    root.position.set(0, -0.35, 0);
     scene.add(root);
 
-    /* ── Partículas geométricas 3D flotando (cuadrados, triángulos, rombos) ── */
-    var gParticles = [];
-    var pColors = [0xffdd00, 0xff4488, 0x44ffaa, 0x4488ff, 0xff8844, 0xcc88ff, 0xffffff, 0x00ffee, 0xff0066, 0x66ff00];
-    var pGeos = [
-      new T.BoxGeometry(0.13, 0.13, 0.13),
-      new T.TetrahedronGeometry(0.11),
-      new T.OctahedronGeometry(0.10),
-      new T.BoxGeometry(0.15, 0.15, 0.015),   // flat square (rombo)
-      new T.TetrahedronGeometry(0.13, 0),
-    ];
-    for (var i = 0; i < 65; i++) {
-      var mat = new T.MeshBasicMaterial({
-        color: pColors[i % pColors.length],
-        transparent: true,
-        opacity: 0.50 + Math.random() * 0.35,
-        wireframe: i % 4 === 0
-      });
-      var mesh = new T.Mesh(pGeos[i % pGeos.length], mat);
-      mesh.position.set(
-        (Math.random() - 0.5) * 18,
-        (Math.random() - 0.5) * 10,
-        (Math.random() - 0.5) * 6 - 1
-      );
-      mesh.rotation.set(Math.random()*Math.PI*2, Math.random()*Math.PI*2, Math.random()*Math.PI*2);
-      mesh.userData = {
-        vx: (Math.random()-0.5)*0.007,
-        vy: (Math.random()-0.5)*0.004,
-        rx: (Math.random()-0.5)*0.022,
-        ry: (Math.random()-0.5)*0.022,
-        phase: Math.random()*Math.PI*2
-      };
-      scene.add(mesh);
-      gParticles.push(mesh);
+    /* partículas Three.js alrededor */
+    var pts = [];
+    for (var i = 0; i < 60; i++) {
+      var pm = new T.MeshBasicMaterial({ color: [0x66ffaa, 0xffd066, 0x88ddff, 0xffffff][i%4], transparent: true, opacity: 0.55 });
+      var pg = new T.SphereGeometry(0.012 + Math.random() * 0.022, 5, 4);
+      var pt = new T.Mesh(pg, pm);
+      var r = 1.4 + Math.random() * 2.2;
+      var theta = Math.random() * Math.PI * 2;
+      var phi = (Math.random() - 0.5) * Math.PI;
+      pt.position.set(r * Math.cos(theta) * Math.cos(phi), r * Math.sin(phi), r * Math.sin(theta) * Math.cos(phi));
+      pt.userData = { r: r, theta: theta, phi: phi, speed: 0.003 + Math.random() * 0.008, phase: Math.random() * Math.PI * 2 };
+      scene.add(pt);
+      pts.push(pt);
     }
 
     /* acelerómetro */
     var tiltX = 0, tiltY = 0;
-    window.addEventListener('deviceorientation', function(e) {
-      tiltX = (e.gamma||0)/40; tiltY = (e.beta||0)/60;
-    }, { passive: true });
+    function onOrient(e) {
+      tiltX = (e.gamma || 0) / 40;
+      tiltY = (e.beta  || 0) / 60;
+    }
+    window.addEventListener('deviceorientation', onOrient, { passive: true });
 
     /* resize */
     window.addEventListener('resize', function() {
@@ -8837,6 +8682,15 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
       camera.updateProjectionMatrix();
     }, { passive: true });
 
+    /* mensajes → opacidad del pudú ambient */
+    var msgObs = new MutationObserver(function() {
+      var msgs = document.getElementById('messages');
+      var wrap = document.getElementById('pudu-ambient-wrap');
+      if (wrap && msgs && msgs.children.length > 2) wrap.classList.add('has-messages');
+    });
+    var msgEl = document.getElementById('messages');
+    if (msgEl) msgObs.observe(msgEl, { childList: true });
+
     /* ── Animación principal ── */
     var startT = null;
     function animate(now) {
@@ -8844,59 +8698,54 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
       if (!startT) startT = now;
       var t = (now - startT) / 1000;
 
-      /* pudú flota y respira */
-      root.position.y = -0.32 + Math.sin(t * 0.9) * 0.07;
-      root.rotation.y = Math.sin(t * 0.35) * 0.20 + tiltX * 0.55;
-      root.rotation.z = tiltX * -0.12 + Math.sin(t * 0.6) * 0.022;
+      /* pudú respira y flota */
+      root.position.y = -0.35 + Math.sin(t * 0.9) * 0.06;
+      root.rotation.y = Math.sin(t * 0.35) * 0.18 + tiltX * 0.55;
+      root.rotation.z = tiltX * -0.12 + Math.sin(t * 0.6) * 0.025;
       root.rotation.x = tiltY * 0.10;
 
-      /* cabeza */
-      head.rotation.y = Math.sin(t * 0.5) * 0.12 + tiltX * 0.40;
+      /* cabeza mira */
+      head.rotation.y = Math.sin(t * 0.5) * 0.12 + tiltX * 0.4;
       head.rotation.x = Math.sin(t * 0.4) * 0.06 + tiltY * 0.22;
 
-      /* halos */
-      halo.rotation.z = t * 0.55;
-      halo2.rotation.z = -(t * 0.40);
-
       /* aura pulsa */
-      var aS = 1.04 + Math.sin(t * 1.2) * 0.04;
-      aura.scale.set(aS*1.12, aS*0.88, aS);
-      aura.material.opacity = 0.04 + Math.sin(t*1.5)*0.02;
-      auraWire.material.opacity = 0.10 + Math.sin(t*1.8)*0.05;
+      var auraS = 1.04 + Math.sin(t * 1.2) * 0.04;
+      aura.scale.set(auraS * 1.1, auraS * 0.88, auraS);
+      aura.material.opacity = 0.06 + Math.sin(t * 1.5) * 0.03;
+      auraWire.material.opacity = 0.10 + Math.sin(t * 1.8) * 0.04;
 
-      /* orejas */
-      lEar.rotation.z = 0.36 + Math.sin(t*1.4)*0.06;
-      rEar.rotation.z = -0.36 - Math.sin(t*1.4)*0.06;
+      /* orejas wiggle */
+      lEar.rotation.z = 0.36 + Math.sin(t * 1.4) * 0.06;
+      rEar.rotation.z = -0.36 - Math.sin(t * 1.4) * 0.06;
 
-      /* cola */
-      tail.rotation.y = Math.sin(t*2.2)*0.28;
+      /* cola waggle */
+      tail.rotation.y = Math.sin(t * 2.2) * 0.28;
 
-      /* patas */
-      paws.forEach(function(p,i){ p.rotation.x = Math.sin(t*1.1+i*0.9)*0.06; });
+      /* patas pequeña marcha */
+      paws.forEach(function(p, i) {
+        p.rotation.x = Math.sin(t * 1.1 + i * 0.9) * 0.06;
+      });
 
       /* nariz */
-      muzzle.scale.y = 0.70 + Math.sin(t*1.6)*0.04;
+      muzzle.scale.y = 0.70 + Math.sin(t * 1.6) * 0.04;
 
-      /* ojos parpadeo suave */
-      var blink = Math.sin(t * 0.8);
-      if (blink < -0.9) { lEye.scale.y = 0.12; rEye.scale.y = 0.12; }
-      else { lEye.scale.y = 1; rEye.scale.y = 1; }
-
-      /* luz pulsa */
-      fl.intensity = 1.0 + Math.sin(t*0.7)*0.4;
-
-      /* partículas geométricas */
-      gParticles.forEach(function(p) {
-        p.position.x += p.userData.vx;
-        p.position.y += p.userData.vy;
-        p.rotation.x += p.userData.rx;
-        p.rotation.y += p.userData.ry;
-        if (p.position.x > 10)  p.position.x = -10;
-        if (p.position.x < -10) p.position.x = 10;
-        if (p.position.y > 6)   p.position.y = -6;
-        if (p.position.y < -6)  p.position.y = 6;
-        p.material.opacity = 0.30 + Math.sin(t*1.2 + p.userData.phase) * 0.28;
+      /* partículas orbitan */
+      pts.forEach(function(pt) {
+        pt.userData.theta += pt.userData.speed;
+        var r = pt.userData.r;
+        var ph = pt.userData.phi;
+        var th = pt.userData.theta;
+        pt.position.set(
+          r * Math.cos(th) * Math.cos(ph),
+          r * Math.sin(ph) + Math.sin(t * 0.8 + pt.userData.phase) * 0.12,
+          r * Math.sin(th) * Math.cos(ph)
+        );
+        pt.material.opacity = 0.30 + Math.sin(t * 1.2 + pt.userData.phase) * 0.25;
       });
+
+      /* luz fill pulsa */
+      fl.intensity = 1.4 + Math.sin(t * 0.7) * 0.4;
+      bl.intensity = 0.6 + Math.sin(t * 0.9) * 0.3;
 
       renderer.render(scene, camera);
     }
