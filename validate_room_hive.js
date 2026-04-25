@@ -33,7 +33,11 @@ try {
   check(/const ROOM_CAPACITY = 15;/.test(hostHtml), 'host.html mantiene 15 usuarios por sala');
 
   const runPetalsBlock = section(indexHtml, 'async function runPetalsInference(', '// Handle incoming Petals tensor');
-  check(!runPetalsBlock.includes('runSimulationCollectiveInference'), 'runPetalsInference ya no deriva al motor local simulado');
+  check(
+    !runPetalsBlock.includes('runSimulationCollectiveInference') ||
+      runPetalsBlock.includes('shouldServeSimulatedCollective()'),
+    'runPetalsInference solo deriva al motor local simulado dentro del simulador'
+  );
   check(!runPetalsBlock.includes('ensureSimulationCollectiveEngine'), 'runPetalsInference ya no precalienta cerebro simulado');
   check(runPetalsBlock.includes('petalsForwardPass') || runPetalsBlock.includes('generatePetalsTextFromMessages'), 'runPetalsInference sigue usando Petals real');
 

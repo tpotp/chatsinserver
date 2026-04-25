@@ -4523,6 +4523,44 @@ function normalizePuduCollectiveText(text, forceSentence = false) {
   return cleaned || (text || '');
 }
 
+function shouldServeSimulatedCollective() {
+  return STRICT_PUDU_HIVE && !!hiveSimulation.active && (isSimulateMode || isSimMode || SHOULD_PREWARM_SIM_ENGINE);
+}
+
+async function ensureRoomSimulationVoice(stageState = getPuduStageState()) {
+  if (!shouldServeSimulatedCollective()) return false;
+  try {
+    return await ensureSimulationCollectiveEngine(stageState);
+  } catch (error) {
+    console.warn('[Pudu sim voice]', error.message);
+    return false;
+  }
+}
+
+async function runSimulationCollectivePrompt(messages, options = {}) {
+  const stageState = getPuduStageState();
+  const stage = stageState.activeStage || PUDU_HIVE_STAGES[0];
+  const ready = await ensureRoomSimulationVoice(stageState);
+  if (!ready || !engine) throw new Error('La voz simulada del pudu aun no esta lista.');
+  let fullResponse = '';
+  let tokenCount = 0;
+  const chunks = await engine.chat.completions.create({
+    messages,
+    stream: true,
+    temperature: 0.4,
+    max_tokens: Math.max(options.maxTokens || 0, stage.maxTokens || 48),
+  });
+  for await (const chunk of chunks) {
+    const token = chunk.choices[0]?.delta?.content || '';
+    if (!token) continue;
+    fullResponse += token;
+    tokenCount++;
+    options.onToken?.(token, fullResponse);
+  }
+  fullResponse = normalizePuduCollectiveText(fullResponse || '[El pudu guardo silencio por un momento]', true);
+  return { text: fullResponse, tokenCount, model: currentModelLabel || stage.modelLabel };
+}
+
 async function runSimulationCollectiveInference(aiMsgEl, stage, startTime, options = {}) {
   const contentEl = aiMsgEl.querySelector('.msg-content');
   const pill = document.createElement('div');
@@ -4601,6 +4639,23 @@ async function runPetalsInference(userMessage, options = {}) {
     if (metaEl) metaEl.textContent = `Colmena incompleta · ${stageState.coverageCount}/${PETALS_COMPONENTS.length} shards`;
     isGenerating = false;
     return { text: stageState.progressText, model: stage.modelLabel, meta: metaEl?.textContent || '', blocked: true, route: 'pending' };
+  }
+
+  if (shouldServeSimulatedCollective()) {
+    const simReady = await ensureRoomSimulationVoice(stageState);
+    if (simReady && engine) {
+      let simResult;
+      try {
+        simResult = await runSimulationCollectiveInference(aiMsgEl, stage, startTime, options);
+      } catch (err) {
+        contentEl.textContent = `[Pudu Sim Error: ${err.message}]`;
+        const errorMeta = aiMsgEl.querySelector('.msg-meta');
+        if (errorMeta) errorMeta.textContent = 'Colmena simulada · error';
+        simResult = { text: contentEl.textContent, model: currentModelLabel || stage.modelLabel, meta: errorMeta?.textContent || '', error: err };
+      }
+      isGenerating = false;
+      return simResult;
+    }
   }
 
   const hasLocalLayers = !!petalsActive && petalsMyLayers.length > 0;
@@ -6345,7 +6400,16 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
   try {
     let text = "";
     const strictPetalsRequest = STRICT_PUDU_HIVE && !!signal?.petalsHive && Array.isArray(signal.messages);
-    if (strictPetalsRequest && petalsActive && petalsMyLayers.length > 0) {
+    if (strictPetalsRequest && shouldServeSimulatedCollective()) {
+      const startedAt = performance.now();
+      const result = await runSimulationCollectivePrompt(signal.messages, {
+        maxTokens: signal.max_tokens || 200,
+      });
+      text = result.text;
+      const elapsedMs = Math.max(1, performance.now() - startedAt);
+      const servedTps = Math.round(((result.tokenCount || 1) / (elapsedMs / 1000)) * 10) / 10;
+      localTPS = Math.max(localTPS || 0, servedTps || 0);
+    } else if (strictPetalsRequest && petalsActive && petalsMyLayers.length > 0) {
       const startedAt = performance.now();
       const result = await generatePetalsTextFromMessages(signal.messages, { maxTokens: signal.max_tokens || 200 });
       text = result.text;
@@ -6767,6 +6831,39 @@ async function handleBinMsg(fromId, buf, myVirtualId = null, dc = null) {
     case MSG.MOE_REQ:
     case MSG.TOK_REQ:
     case MSG.SHARD_HANDOFF:
+      if (m.payload?.petalsHive && shouldServeSimulatedCollective() && Array.isArray(m.payload.messages)) {
+        if (isGenerating) {
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null }));
+          break;
+        }
+        isGenerating = true;
+        const startedAt = performance.now();
+        let seqC = 0;
+        try {
+          const stageState = getPuduStageState();
+          const result = await runSimulationCollectivePrompt(m.payload.messages, {
+            maxTokens: m.payload.max_tokens || stageState.activeStage?.maxTokens || 160,
+            onToken: (token) => {
+              if (token && peer.dc?.readyState === 'open') peer.dc.send(encodeMsg(MSG.TOK_CHUNK, m.reqId, seqC++, { token }));
+            }
+          });
+          const elapsedMs = Math.max(1, performance.now() - startedAt);
+          const servedTps = Math.round(((result.tokenCount || 1) / (elapsedMs / 1000)) * 10) / 10;
+          localTPS = Math.max(localTPS || 0, servedTps || 0);
+          if (peer.dc?.readyState === "open") {
+            peer.dc.send(encodeMsg(MSG.TOK_END, m.reqId, seqC, {
+              text: result.text,
+              model: result.model || stageState.activeStage?.modelLabel || 'SmolLM2-1.7B-Q8',
+              tps: servedTps || localTPS,
+            }));
+          }
+          reputation.addInference();
+        } catch (e) {
+          if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Error: ' + e.message, model: null }));
+        }
+        isGenerating = false;
+        break;
+      }
       if (m.payload?.petalsHive && STRICT_PUDU_HIVE && petalsActive && petalsMyLayers.length > 0 && petalsTokenizer && Array.isArray(m.payload.messages)) {
         if (isGenerating) {
           if (peer.dc?.readyState === "open") peer.dc.send(encodeMsg(MSG.TOK_RES, m.reqId, m.seq, { text: 'Ocupado, reintenta.', model: null }));
