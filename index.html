@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>aRosoCHACHAtoP2P-LLM — Distributed Hive Mind</title>
+<title>CHACHAtoP2P-LLM — Distributed Hive Mind</title>
 <meta name="description" content="Browser-based peer-to-peer distributed edge routing with 5-tier hardware classification. Zero-install, zero-server AI inference.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -276,9 +276,9 @@ body::before {
 .pudu-deer {
   position: absolute;
   left: 50%;
-  bottom: 6px;
-  width: 70px;
-  height: 70px;
+  bottom: 10px;
+  width: 62px;
+  height: 62px;
   transform:
     translateX(-50%)
     translateY(var(--pudu-breath-shift))
@@ -434,19 +434,6 @@ body::before {
 @keyframes puduSpark {
   from { opacity: 0.95; transform: translate(-50%, -50%) scale(0.25); }
   to { opacity: 0; transform: translate(-50%, -50%) scale(2.4); }
-}
-@keyframes puduFloat {
-  0%,100% { transform: translateX(-50%) translateY(0) rotate(-1deg); }
-  50%      { transform: translateX(-50%) translateY(-8px) rotate(1deg); }
-}
-/* Aplica la animación al pudu-deer dentro del avatar del sidebar */
-.pudu-avatar .pudu-deer {
-  animation: puduFloat 4s ease-in-out infinite;
-}
-/* Ring pulsante alrededor del avatar cuando está activo */
-@keyframes ringOut {
-  0%   { opacity: 0.8; transform: scale(0.6); }
-  100% { opacity: 0;   transform: scale(1.6); }
 }
 .pudu-stage-name { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: #d9ffe7; }
 .pudu-stage-model { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
@@ -751,76 +738,53 @@ body::before {
 .room-card:not(.active) .room-active-dot {
   background: rgba(255,255,255,0.16); box-shadow: none;
 }
-/* ══ PUDÚ 3D OVERLAY — estilo v12 completo ══ */
 #pudu3d-overlay {
   position: fixed;
-  inset: 0;
-  z-index: 500;
-  display: none;
+  left: 0; right: 0;
+  top: 0; bottom: 0;
+  z-index: 500; display: none;
   pointer-events: none;
-  overflow: hidden;
-}
-#pudu3d-overlay.active {
-  display: block;
 }
 #pudu3d-vignette {
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse at center, transparent 20%, rgba(5,8,20,0.70) 100%);
+  background: radial-gradient(ellipse at 50% 40%, rgba(0,255,180,0.04) 0%, rgba(0,0,0,0.55) 100%);
   opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.5s ease;
+  transition: opacity 0.4s ease;
 }
 #pudu3d-overlay.active #pudu3d-vignette { opacity: 1; }
 #pudu3d-canvas {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100% !important;
-  height: 100% !important;
+  left: 0; right: 0;
+  top: 0;
+  /* Only top 65% — leaves room bar + input visible below */
+  height: 65%;
+  width: 100%;
   pointer-events: auto;
 }
-/* Caption estilo v12 — texto arriba del pudú */
+/* Caption appears below pudú, above the chat input area */
 #pudu3d-bubble {
   position: absolute;
-  bottom: 90px;
   left: 50%;
-  transform: translateX(-50%);
+  top: calc(65% - 2px);
+  transform: translateX(-50%) translateY(8px);
   width: min(90vw, 700px);
   padding: 12px 20px; border-radius: 16px;
-  border: 1px solid rgba(0,229,255,0.28);
+  border: 1px solid rgba(0,229,255,0.22);
   background: rgba(4, 10, 24, 0.82);
   backdrop-filter: blur(18px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.48), 0 0 24px rgba(0,229,255,0.10);
-  opacity: 0; transition: opacity 0.4s ease;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.38);
+  opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease;
   pointer-events: none;
-  z-index: 10;
 }
 #pudu3d-overlay.active #pudu3d-bubble {
-  opacity: 1;
+  opacity: 1; transform: translateX(-50%) translateY(0);
 }
 #pudu3d-caption {
-  font-family: 'Fredoka', 'Nunito', cursive;
-  font-size: clamp(16px, 3.5vw, 28px);
-  letter-spacing: 2px;
-  line-height: 1.3;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 0 20px #00e5ff, 0 0 40px rgba(177,107,255,0.6), 2px 2px 0 rgba(0,0,0,0.5);
-  text-transform: uppercase;
-  text-align: center;
+  font-size: clamp(14px, 1.8vw, 22px); line-height: 1.45; font-weight: 700; color: #e8fff8;
+  text-shadow: 0 0 14px rgba(0,229,255,0.18);
 }
 #pudu3d-meta {
-  margin-top: 6px; font-size: 11px; letter-spacing: 0.08em;
-  text-transform: uppercase; color: #66ccff; text-align: center;
-}
-/* Asegura que el input nunca quede bloqueado por el overlay del pudú */
-#input-area {
-  position: relative;
-  z-index: 600 !important;
-}
-@media (max-width: 600px) {
-  #pudu3d-bubble { bottom: 80px; padding: 10px 14px; }
-  #pudu3d-caption { font-size: clamp(14px, 5vw, 22px); }
+  margin-top: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #66ccff;
 }
 
 /* ── Consensus Card ──────────────────────────────────────────── */
@@ -1478,30 +1442,44 @@ body:not(.debug-mode) .message.user-msg .msg-body {
 }
 
 /* Textura de bosque en el fondo (gradiente animado cuando no hay Three.js) */
-/* ── Fondo bosque nativo estilo v12 ── */
-#bg-img {
+body:not(.debug-mode)::before {
+  content: '';
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: url('https://media-cldnry.s-nbcnews.com/image/upload/t_social_share_1024x768_scale,f_auto,q_auto:best/rockcms/2024-11/Pudu-Argentina-207469.jpg') center/cover no-repeat;
-  filter: blur(3px) saturate(1.4) brightness(0.65);
-  transform: scale(1.04);
+  /* Foto real de bosque nativo chileno vía unsplash */
+  background-image: url('https://images.unsplash.com/photo-1448375240586-882707db888b?w=1600&q=80&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center 30%;
+  filter: brightness(0.52) saturate(1.3);
+  animation: bgForestPulse 14s ease-in-out infinite alternate;
 }
-#bg-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(to bottom, rgba(5,8,20,0.5) 0%, rgba(15,10,30,0.3) 40%, rgba(5,8,20,0.6) 100%);
-  pointer-events: none;
-}
-body:not(.debug-mode)::before {
-  content: none;
+@keyframes bgForestPulse {
+  0%  { filter: brightness(0.48) saturate(1.2); }
+  50% { filter: brightness(0.56) saturate(1.4); }
+  100%{ filter: brightness(0.50) saturate(1.3); }
 }
 
 /* Pudú ambient — canvas fullscreen en el fondo */
-
+#pudu-ambient-wrap {
+  display: none; /* ya no usamos wrap, el canvas es directo */
+}
+body.debug-mode #pudu-ambient-wrap { display: none; }
 
 /* El canvas del ambient pudú — fullscreen z-index bajo */
+#pudu-ambient-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  z-index: 1;
+  pointer-events: none;
+}
+@media (max-width: 480px) {
+  #pudu-ambient-canvas { width: 100% !important; height: 100% !important; }
+}
+
 /* Partículas de bosque flotantes */
 #forest-particles {
   position: fixed;
@@ -1512,14 +1490,15 @@ body:not(.debug-mode)::before {
 }
 .fp {
   position: absolute;
+  border-radius: 50%;
   opacity: 0;
-  /* NO border-radius — queremos cuadrados y rombos, no círculos */
+  animation: fpFloat linear infinite;
 }
 @keyframes fpFloat {
-  0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
-  8%   { opacity: 0.7; }
-  92%  { opacity: 0.5; }
-  100% { transform: translateY(-105vh) rotate(270deg); opacity: 0; }
+  0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.4; }
+  100% { transform: translateY(-10vh) rotate(360deg); opacity: 0; }
 }
 
 /* Whisper badge flotante encima del input */
@@ -1548,10 +1527,6 @@ body.debug-mode #pudu-whisper-float { display: none; }
 </style>
 </head>
 <body>
-
-<!-- ── Fondo bosque mágico estilo v12 ── -->
-<div id="bg-img" aria-hidden="true"></div>
-<div id="bg-overlay" aria-hidden="true"></div>
 
 <div id="init-overlay">
   <div class="init-logo">PUDU MIND</div>
@@ -1792,7 +1767,7 @@ body.debug-mode #pudu-whisper-float { display: none; }
 </div>
 
 <!-- ══ BOSQUE VIVO — capas ambientales siempre presentes ══ -->
-
+<canvas id="pudu-ambient-canvas" style="position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;"></canvas>
 <div id="forest-particles" aria-hidden="true"></div>
 <div id="pudu-whisper-float" aria-hidden="true"></div>
 
@@ -2797,34 +2772,16 @@ const PUDU_AVATAR_TEMPLATE = `
     <span class="pudu-orbit"></span>
     <span class="pudu-forest-glow"></span>
     <span class="pudu-deer">
-      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;filter:drop-shadow(0 0 14px rgba(0,229,255,0.55)) drop-shadow(0 0 7px rgba(177,107,255,0.4))">
-        <defs>
-          <radialGradient id="bodGav" cx="50%" cy="40%"><stop offset="0%" stop-color="#c8a46e"/><stop offset="100%" stop-color="#8b5e3c"/></radialGradient>
-          <radialGradient id="faceGav" cx="50%" cy="40%"><stop offset="0%" stop-color="#ddb87a"/><stop offset="100%" stop-color="#a0713f"/></radialGradient>
-        </defs>
-        <ellipse cx="100" cy="136" rx="46" ry="38" fill="url(#bodGav)"/>
-        <rect x="65" y="158" width="12" height="26" rx="6" fill="#8b5e3c"/>
-        <rect x="82" y="162" width="12" height="22" rx="6" fill="#8b5e3c"/>
-        <rect x="106" y="162" width="12" height="22" rx="6" fill="#8b5e3c"/>
-        <rect x="123" y="158" width="12" height="26" rx="6" fill="#8b5e3c"/>
-        <ellipse cx="71" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
-        <ellipse cx="88" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
-        <ellipse cx="112" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
-        <ellipse cx="129" cy="184" rx="9" ry="5" fill="#5c3a1e"/>
-        <ellipse cx="148" cy="130" rx="10" ry="7" fill="#e8d4b0"/>
-        <ellipse cx="100" cy="80" rx="34" ry="32" fill="url(#faceGav)"/>
-        <ellipse cx="72" cy="52" rx="10" ry="18" fill="#c8a46e" transform="rotate(-15 72 52)"/>
-        <ellipse cx="128" cy="52" rx="10" ry="18" fill="#c8a46e" transform="rotate(15 128 52)"/>
-        <ellipse cx="72" cy="52" rx="6" ry="12" fill="#f0c8a0" transform="rotate(-15 72 52)"/>
-        <ellipse cx="128" cy="52" rx="6" ry="12" fill="#f0c8a0" transform="rotate(15 128 52)"/>
-        <ellipse cx="86" cy="78" rx="9" ry="10" fill="#1a0a00"/>
-        <ellipse cx="114" cy="78" rx="9" ry="10" fill="#1a0a00"/>
-        <ellipse cx="88" cy="75" rx="3" ry="3.5" fill="white" opacity=".85"/>
-        <ellipse cx="116" cy="75" rx="3" ry="3.5" fill="white" opacity=".85"/>
-        <ellipse cx="100" cy="93" rx="5" ry="3.5" fill="#c06040"/>
-        <path d="M 88 100 Q 100 96 112 100" stroke="#1a0a00" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <polygon points="100,108 103,116 111,116 105,121 107,129 100,124 93,129 95,121 89,116 97,116" fill="#ffd700" opacity=".9"/>
-      </svg>
+      <span class="pudu-ear pudu-ear-left"></span>
+      <span class="pudu-ear pudu-ear-right"></span>
+      <span class="pudu-face">
+        <span class="pudu-eye pudu-eye-left"><span class="pudu-eye-pupil"></span></span>
+        <span class="pudu-eye pudu-eye-right"><span class="pudu-eye-pupil"></span></span>
+        <span class="pudu-snout">
+          <span class="pudu-nose"></span>
+          <span class="pudu-mouth"></span>
+        </span>
+      </span>
     </span>
     <span class="pudu-touch-ring"></span>
   </span>`;
@@ -3459,12 +3416,12 @@ function buildPuduSummonModel() {
   const root = new T.Group();
 
   // ── Materiales estilo v12: wireframe cyan-verde + ojos grandes expresivos ──
-  const wireMat   = new T.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.85 });
-  const wireMat2  = new T.MeshBasicMaterial({ color: 0x44ffaa, wireframe: true, transparent: true, opacity: 0.72 });
-  const wirePurp  = new T.MeshBasicMaterial({ color: 0xcc88ff, wireframe: true, transparent: true, opacity: 0.60 });
-  const wireGold  = new T.MeshBasicMaterial({ color: 0xffd700, wireframe: true, transparent: true, opacity: 0.75 });
-  const glowMat   = new T.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.18 });
-  const glowBlue  = new T.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.14 });
+  const wireMat   = new T.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.72 });
+  const wireMat2  = new T.MeshBasicMaterial({ color: 0x44ffaa, wireframe: true, transparent: true, opacity: 0.55 });
+  const wirePurp  = new T.MeshBasicMaterial({ color: 0xcc88ff, wireframe: true, transparent: true, opacity: 0.45 });
+  const wireGold  = new T.MeshBasicMaterial({ color: 0xffd700, wireframe: true, transparent: true, opacity: 0.65 });
+  const glowMat   = new T.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.06 });
+  const glowBlue  = new T.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.08 });
 
   // Aura exterior — halo amarillo giratorio como v12
   const haloGeo = new T.TorusGeometry(1.62, 0.022, 8, 54);
@@ -3487,7 +3444,7 @@ function buildPuduSummonModel() {
   root.add(aura);
   root.userData.aura = aura;
   const auraWire = new T.Mesh(new T.SphereGeometry(1.55, 12, 9), wireMat.clone());
-  auraWire.material.opacity = 0.30;
+  auraWire.material.opacity = 0.22;
   auraWire.scale.copy(aura.scale);
   root.add(auraWire);
   root.userData.auraWire = auraWire;
@@ -3608,15 +3565,12 @@ function initPuduSummonScene() {
   puduSummon3D.renderer.setClearColor(0x000000, 0);
   puduSummon3D.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   // Canvas is 65% of window height
-  const cW = window.innerWidth, cH = window.innerHeight;
+  const cW = window.innerWidth, cH = Math.floor(window.innerHeight * 0.65);
   puduSummon3D.renderer.setSize(cW, cH);
-  // Explicitly set CSS pixel dimensions
-  canvas.style.width  = cW + 'px';
-  canvas.style.height = cH + 'px';
   puduSummon3D.scene = new T.Scene();
-  puduSummon3D.camera = new T.PerspectiveCamera(55, cW / Math.max(cH, 1), 0.1, 100);
-  puduSummon3D.camera.position.set(0, 1.8, 7);
-  puduSummon3D.camera.lookAt(0, 0, 0);
+  puduSummon3D.camera = new T.PerspectiveCamera(48, cW / Math.max(cH, 1), 0.1, 100);
+  puduSummon3D.camera.position.set(0, 0.45, 5.8);
+  puduSummon3D.camera.lookAt(0, 0.15, 0);
 
   // Iluminación minimal — el wireframe no necesita mucha luz
   puduSummon3D.scene.add(new T.AmbientLight(0xffffff, 1.6));
@@ -3666,10 +3620,8 @@ function initPuduSummonScene() {
 
   const resize = () => {
     if (!puduSummon3D.renderer || !puduSummon3D.camera) return;
-    const nW = window.innerWidth, nH = window.innerHeight;
+    const nW = window.innerWidth, nH = Math.floor(window.innerHeight * 0.65);
     puduSummon3D.renderer.setSize(nW, nH);
-    canvas.style.width  = nW + 'px';
-    canvas.style.height = nH + 'px';
     puduSummon3D.camera.aspect = nW / Math.max(nH, 1);
     puduSummon3D.camera.updateProjectionMatrix();
   };
@@ -8697,65 +8649,260 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
     setTimeout(() => waitThree(cb, tries + 1), 100);
   }
 
-  /* ── Partículas geométricas CSS flotantes estilo v12 ── */
+  /* ── Partículas flotantes CSS (hojas / brillos) ── */
   function spawnForestParticles() {
     var wrap = document.getElementById('forest-particles');
     if (!wrap) return;
-    var colors = ['#ffdd00','#ff4488','#44ffaa','#4488ff','#ff8844','#cc88ff','#ffffff','#00ffee','#ff0066','#66ff00'];
-    // Tipos: 0=cuadrado, 1=rombo, 2=triángulo
-    var count = 55;
-    for (var i = 0; i < count; i++) {
+    var colors = ['#66ffab','#a0ffd0','#ffd66b','#b5efff','#e0fff5','#c8ffa0'];
+    for (var i = 0; i < 28; i++) {
       (function(i) {
         setTimeout(function() {
           var p = document.createElement('div');
-          var type = i % 3;
-          var sz = 6 + Math.random() * 14;
-          var color = colors[i % colors.length];
-          var dur = 10 + Math.random() * 22;
-          var delay = Math.random() * 18;
-          var left = Math.random() * 100;
-          var baseStyle = [
-            'position:absolute',
-            'left:' + left + '%',
-            'bottom:-20px',
-            'animation:fpFloat ' + dur + 's ' + delay + 's linear infinite',
-            'opacity:0',
-          ];
-          if (type === 0) {
-            // cuadrado
-            p.style.cssText = baseStyle.concat([
-              'width:' + sz + 'px',
-              'height:' + sz + 'px',
-              'background:' + color,
-              'transform:rotate(' + (Math.random()*45) + 'deg)',
-            ]).join(';');
-          } else if (type === 1) {
-            // rombo
-            p.style.cssText = baseStyle.concat([
-              'width:' + sz + 'px',
-              'height:' + sz + 'px',
-              'background:' + color,
-              'transform:rotate(45deg)',
-            ]).join(';');
-          } else {
-            // triángulo (border trick)
-            var half = Math.round(sz * 0.6);
-            p.style.cssText = baseStyle.concat([
-              'width:0',
-              'height:0',
-              'background:transparent',
-              'border-left:' + half + 'px solid transparent',
-              'border-right:' + half + 'px solid transparent',
-              'border-bottom:' + sz + 'px solid ' + color,
-            ]).join(';');
-          }
+          p.className = 'fp';
+          var sz = 2 + Math.random() * 5;
+          p.style.cssText = [
+            'width:' + sz + 'px',
+            'height:' + sz + 'px',
+            'left:' + (Math.random() * 100) + '%',
+            'background:' + colors[Math.floor(Math.random() * colors.length)],
+            'box-shadow: 0 0 ' + (sz * 2) + 'px ' + colors[Math.floor(Math.random() * colors.length)],
+            'animation-duration:' + (8 + Math.random() * 18) + 's',
+            'animation-delay:' + (Math.random() * 12) + 's',
+          ].join(';');
           wrap.appendChild(p);
-        }, i * 80);
+        }, i * 120);
       })(i);
     }
   }
 
   /* ── Pudú ambiental Three.js permanente — estilo wireframe v12 ── */
+  function initAmbientPudu() {
+    var canvas = document.getElementById('pudu-ambient-canvas');
+    if (!canvas || !window.THREE) return;
+
+    var T = window.THREE;
+    var W = window.innerWidth, H = window.innerHeight;
+    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(W, H);
+
+    var scene = new T.Scene();
+    var camera = new T.PerspectiveCamera(52, W / H, 0.1, 100);
+    camera.position.set(0, 0.3, 7.2);
+    camera.lookAt(0, 0.1, 0);
+
+    /* luces minimal — wireframe no necesita mucho */
+    scene.add(new T.AmbientLight(0xffffff, 1.8));
+    var kl = new T.DirectionalLight(0x88ffee, 1.0); kl.position.set(-2, 5, 4); scene.add(kl);
+    var fl = new T.PointLight(0xffcc44, 1.2, 22); fl.position.set(3, 2, 5); scene.add(fl);
+
+    /* materiales wireframe colores v12 */
+    var wCyan   = function() { return new T.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, transparent: true, opacity: 0.65 }); };
+    var wGreen  = function() { return new T.MeshBasicMaterial({ color: 0x44ffaa, wireframe: true, transparent: true, opacity: 0.50 }); };
+    var wPurp   = function() { return new T.MeshBasicMaterial({ color: 0xcc88ff, wireframe: true, transparent: true, opacity: 0.42 }); };
+    var wGold   = function() { return new T.MeshBasicMaterial({ color: 0xffd700, wireframe: true, transparent: true, opacity: 0.58 }); };
+    var glow    = function(c) { return new T.MeshBasicMaterial({ color: c||0x00ffcc, transparent: true, opacity: 0.05 }); };
+
+    /* ── modelo pudú wireframe ── */
+    var root = new T.Group();
+
+    /* halos */
+    var halo = new T.Mesh(new T.TorusGeometry(1.58, 0.020, 7, 52),
+      new T.MeshBasicMaterial({ color: 0xffdd00, transparent: true, opacity: 0.42 }));
+    halo.rotation.x = Math.PI / 2;
+    root.add(halo);
+    var halo2 = new T.Mesh(new T.TorusGeometry(1.32, 0.014, 6, 38),
+      new T.MeshBasicMaterial({ color: 0xff66cc, transparent: true, opacity: 0.30 }));
+    halo2.rotation.x = Math.PI / 2; halo2.rotation.z = 0.5;
+    root.add(halo2);
+
+    /* aura */
+    var aura = new T.Mesh(new T.SphereGeometry(1.60, 16, 11), glow(0x00ffcc));
+    aura.scale.set(1.12, 0.88, 1); root.add(aura);
+    var auraWire = new T.Mesh(new T.SphereGeometry(1.60, 10, 8), wCyan());
+    auraWire.material.opacity = 0.16; auraWire.scale.copy(aura.scale); root.add(auraWire);
+
+    /* cuerpo */
+    var body = new T.Mesh(new T.SphereGeometry(0.86, 18, 13), wCyan());
+    body.scale.set(1, 0.80, 1.08); root.add(body);
+    root.add(new T.Mesh(new T.SphereGeometry(0.84, 12, 9), glow(0x00ffcc)));
+
+    /* vientre */
+    var belly = new T.Mesh(new T.SphereGeometry(0.50, 14, 10), wPurp());
+    belly.position.set(0, -0.11, 0.30); belly.scale.set(0.92, 0.62, 0.84); root.add(belly);
+
+    /* cabeza */
+    var head = new T.Group();
+    head.position.set(0, 0.84, 0.68); root.add(head);
+    head.add(new T.Mesh(new T.SphereGeometry(0.54, 18, 13), wGreen()));
+
+    /* hocico */
+    var muzzle = new T.Mesh(new T.SphereGeometry(0.23, 14, 10), wCyan());
+    muzzle.position.set(0, -0.09, 0.40); muzzle.scale.set(1.18, 0.70, 0.90); head.add(muzzle);
+
+    /* nariz */
+    head.add(function(){ var n=new T.Mesh(new T.SphereGeometry(0.065,8,6),
+      new T.MeshBasicMaterial({color:0xff88bb,transparent:true,opacity:0.85}));
+      n.position.set(0,-0.06,0.60); return n; }());
+
+    /* ojos grandes expresivos */
+    function mkEye(x) {
+      var g = new T.Group(); g.position.set(x, 0.10, 0.42);
+      g.add(new T.Mesh(new T.SphereGeometry(0.112,12,10), new T.MeshBasicMaterial({color:0xffffff})));
+      var iris=new T.Mesh(new T.SphereGeometry(0.088,10,8),new T.MeshBasicMaterial({color:0x22aaff})); iris.position.z=0.03; g.add(iris);
+      var pupil=new T.Mesh(new T.SphereGeometry(0.052,8,6),new T.MeshBasicMaterial({color:0x080c12})); pupil.position.z=0.06; g.add(pupil);
+      var shine=new T.Mesh(new T.SphereGeometry(0.020,6,5),new T.MeshBasicMaterial({color:0xffffff})); shine.position.set(0.028,0.030,0.075); g.add(shine);
+      return g;
+    }
+    var lEye = mkEye(-0.185), rEye = mkEye(0.185);
+    head.add(lEye, rEye);
+
+    /* orejas */
+    var earG = new T.SphereGeometry(0.20, 12, 8);
+    var lEar = new T.Mesh(earG, wGold()); lEar.position.set(-0.33,0.36,0.04); lEar.scale.set(0.52,1.26,0.40); lEar.rotation.z=0.36;
+    var rEar = new T.Mesh(earG, wGold()); rEar.position.set(0.33,0.36,0.04); rEar.scale.set(0.52,1.26,0.40); rEar.rotation.z=-0.36;
+    head.add(lEar, rEar);
+
+    /* cuernitos */
+    var hornG = new T.CylinderGeometry(0.020,0.046,0.22,6);
+    var hL=new T.Mesh(hornG,wGold()); hL.position.set(-0.14,0.44,-0.03); hL.rotation.z=0.24;
+    var hR=new T.Mesh(hornG,wGold()); hR.position.set(0.14,0.44,-0.03); hR.rotation.z=-0.24;
+    head.add(hL, hR);
+
+    /* patas */
+    var legG=new T.CylinderGeometry(0.085,0.090,0.50,9), hoofG=new T.SphereGeometry(0.095,9,7);
+    var paws = [];
+    [[-0.29,-0.58,0.28],[0.29,-0.58,0.28],[-0.29,-0.58,-0.28],[0.29,-0.58,-0.28]].forEach(function(pos,i){
+      var leg=new T.Group();
+      leg.add(new T.Mesh(legG, i%2===0 ? wPurp() : wCyan()));
+      var hoof=new T.Mesh(hoofG,wGold()); hoof.position.set(0,-0.30,0.04); hoof.scale.set(1.06,0.54,1.14); leg.add(hoof);
+      leg.position.set(pos[0],pos[1],pos[2]); root.add(leg); paws.push(leg);
+    });
+
+    /* cola */
+    var tail=new T.Mesh(new T.SphereGeometry(0.12,10,8),
+      new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.60}));
+    tail.position.set(0,0.14,-0.76); tail.scale.set(1,0.70,0.70); root.add(tail);
+
+    root.position.set(0, -0.32, 0);
+    scene.add(root);
+
+    /* ── Partículas geométricas 3D flotando (cuadrados, triángulos, rombos) ── */
+    var gParticles = [];
+    var pColors = [0xffdd00, 0xff4488, 0x44ffaa, 0x4488ff, 0xff8844, 0xcc88ff, 0xffffff, 0x00ffee, 0xff0066, 0x66ff00];
+    var pGeos = [
+      new T.BoxGeometry(0.13, 0.13, 0.13),
+      new T.TetrahedronGeometry(0.11),
+      new T.OctahedronGeometry(0.10),
+      new T.BoxGeometry(0.15, 0.15, 0.015),   // flat square (rombo)
+      new T.TetrahedronGeometry(0.13, 0),
+    ];
+    for (var i = 0; i < 65; i++) {
+      var mat = new T.MeshBasicMaterial({
+        color: pColors[i % pColors.length],
+        transparent: true,
+        opacity: 0.50 + Math.random() * 0.35,
+        wireframe: i % 4 === 0
+      });
+      var mesh = new T.Mesh(pGeos[i % pGeos.length], mat);
+      mesh.position.set(
+        (Math.random() - 0.5) * 18,
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 6 - 1
+      );
+      mesh.rotation.set(Math.random()*Math.PI*2, Math.random()*Math.PI*2, Math.random()*Math.PI*2);
+      mesh.userData = {
+        vx: (Math.random()-0.5)*0.007,
+        vy: (Math.random()-0.5)*0.004,
+        rx: (Math.random()-0.5)*0.022,
+        ry: (Math.random()-0.5)*0.022,
+        phase: Math.random()*Math.PI*2
+      };
+      scene.add(mesh);
+      gParticles.push(mesh);
+    }
+
+    /* acelerómetro */
+    var tiltX = 0, tiltY = 0;
+    window.addEventListener('deviceorientation', function(e) {
+      tiltX = (e.gamma||0)/40; tiltY = (e.beta||0)/60;
+    }, { passive: true });
+
+    /* resize */
+    window.addEventListener('resize', function() {
+      W = window.innerWidth; H = window.innerHeight;
+      renderer.setSize(W, H);
+      camera.aspect = W / H;
+      camera.updateProjectionMatrix();
+    }, { passive: true });
+
+    /* ── Animación principal ── */
+    var startT = null;
+    function animate(now) {
+      requestAnimationFrame(animate);
+      if (!startT) startT = now;
+      var t = (now - startT) / 1000;
+
+      /* pudú flota y respira */
+      root.position.y = -0.32 + Math.sin(t * 0.9) * 0.07;
+      root.rotation.y = Math.sin(t * 0.35) * 0.20 + tiltX * 0.55;
+      root.rotation.z = tiltX * -0.12 + Math.sin(t * 0.6) * 0.022;
+      root.rotation.x = tiltY * 0.10;
+
+      /* cabeza */
+      head.rotation.y = Math.sin(t * 0.5) * 0.12 + tiltX * 0.40;
+      head.rotation.x = Math.sin(t * 0.4) * 0.06 + tiltY * 0.22;
+
+      /* halos */
+      halo.rotation.z = t * 0.55;
+      halo2.rotation.z = -(t * 0.40);
+
+      /* aura pulsa */
+      var aS = 1.04 + Math.sin(t * 1.2) * 0.04;
+      aura.scale.set(aS*1.12, aS*0.88, aS);
+      aura.material.opacity = 0.04 + Math.sin(t*1.5)*0.02;
+      auraWire.material.opacity = 0.10 + Math.sin(t*1.8)*0.05;
+
+      /* orejas */
+      lEar.rotation.z = 0.36 + Math.sin(t*1.4)*0.06;
+      rEar.rotation.z = -0.36 - Math.sin(t*1.4)*0.06;
+
+      /* cola */
+      tail.rotation.y = Math.sin(t*2.2)*0.28;
+
+      /* patas */
+      paws.forEach(function(p,i){ p.rotation.x = Math.sin(t*1.1+i*0.9)*0.06; });
+
+      /* nariz */
+      muzzle.scale.y = 0.70 + Math.sin(t*1.6)*0.04;
+
+      /* ojos parpadeo suave */
+      var blink = Math.sin(t * 0.8);
+      if (blink < -0.9) { lEye.scale.y = 0.12; rEye.scale.y = 0.12; }
+      else { lEye.scale.y = 1; rEye.scale.y = 1; }
+
+      /* luz pulsa */
+      fl.intensity = 1.0 + Math.sin(t*0.7)*0.4;
+
+      /* partículas geométricas */
+      gParticles.forEach(function(p) {
+        p.position.x += p.userData.vx;
+        p.position.y += p.userData.vy;
+        p.rotation.x += p.userData.rx;
+        p.rotation.y += p.userData.ry;
+        if (p.position.x > 10)  p.position.x = -10;
+        if (p.position.x < -10) p.position.x = 10;
+        if (p.position.y > 6)   p.position.y = -6;
+        if (p.position.y < -6)  p.position.y = 6;
+        p.material.opacity = 0.30 + Math.sin(t*1.2 + p.userData.phase) * 0.28;
+      });
+
+      renderer.render(scene, camera);
+    }
+    requestAnimationFrame(animate);
+  }
+
   /* ── Whisper float (espejo del pudu-whisper en overlay) ── */
   function initWhisperFloat() {
     var wf = document.getElementById('pudu-whisper-float');
@@ -8789,10 +8936,12 @@ boot().catch(err => { updateInitStatus(`Boot failed: ${err.message}`); console.e
   document.addEventListener('DOMContentLoaded', function() {
     spawnForestParticles();
     initWhisperFloat();
+    waitThree(initAmbientPudu);
   });
   if (document.readyState !== 'loading') {
     spawnForestParticles();
     initWhisperFloat();
+    waitThree(initAmbientPudu);
   }
 })();
 </script>
