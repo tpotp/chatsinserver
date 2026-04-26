@@ -689,7 +689,25 @@ function _hiveRegisterWorker(workerId, hasEngine, tps) {
     peerId: workerId, hasEngine: !!hasEngine,
     tps: tps || 0, lastSeen: Date.now()
   });
+  // Update HiveCounter if available
   if (_hiveCounterRef) _hiveCounterRef.setHiveWorkers(hiveWorkers.size);
+  // ALSO directly update the DOM hive bar (failsafe)
+  try {
+    const bar = document.getElementById('pudu-hive-bar');
+    if (bar) {
+      const workerEl = bar.querySelector('.hive-workers,.hive-offline');
+      if (workerEl && hiveWorkers.size > 0) {
+        workerEl.className='hive-workers';
+        workerEl.textContent=`🐝 COLMENA ACTIVA · ${hiveWorkers.size} worker${hiveWorkers.size>1?'s':''}`;
+        workerEl.style.color='#4ade80';
+        workerEl.style.fontWeight='800';
+        workerEl.style.fontStyle='normal';
+        workerEl.style.textShadow='0 0 8px rgba(74,222,128,0.5)';
+        bar.style.borderColor='rgba(74,222,128,0.4)';
+        bar.style.boxShadow='0 0 12px rgba(74,222,128,0.15)';
+      }
+    }
+  } catch(e) { console.warn('[HIVE] DOM failsafe error:', e); }
   console.log('[HIVE] ✅ Worker registrado:', workerId?.slice(0,8), 'hasEngine=' + hasEngine, 'total=' + hiveWorkers.size);
 }
 
@@ -1275,8 +1293,19 @@ window.sendMessage=function(){
   inp.value='';inp.style.height='auto';
   // @pudu trigger — invoke PuduBot if message starts with @pudu
   if(/^@pudu(?:bot)?\b/i.test(rawTxt)){
+    console.log('[PuduBot] @pudu detectado en sendMessage! rawTxt:', rawTxt);
     const q=rawTxt.replace(/^@pudu(?:bot)?\s*/i,'').trim()||'¿quién eres?';
-    setTimeout(()=>_invokePuduBot(currentRoomId,q,myName||'alguien'),400);
+    const _room=currentRoomId, _name=myName||'alguien';
+    setTimeout(function(){ 
+      console.log('[PuduBot] setTimeout fired, calling _invokePuduBot');
+      try { 
+        if (window._invokePuduBot) {
+          window._invokePuduBot(_room, q, _name);
+        } else {
+          _invokePuduBot(_room, q, _name); 
+        }
+      } catch(e) { console.error('[PuduBot] _invokePuduBot error:', e); }
+    }, 400);
   }
 };
 
@@ -3697,6 +3726,10 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
     _puduIsThinking = false;
   }
 }
+// Expose on window for debugging and cross-scope access
+window._invokePuduBot = _invokePuduBot;
+window._hiveWorkers = hiveWorkers;
+window._hiveBestWorker = hiveBestWorker;
 
 // Handle pudubot_resp P2P messages — hook into handleP2PMessage
 const _origHandleP2P = handleP2PMessage;
