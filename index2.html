@@ -953,8 +953,15 @@ function connectNostrRelay(url){
   function connect(){
     if(nostrSockets[url]&&nostrSockets[url].readyState<=1)return;
     const ws=new WebSocket(url);nostrSockets[url]=ws;
-    ws.onopen=()=>{dot.className='rdot ok';retryDelay=3000;const since=Math.floor(Date.now()/1000)-SIG_TTL*4;ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":[GLOBAL_TAG,"p2p-hive-public"],since}]));onRelayReady();};
-    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT"){handleNostrEvent(msg[2]);_hiveProcessEvent(msg[2]);}else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
+    ws.onopen=()=>{dot.className='rdot ok';retryDelay=3000;const since=Math.floor(Date.now()/1000)-SIG_TTL*4;
+      // Subscribe to chat tag + all hive namespaces (public AND room-specific)
+      const hiveTags=[GLOBAL_TAG,'p2p-hive-public'];
+      const _rp=new URLSearchParams(window.location.search).get('room');
+      if(_rp)hiveTags.push('p2p-hive-'+_rp);
+      ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":hiveTags,since}]));
+      onRelayReady();
+    };
+    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT"){const ev=msg[2];handleNostrEvent(ev);try{_hiveProcessEvent(ev);}catch(he){console.warn('[HIVE] Process error:',he.message);}}else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
     ws.onerror=()=>{dot.className='rdot fail';};
     ws.onclose=()=>{dot.className='rdot fail';nostrSockets[url]=null;setTimeout(connect,retryDelay);retryDelay=Math.min(retryDelay*2,60000);};
   }
@@ -3435,12 +3442,15 @@ function hiveRequest(messages, maxTokens = 250) {
 // No need to hook window.handleNostrEvent (which doesn't exist in module scope).
 function _hiveProcessEvent(ev) {
   if (!ev || !ev.id) return;
-  const tags = ev.tags || [];
-  const isHive = tags.some(t => t[0] === 't' && (t[1] === HIVE_NAMESPACE || t[1] === 'p2p-hive-public'));
-  if (!isHive) return;
+  // Skip own events
+  if (ev.pubkey === pubKeyHex) return;
+  
   let c;
   try { c = JSON.parse(ev.content); } catch(e) { return; }
 
+  // Check if this is a hive-relevant event by content type (not just tags)
+  // This catches events from both the tag subscription AND direct parsing
+  
   // Presencia de un nodo de la colmena
   if (c.type === 'presence' && c.peerId) {
     const workerHasEngine = !!c.hasEngine || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
@@ -3449,10 +3459,10 @@ function _hiveProcessEvent(ev) {
       tps: c.tps || 0, lastSeen: Date.now()
     });
     // Also set the legacy colmenaPeerId for the old sendPudubotRequest path
-    if (workerHasEngine && !colmenaPeerId) colmenaPeerId = ev.pubkey || c.peerId;
+    if (workerHasEngine) colmenaPeerId = ev.pubkey || c.peerId;
     // Actualizar UI inmediatamente al detectar workers
     HiveCounter.setHiveWorkers(hiveWorkers.size);
-    console.log(`[PuduBot] Worker detectado: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine} total=${hiveWorkers.size}`);
+    console.log(`[HIVE] ✅ Worker detectado: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine} tps=${c.tps} total=${hiveWorkers.size}`);
     return;
   }
 
@@ -3460,7 +3470,7 @@ function _hiveProcessEvent(ev) {
   if (c.type === 'signal' && peerId && (c.to === peerId || c.to === pubKeyHex)) {
     const sig = c.signal;
     if (sig?.type === 'moe_fallback_res') {
-      console.log(`[PuduBot] Respuesta recibida reqId=${sig.reqId}`);
+      console.log(`[HIVE] ✅ Respuesta recibida reqId=${sig.reqId}`);
       const pending = pudubotPending.get(sig.reqId);
       if (pending) {
         clearTimeout(pending.timer);
