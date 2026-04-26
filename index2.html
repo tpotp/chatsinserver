@@ -3413,7 +3413,7 @@ function hiveStartListening() {
 
 // ── Publicar en p2p-hive-public usando sockets del chat ───────────
 function hivePublish(content) {
-  if (!nostrMod || !privKeyBytes) { console.error('[PuduBot] nostrMod o privKeyBytes no listo'); return 0; }
+  if (!nostrMod || !privKeyBytes) { console.error('[PuduBot] nostrMod o privKeyBytes no listo. nostrMod:', !!nostrMod, 'privKeyBytes:', !!privKeyBytes); return 0; }
   const event = nostrMod.finalizeEvent({
     kind: 1,
     created_at: Math.floor(Date.now()/1000),
@@ -3572,6 +3572,11 @@ const HiveCounter = (() => {
   const result = { LEVELS, getCount, getLevel, setHiveWorkers, updateUI };
   // Wire up the early reference for the bridge function at module top
   _hiveCounterRef = result;
+  // Sync with any workers detected before HiveCounter was initialized
+  if (hiveWorkers.size > 0) {
+    _hiveCounterRef.setHiveWorkers(hiveWorkers.size);
+    console.log('[HIVE] HiveCounter synced with', hiveWorkers.size, 'pre-detected workers');
+  }
   return result;
 })();
 
@@ -3621,6 +3626,7 @@ function _puduShowResponseCinematic(responseText) {
 }
 
 async function _invokePuduBot(roomId, question, askerName) {
+  console.log('[PuduBot] _invokePuduBot llamado. room=' + roomId + ' q=' + question + ' asker=' + askerName);
   if (_puduIsThinking) { addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿'); return; }
   _puduIsThinking = true;
 
@@ -3639,16 +3645,23 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
   let responseText = null;
   try {
     const worker = hiveBestWorker();
+    console.log('[PuduBot] hiveBestWorker():', worker ? JSON.stringify(worker) : 'NULL', 'hiveWorkers.size:', hiveWorkers.size);
     if (worker) {
-      console.log('[PuduBot] Invocando colmena...');
-      const result = await hiveRequest([
-        { role:'system', content: systemPrompt },
-        { role:'user',   content: `${askerName} pregunta: ${question}` }
-      ], 250);
-      if (result?.text) {
-        responseText = result.text;
-        console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
-        _puduShowResponseCinematic(responseText);
+      console.log('[PuduBot] Invocando colmena... worker:', worker.peerId?.slice(0,8));
+      try {
+        const result = await hiveRequest([
+          { role:'system', content: systemPrompt },
+          { role:'user',   content: `${askerName} pregunta: ${question}` }
+        ], 250);
+        console.log('[PuduBot] hiveRequest result:', result ? JSON.stringify(result).slice(0,100) : 'NULL');
+        if (result?.text) {
+          responseText = result.text;
+          console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
+          _puduShowResponseCinematic(responseText);
+        }
+      } catch(hiveErr) {
+        console.error('[PuduBot] hiveRequest error:', hiveErr.message);
+        // Don't return - fall through to fallback
       }
     }
 
