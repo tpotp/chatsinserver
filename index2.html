@@ -954,7 +954,7 @@ function connectNostrRelay(url){
     if(nostrSockets[url]&&nostrSockets[url].readyState<=1)return;
     const ws=new WebSocket(url);nostrSockets[url]=ws;
     ws.onopen=()=>{dot.className='rdot ok';retryDelay=3000;const since=Math.floor(Date.now()/1000)-SIG_TTL*4;ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":[GLOBAL_TAG,"p2p-hive-public"],since}]));onRelayReady();};
-    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT")handleNostrEvent(msg[2]);else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
+    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT"){handleNostrEvent(msg[2]);_hiveProcessEvent(msg[2]);}else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
     ws.onerror=()=>{dot.className='rdot fail';};
     ws.onclose=()=>{dot.className='rdot fail';nostrSockets[url]=null;setTimeout(connect,retryDelay);retryDelay=Math.min(retryDelay*2,60000);};
   }
@@ -1220,6 +1220,7 @@ function addReact(msgId,emoji){
 
 window.sendMessage=function(){
   const inp=document.getElementById('chat-input');let txt=inp.value.trim();if(!txt)return;
+  const rawTxt=txt; // save before filtering for @pudu check
   txt=filtrarGarabatos(txt);const msgId=uid(),room=rooms.get(currentRoomId);if(!room)return;
   
   const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:pubKeyHex,ts:Date.now(),hops:0,payload:{text:txt,name:myName}};
@@ -1228,6 +1229,11 @@ window.sendMessage=function(){
   try{add3DText(txt,true);spawnStars(innerWidth-80,innerHeight-80);spawnRipple(innerWidth-80,innerHeight-80);playSendSound();}catch(e){}
   if(sent===0)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
   inp.value='';inp.style.height='auto';
+  // @pudu trigger — invoke PuduBot if message starts with @pudu
+  if(/^@pudu(?:bot)?\b/i.test(rawTxt)){
+    const q=rawTxt.replace(/^@pudu(?:bot)?\s*/i,'').trim()||'¿quién eres?';
+    setTimeout(()=>_invokePuduBot(currentRoomId,q,myName||'alguien'),400);
+  }
 };
 
 let myTypingTO=null,myTypingSent=false;
@@ -3424,46 +3430,51 @@ function hiveRequest(messages, maxTokens = 250) {
   });
 }
 
-// ── Hook en handleNostrEvent para recibir eventos de la colmena ───
-// Se instala después de que el chat define handleNostrEvent
-function hiveHookNostrEvent() {
-  const _orig = window.handleNostrEvent;
-  window.handleNostrEvent = function(ev) {
-    // Procesar siempre con el handler original primero
-    _orig(ev);
-    // Luego revisar si es un evento de la colmena
-    const tags = ev.tags || [];
-    const isHive = tags.some(t => t[0] === 't' && t[1] === HIVE_NAMESPACE);
-    if (!isHive) return;
-    let c;
-    try { c = JSON.parse(ev.content); } catch(e) { return; }
+// ── Hive event processor — called from ws.onmessage in connectNostrRelay ───
+// This runs inside the module scope so it has direct access to all variables.
+// No need to hook window.handleNostrEvent (which doesn't exist in module scope).
+function _hiveProcessEvent(ev) {
+  if (!ev || !ev.id) return;
+  const tags = ev.tags || [];
+  const isHive = tags.some(t => t[0] === 't' && (t[1] === HIVE_NAMESPACE || t[1] === 'p2p-hive-public'));
+  if (!isHive) return;
+  let c;
+  try { c = JSON.parse(ev.content); } catch(e) { return; }
 
-    // Presencia de un nodo de la colmena
-    if (c.type === 'presence' && c.peerId) {
-      const workerHasEngine = !!c.hasEngine || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
-      hiveWorkers.set(c.peerId, {
-        peerId: c.peerId, hasEngine: workerHasEngine,
-        tps: c.tps || 0, lastSeen: Date.now()
-      });
-      console.log(`[PuduBot] Worker: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine}`);
-      return;
-    }
+  // Presencia de un nodo de la colmena
+  if (c.type === 'presence' && c.peerId) {
+    const workerHasEngine = !!c.hasEngine || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
+    hiveWorkers.set(c.peerId, {
+      peerId: c.peerId, hasEngine: workerHasEngine,
+      tps: c.tps || 0, lastSeen: Date.now()
+    });
+    // Also set the legacy colmenaPeerId for the old sendPudubotRequest path
+    if (workerHasEngine && !colmenaPeerId) colmenaPeerId = ev.pubkey || c.peerId;
+    // Actualizar UI inmediatamente al detectar workers
+    HiveCounter.setHiveWorkers(hiveWorkers.size);
+    console.log(`[PuduBot] Worker detectado: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine} total=${hiveWorkers.size}`);
+    return;
+  }
 
-    // Respuesta de la colmena dirigida a nosotros
-    // La colmena usa "to: peerId" donde peerId = pubKeyHex.slice(0,12)
-    if (c.type === 'signal' && (c.to === peerId || c.to === pubKeyHex)) {
-      const sig = c.signal;
-      if (sig?.type === 'moe_fallback_res') {
-        console.log(`[PuduBot] Respuesta recibida reqId=${sig.reqId}`);
-        const pending = pudubotPending.get(sig.reqId);
-        if (pending) {
-          clearTimeout(pending.timer);
-          pudubotPending.delete(sig.reqId);
-          pending.resolve(sig.payload);
-        }
+  // Respuesta de la colmena dirigida a nosotros
+  if (c.type === 'signal' && peerId && (c.to === peerId || c.to === pubKeyHex)) {
+    const sig = c.signal;
+    if (sig?.type === 'moe_fallback_res') {
+      console.log(`[PuduBot] Respuesta recibida reqId=${sig.reqId}`);
+      const pending = pudubotPending.get(sig.reqId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pudubotPending.delete(sig.reqId);
+        pending.resolve(sig.payload);
       }
     }
-  };
+  }
+}
+
+// Legacy hook — no-op since we now process hive events inline
+function hiveHookNostrEvent() {
+  // Processing is now done directly in _hiveProcessEvent called from ws.onmessage
+  console.log('[PuduBot] Hive event processing active (inline)');
 }
 
 // ── HIVE COUNTER UI (simplificado) ───────────────────────────────
@@ -3496,10 +3507,22 @@ const HiveCounter = (() => {
     const workerEl = bar.querySelector('.hive-workers,.hive-offline');
     if (_hiveWorkers > 0) {
       workerEl.className='hive-workers';
-      workerEl.textContent=`⚡ ${_hiveWorkers} worker${_hiveWorkers>1?'s':''}`;
+      workerEl.textContent=`🐝 COLMENA ACTIVA · ${_hiveWorkers} worker${_hiveWorkers>1?'s':''}`;
+      workerEl.style.color='#4ade80';
+      workerEl.style.fontWeight='800';
+      workerEl.style.fontStyle='normal';
+      workerEl.style.textShadow='0 0 8px rgba(74,222,128,0.5)';
+      bar.style.borderColor='rgba(74,222,128,0.4)';
+      bar.style.boxShadow='0 0 12px rgba(74,222,128,0.15)';
     } else {
       workerEl.className='hive-offline';
       workerEl.textContent='colmena offline';
+      workerEl.style.color='rgba(255,100,100,0.6)';
+      workerEl.style.fontWeight='';
+      workerEl.style.fontStyle='italic';
+      workerEl.style.textShadow='';
+      bar.style.borderColor='rgba(0,229,255,0.15)';
+      bar.style.boxShadow='';
     }
   }
   return { LEVELS, getCount, getLevel, setHiveWorkers, updateUI };
@@ -3516,130 +3539,135 @@ const PUDU_PERSONALITIES = [
 ];
 
 // ── PUDUBOT CORE ─────────────────────────────────────────────────
-const PuduBot = (() => {
-  let isThinking = false;
+// ── _invokePuduBot — called from sendMessage when @pudu detected ──
+let _puduIsThinking = false;
 
-  function getRoomContext(roomId, n=6) {
-    const room = rooms.get(roomId);
-    if (!room) return '';
-    return room.msgArchive
-      .filter(m => !m.isSystem && !m.text.startsWith('*'))
-      .slice(-n).map(m => `${m.user}: ${m.text}`).join('\n');
-  }
+function _puduGetRoomContext(roomId, n=6) {
+  const room = rooms.get(roomId);
+  if (!room) return '';
+  return room.msgArchive
+    .filter(m => !m.isSystem && !m.text.startsWith('*'))
+    .slice(-n).map(m => `${m.user}: ${m.text}`).join('\n');
+}
 
-  async function invoke(roomId, question, askerName) {
-    if (isThinking) { addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿'); return; }
-    isThinking = true;
+function _puduUpdateThinkMsg(roomId, thinkId, text) {
+  const room = rooms.get(roomId); if (!room) return;
+  const el = room.msgEls[thinkId];
+  if (el) { const b=el.querySelector('.msg-bubble'); if(b) b.textContent=text; }
+  const entry = room.msgArchive.find(m=>m.id===thinkId);
+  if (entry) entry.text = text;
+}
 
-    const count = HiveCounter.getCount();
-    const level = HiveCounter.getLevel(count);
-    const levelIdx = HiveCounter.LEVELS.indexOf(level);
-    const thinkId = uid();
-    const thinkTexts = ['*...consultando el bosque...*','*...el pudú cierra los ojos...*','*...la colmena procesa...*','*...los árboles susurran...*'];
-    addMsgToVS(roomId, thinkId, `PuduBot ${level.emoji}`, thinkTexts[Math.floor(Math.random()*thinkTexts.length)], false, Date.now());
+// Show the pudú 3D cinematic with the response text coming from its mouth
+function _puduShowResponseCinematic(responseText) {
+  try {
+    // Trigger the 3D pudú overlay with text
+    add3DText(responseText, false);
+    playMsgReceive();
+    // Show a quick pudú cinematic if not already showing
+    if (!puduBusy && chatEntered && !liteMode) {
+      puduBusy = false; // reset so cinematic can trigger
+      clearTimeout(puduSchedulerTO);
+      showPuduCinematic();
+    }
+  } catch(e) { console.warn('[PuduBot] Cinematic error:', e); }
+}
 
-    const systemPrompt = `${PUDU_PERSONALITIES[levelIdx]||PUDU_PERSONALITIES[0]}
+async function _invokePuduBot(roomId, question, askerName) {
+  if (_puduIsThinking) { addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿'); return; }
+  _puduIsThinking = true;
+
+  const count = HiveCounter.getCount();
+  const level = HiveCounter.getLevel(count);
+  const levelIdx = HiveCounter.LEVELS.indexOf(level);
+  const thinkId = uid();
+  const thinkTexts = ['*...consultando el bosque...*','*...el pudú cierra los ojos...*','*...la colmena procesa...*','*...los árboles susurran...*'];
+  addMsgToVS(roomId, thinkId, `PuduBot ${level.emoji}`, thinkTexts[Math.floor(Math.random()*thinkTexts.length)], false, Date.now());
+
+  const systemPrompt = `${PUDU_PERSONALITIES[levelIdx]||PUDU_PERSONALITIES[0]}
 Estado de la red: ${count.toLocaleString('es-CL')} personas. Nivel: "${level.name}".
-Contexto: ${getRoomContext(roomId)}
+Contexto: ${_puduGetRoomContext(roomId)}
 REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. No menciones que eres IA.`;
 
-    let responseText = null;
-    try {
-      const worker = hiveBestWorker();
-      if (worker) {
-        console.log('[PuduBot] Invocando colmena...');
-        const result = await hiveRequest([
-          { role:'system', content: systemPrompt },
-          { role:'user',   content: `${askerName} pregunta: ${question}` }
-        ], 250);
-        if (result?.text) {
-          responseText = result.text;
-          console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
-        }
+  let responseText = null;
+  try {
+    const worker = hiveBestWorker();
+    if (worker) {
+      console.log('[PuduBot] Invocando colmena...');
+      const result = await hiveRequest([
+        { role:'system', content: systemPrompt },
+        { role:'user',   content: `${askerName} pregunta: ${question}` }
+      ], 250);
+      if (result?.text) {
+        responseText = result.text;
+        console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
+        _puduShowResponseCinematic(responseText);
       }
-
-      if (!responseText) {
-        if (typeof webLLMReady !== 'undefined' && webLLMReady && typeof webLLMEngine !== 'undefined' && webLLMEngine) {
-           _updateThinkMsg(roomId, thinkId, '🧠 Colmena no lista · el Pudú reflexiona localmente...');
-           try {
-             const localRes = await webLLMEngine.chat.completions.create({
-               messages: [ { role: 'system', content: systemPrompt }, { role: 'user', content: question } ],
-               max_tokens: 200, temperature: 0.7,
-             });
-             responseText = localRes.choices?.[0]?.message?.content || '...';
-             try{ window.pudu3dState='talking'; add3DText(responseText, false); playMsgReceive(); }catch(e){}
-           } catch(e) {
-             responseText = '❌ Error al usar cerebros locales: ' + e.message;
-           }
-        } else {
-           const wc = hiveWorkers.size;
-           responseText = wc === 0
-             ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app/sim.html en tu computador para despertar la colmena* 🌿'
-             : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
-        }
-      }
-
-      _updateThinkMsg(roomId, thinkId, responseText);
-      broadcastP2P(roomId, { type:'pudubot_resp', id:uid(), roomId,
-        senderId:'pudubot', ts:Date.now(), hops:0,
-        payload:{ text:responseText, emoji:level.emoji, thinkId, asker:askerName } });
-    } catch(e) {
-      console.error('[PuduBot] Error:', e.message);
-      _updateThinkMsg(roomId, thinkId, `🦌 *${e.message}* 🍃`);
-    } finally {
-      isThinking = false;
     }
+
+    if (!responseText) {
+      if (webLLMReady && webLLMEngine) {
+         _puduUpdateThinkMsg(roomId, thinkId, '🧠 Colmena no lista · el Pudú reflexiona localmente...');
+         try {
+           const localRes = await webLLMEngine.chat.completions.create({
+             messages: [ { role: 'system', content: systemPrompt }, { role: 'user', content: question } ],
+             max_tokens: 200, temperature: 0.7,
+           });
+           responseText = localRes.choices?.[0]?.message?.content || '...';
+           _puduShowResponseCinematic(responseText);
+         } catch(e) {
+           responseText = '❌ Error al usar cerebros locales: ' + e.message;
+         }
+      } else {
+         const wc = hiveWorkers.size;
+         responseText = wc === 0
+           ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app?simulate=10 en tu computador para despertar la colmena* 🌿'
+           : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
+      }
+    }
+
+    _puduUpdateThinkMsg(roomId, thinkId, responseText);
+    broadcastP2P(roomId, { type:'pudubot_resp', id:uid(), roomId,
+      senderId:'pudubot', ts:Date.now(), hops:0,
+      payload:{ text:responseText, emoji:level.emoji, thinkId, asker:askerName } });
+  } catch(e) {
+    console.error('[PuduBot] Error:', e.message);
+    _puduUpdateThinkMsg(roomId, thinkId, `🦌 *${e.message}* 🍃`);
+  } finally {
+    _puduIsThinking = false;
   }
+}
 
-  function _updateThinkMsg(roomId, thinkId, text) {
-    const room = rooms.get(roomId); if (!room) return;
-    const el = room.msgEls[thinkId];
-    if (el) { const b=el.querySelector('.msg-bubble'); if(b) b.textContent=text; }
-    const entry = room.msgArchive.find(m=>m.id===thinkId);
-    if (entry) entry.text = text;
+// Handle pudubot_resp P2P messages — hook into handleP2PMessage
+const _origHandleP2P = handleP2PMessage;
+function handleP2PMessageWithPudu(roomId, fromPub, msg) {
+  if (['cr_request','cr_ready','cr_data'].includes(msg.type)) {
+    CircuitRelay.handleCircuitMsg(roomId, fromPub, msg); return;
   }
-
-  // Interceptar sendMessage
-  const _origSend = window.sendMessage;
-  window.sendMessage = function() {
-    const inp = document.getElementById('chat-input');
-    const txt = inp?.value?.trim() || '';
-    _origSend();
-    if (TRIGGER_REGEX.test(txt)) {
-      const q = txt.replace(TRIGGER_REGEX,'').trim() || '¿quién eres?';
-      setTimeout(() => invoke(currentRoomId, q, myName||'alguien'), 400);
+  if (msg.type === 'pudubot_resp') {
+    const { text, emoji, thinkId } = msg.payload;
+    const room = rooms.get(roomId);
+    if (room && thinkId && room.msgEls[thinkId]) _puduUpdateThinkMsg(roomId, thinkId, text);
+    else addMsgToVS(roomId, msg.id, `PuduBot ${emoji}`, text, false, msg.ts);
+    try { _puduShowResponseCinematic(text); } catch(e) {}
+    return;
+  }
+  if (msg.type==='chat' && msg.payload && TRIGGER_REGEX.test(msg.payload.text)) {
+    _origHandleP2P(roomId, fromPub, msg);
+    const peers = getRoomPeers(roomId);
+    let lowest = pubKeyHex;
+    if (peers) for (const [pub] of peers) if (pub < lowest) lowest = pub;
+    if (lowest === pubKeyHex) {
+      const q = msg.payload.text.replace(TRIGGER_REGEX,'').trim()||'¿quién eres?';
+      setTimeout(() => _invokePuduBot(roomId, q, msg.payload.name||fromPub.slice(0,8)), 600);
     }
-  };
-
-  // Interceptar P2P
-  const _origP2P = window.handleP2PMessage;
-  window.handleP2PMessage = function(roomId, fromPub, msg) {
-    if (['cr_request','cr_ready','cr_data'].includes(msg.type)) {
-      CircuitRelay.handleCircuitMsg(roomId, fromPub, msg); return;
-    }
-    if (msg.type === 'pudubot_resp') {
-      const { text, emoji, thinkId } = msg.payload;
-      const room = rooms.get(roomId);
-      if (room && thinkId && room.msgEls[thinkId]) _updateThinkMsg(roomId, thinkId, text);
-      else addMsgToVS(roomId, msg.id, `PuduBot ${emoji}`, text, false, msg.ts);
-      return;
-    }
-    if (msg.type==='chat' && msg.payload && TRIGGER_REGEX.test(msg.payload.text)) {
-      _origP2P(roomId, fromPub, msg);
-      const peers = getRoomPeers(roomId);
-      let lowest = pubKeyHex;
-      if (peers) for (const [pub] of peers) if (pub < lowest) lowest = pub;
-      if (lowest === pubKeyHex) {
-        const q = msg.payload.text.replace(TRIGGER_REGEX,'').trim()||'¿quién eres?';
-        setTimeout(() => invoke(roomId, q, msg.payload.name||fromPub.slice(0,8)), 600);
-      }
-      return;
-    }
-    _origP2P(roomId, fromPub, msg);
-  };
-
-  return { invoke };
-})();
+    return;
+  }
+  _origHandleP2P(roomId, fromPub, msg);
+}
+// Replace the P2P handler reference used by setupDataChannel
+// We need to override the function that channel.onmessage calls
+handleP2PMessage = handleP2PMessageWithPudu;
 
 // ── HIVE UI STUB ─────────────────────────────────────────────────────
 // The hive bar HTML already exists statically in the document (pudu-hive-bar)
