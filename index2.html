@@ -961,7 +961,7 @@ function connectNostrRelay(url){
       ws.send(JSON.stringify(["REQ","sig-sub",{kinds:[1],"#t":hiveTags,since}]));
       onRelayReady();
     };
-    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT"){const ev=msg[2];handleNostrEvent(ev);try{_hiveProcessEvent(ev);}catch(he){console.warn('[HIVE] Process error:',he.message);}}else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
+    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT"){handleNostrEvent(msg[2]);}else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
     ws.onerror=()=>{dot.className='rdot fail';};
     ws.onclose=()=>{dot.className='rdot fail';nostrSockets[url]=null;setTimeout(connect,retryDelay);retryDelay=Math.min(retryDelay*2,60000);};
   }
@@ -984,17 +984,44 @@ function handleNostrEvent(ev){
   
   if (data.type === "presence" && data.payload && (data.payload.hasEngine || data.payload.petalsLayers)) {
       colmenaPeerId = data.from;
-      console.log('[HIVE] Detected colmena peer:', data.from.slice(0,12), 'hasEngine:', data.payload.hasEngine);
+      console.log('[HIVE] Detected colmena peer:', data.from?.slice(0,12), 'hasEngine:', data.payload.hasEngine);
+      // Register in hiveWorkers (deferred access — defined later in module but populated here)
+      try {
+        if (typeof hiveWorkers !== 'undefined') {
+          hiveWorkers.set(data.from || fromPub, { peerId: data.from || fromPub, hasEngine: true, tps: data.payload.tps || 0, lastSeen: Date.now() });
+          if (typeof HiveCounter !== 'undefined') HiveCounter.setHiveWorkers(hiveWorkers.size);
+        }
+      } catch(e) {}
   }
   // Also detect index.html-style presence events (with peerId format)
-  if (data.type === "presence" && data.peerId && (data.hasEngine || data.tps > 0)) {
-      // Map peerId back to full pubkey if available
-      if (!colmenaPeerId) colmenaPeerId = ev.pubkey || data.from;
+  if (data.type === "presence" && data.peerId && (data.hasEngine || data.tps > 0 || data.webgpu || data.deviceTier === 'S' || data.deviceTier === 'A' || data.deviceTier === 'B')) {
+      colmenaPeerId = ev.pubkey || data.from;
       console.log('[HIVE] Detected index.html host:', data.peerId, 'hasEngine:', data.hasEngine, 'tps:', data.tps);
+      // Register in hiveWorkers
+      try {
+        if (typeof hiveWorkers !== 'undefined') {
+          const whe = !!data.hasEngine || !!data.webgpu || data.deviceTier === 'S' || data.deviceTier === 'A' || data.deviceTier === 'B';
+          hiveWorkers.set(data.peerId, { peerId: data.peerId, hasEngine: whe, tps: data.tps || 0, lastSeen: Date.now() });
+          if (typeof HiveCounter !== 'undefined') HiveCounter.setHiveWorkers(hiveWorkers.size);
+          console.log('[HIVE] ✅ Worker registrado:', data.peerId?.slice(0,8), 'total:', hiveWorkers.size);
+        }
+      } catch(e) { console.warn('[HIVE] Worker reg error:', e.message); }
   }
   
   if (data.type === "signal" && data.to === pubKeyHex && data.signal && data.signal.type === "moe_fallback_res") {
       const res = data.signal;
+      // Check NEW pudubotPending Map first (used by the hiveRequest path)
+      try {
+        if (typeof pudubotPending !== 'undefined' && pudubotPending.has(res.reqId)) {
+          const pending = pudubotPending.get(res.reqId);
+          clearTimeout(pending.timer);
+          pudubotPending.delete(res.reqId);
+          pending.resolve(res.payload);
+          console.log('[HIVE] ✅ Respuesta recibida vía pudubotPending reqId=', res.reqId);
+          return;
+        }
+      } catch(e) {}
+      // Legacy path for old pendingPudubotReqs
       if (pendingPudubotReqs.has(res.reqId)) {
          const { msgId } = pendingPudubotReqs.get(res.reqId);
          pendingPudubotReqs.delete(res.reqId);
@@ -1011,6 +1038,22 @@ function handleNostrEvent(ev){
          try{playMsgReceive();}catch(e){}
       }
       return;
+  }
+  // Also handle signal responses where 'to' matches our peerId (12-char)
+  if (data.type === 'signal' && data.signal?.type === 'moe_fallback_res') {
+    try {
+      if (typeof peerId !== 'undefined' && peerId && (data.to === peerId)) {
+        const sig = data.signal;
+        if (typeof pudubotPending !== 'undefined' && pudubotPending.has(sig.reqId)) {
+          const pending = pudubotPending.get(sig.reqId);
+          clearTimeout(pending.timer);
+          pudubotPending.delete(sig.reqId);
+          pending.resolve(sig.payload);
+          console.log('[HIVE] ✅ Respuesta recibida vía peerId match reqId=', sig.reqId);
+          return;
+        }
+      }
+    } catch(e) {}
   }
 
   switch(data.type){
