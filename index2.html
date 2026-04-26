@@ -10,7 +10,7 @@
 <style>
 /* ── PUDÚ 3D OVERLAY ── */
 #pudu3d-overlay{
-  position:fixed;inset:0;z-index:500;pointer-events:none;
+  position:fixed;top:0;left:0;right:0;bottom:80px;z-index:500;pointer-events:none;
   overflow:hidden;display:none;
 }
 #pudu3d-canvas{
@@ -327,7 +327,7 @@ canvas{position:fixed;inset:0;z-index:0}
 
 /* ── INPUT AREA ── */
 .chat-input-area{
-  position:relative;z-index:20;background:rgba(10,14,25,.95);
+  position:relative;z-index:600;background:rgba(10,14,25,.95);
   border-top:1px solid rgba(0,229,255,.2);
   padding:14px 18px;display:flex;gap:12px;align-items:flex-end;
   backdrop-filter:blur(28px);flex-shrink:0;
@@ -3332,7 +3332,10 @@ const CircuitRelay = (() => {
 //  3. handleNostrEvent lo intercepta y resuelve la promesa
 // ══════════════════════════════════════════════════════════════════════
 
-const HIVE_NAMESPACE = 'p2p-hive-public';
+// HIVE_NAMESPACE must match index.html's CONFIG.appNamespace = 'p2p-hive-{roomName}'
+const _hiveRoomParam = new URLSearchParams(window.location.search).get('room');
+const HIVE_NAMESPACE = _hiveRoomParam ? `p2p-hive-${_hiveRoomParam}` : 'p2p-hive-public';
+console.log('[PuduBot] HIVE_NAMESPACE =', HIVE_NAMESPACE);
 const HIVE_TIMEOUT_MS = 45000;
 const TRIGGER_REGEX = /^@pudu(?:bot)?\b/i;
 
@@ -3437,11 +3440,12 @@ function hiveHookNostrEvent() {
 
     // Presencia de un nodo de la colmena
     if (c.type === 'presence' && c.peerId) {
+      const workerHasEngine = !!c.hasEngine || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
       hiveWorkers.set(c.peerId, {
-        peerId: c.peerId, hasEngine: !!c.hasEngine,
+        peerId: c.peerId, hasEngine: workerHasEngine,
         tps: c.tps || 0, lastSeen: Date.now()
       });
-      console.log(`[PuduBot] Worker: ${c.peerId?.slice(0,8)} hasEngine=${c.hasEngine}`);
+      console.log(`[PuduBot] Worker: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine}`);
       return;
     }
 
@@ -3636,6 +3640,33 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
 
   return { invoke };
 })();
+
+// ── HIVE UI STUB ─────────────────────────────────────────────────────
+// The hive bar HTML already exists statically in the document (pudu-hive-bar)
+// This stub prevents errors from the old dynamic injection call
+function injectHiveUI() {
+  // Already in static HTML — just make sure hint is added
+  const area = document.querySelector('.chat-input-area');
+  if (area && !document.getElementById('pudubot-hint')) {
+    area.style.position = 'relative';
+    const hint = document.createElement('span');
+    hint.id = 'pudubot-hint';
+    hint.textContent = 'escribe @pudu para invocar al pudú 🦌';
+    hint.style.cssText = 'position:absolute;right:56px;bottom:12px;font-size:9px;color:rgba(0,229,255,0.35);pointer-events:none;font-family:Nunito,sans-serif;transition:opacity .3s;';
+    area.appendChild(hint);
+  }
+  // Highlight al escribir @pudu
+  const inp = document.getElementById('chat-input');
+  if (inp) {
+    inp.addEventListener('input', () => {
+      const active = TRIGGER_REGEX.test(inp.value);
+      inp.style.borderColor = active ? 'rgba(177,107,255,.7)' : '';
+      inp.style.boxShadow = active ? '0 0 14px rgba(177,107,255,.2)' : '';
+      const hint = document.getElementById('pudubot-hint');
+      if (hint) hint.style.opacity = active ? '0' : '1';
+    });
+  }
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────
 async function initPuduBotModule() {
