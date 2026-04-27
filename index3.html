@@ -1,72 +1,9 @@
-[],msgEls:{},seenMsgIds:new Set(),reactions:{},typingPeers:new
-Set(),typTO:null,vsOffset:0}); currentRoomId=newId;
-rooms.get(newId).users.add(pubKeyHex); } }
-
-
-```javascript
-  if(signal.type==='moe_fallback_req'){
-          signal.petalsHive=true
-          signal.intent='pudu_hive'
-          signal.targetRole='pudu_hive'
-          hiveRequest({type:'signal',data:signal})
-
-  if (c.type === 'presence' && c.peerId) {
-    const workerHasEngine = !!c.hasEngine || !!c.petalsActive || (Array.isArray(c.petalsLayers) && c.petalsLayers.length > 0) || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
-    hiveWorkers.set(c.peerId, {
-      peerId: c.peerId, hasEngine: workerHasEngine,
-      tps: c.tps || 0, lastSeen: Date.now()
-    });
-
-Will change to:
-
-  if (c.type === 'presence' && c.peerId) {
-    const workerHasEngine = !!c.hasEngine || !!c.petalsActive || (Array.isArray(c.petalsLayers) && c.petalsLayers.length > 0) || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
-    hiveWorkers.set(c.peerId, {
-      peerId: c.peerId, hasEngine: workerHasEngine,
-      tps: c.tps || 0, lastSeen: Date.now(),
-        petalsActive:c.petalsActive,
-      petalsLayers:c.petalsLayers,
-    });
-
-  if (c.type === 'signal' && c.data.type === 'moe_fallback_req') {
-    //  console.log
-
-**Refining Fix Implementation**
-
-I'm now putting the finishing touches on the codebase. I am updating `getCurrentHiveNamespace()` to always return `p2p-hive-sala-1` if no room is passed in, as well as fixing a fallback event, and extracting the presence signals correctly. I'm carefully implementing the updates to ensure the logic works. I am now validating the changes.
-
-
-**Finalizing Implementation**
-
-I've integrated the final changes to the code. Specifically, I've standardized the default namespace and fallback requests in `index3.html`. I've also updated the presence signal extraction. I'm now testing the code with a variety of scenarios to ensure that the modifications function as expected.
-
-
-**Refining Integration Verification**
-
-I'm now running comprehensive tests to confirm the integration of the implemented namespace and signal fixes in `index3.html`. I'm verifying proper communication with the hive, ensuring fallback requests are handled correctly and that the petals active status is now properly used. I will run a battery of tests to validate the improvements.
-
-
-**Finalizing Issue Resolution**
-
-I'm now in the final stages, testing comprehensive scenarios. I've standardized namespace handling, ensured `petalsHive` signals are consistent, and corrected presence data extraction. With all of the fixes completed, my tests confirm both HTML versions properly communicate and work as expected.
-
-
-**Finalizing Namespace and Logic**
-
-I've successfully standardized the namespace, refined fallback request handling, and corrected the presence data extraction. Rigorous testing confirms that both HTML versions now communicate correctly, with the hive function as designed. I am now confident that all issues have been fully resolved.
-
-
-**Finalizing Resolution Verification**
-
-I'm now completely satisfied. The namespace has been standardized, and the fallback requests are consistently handled. I've corrected presence extraction in the Spanish version. Rigorous testing has verified seamless communication between the two HTML versions, and proper functionality of the hive in all test scenarios. All issues are fully resolved.
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CHACHAtoP2P-LLM — Distributed Hive Mind</title>
+<title>iiCHACHAtoP2P-LLM — Distributed Hive Mind</title>
 <meta name="description" content="Browser-based peer-to-peer distributed edge routing with 5-tier hardware classification. Zero-install, zero-server AI inference.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -2135,6 +2072,13 @@ function scheduleAutoRoomSelection() {
     }
   }, ROOM_AUTO_DISCOVERY_MS);
 }
+
+// -- PATCH: fallback namespace resolver --
+function getCurrentHiveNamespace() {
+  const effectiveRoom = roomName || "sala-1";
+  return `p2p-hive-${effectiveRoom}`;
+}
+
 
 function applyRoom(name, options = {}) {
   roomName = normalizeRoomName(name);
@@ -5828,12 +5772,20 @@ makes remote peers route to a dead end // (their dc.send is a no-op stub). Skip
 presence publish for masqueraded peers. // If you want simulated peers visible
 only locally, they are already in peers Map. }
 
-function subscribeRelayNamespaces(ws) { if (!ws || ws.readyState !== 1) return;
-const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec; try {
-ws.send(JSON.stringify(["REQ", sub-${peerId.slice(0,8)}, { kinds: [1], "#t":
-[CONFIG.appNamespace], since, limit: 100 }])); if (!IS_HOST_EMBED) {
-ws.send(JSON.stringify(["REQ", lobby-${peerId.slice(0,8)}, { kinds: [1], "#t":
-[ROOM_LOBBY_NAMESPACE], since, limit: 250 }])); } } catch (error) {} }
+function subscribeRelayNamespaces(ws) {
+  if (!ws || ws.readyState !== 1) return;
+  const since = Math.floor(Date.now() / 1000) - CONFIG.presenceWindowSec;
+  try {
+    // Main room namespace
+    ws.send(JSON.stringify(["REQ", `sub-${peerId.slice(0,8)}`, { kinds: [1], "#t": [CONFIG.appNamespace], since, limit: 100 }]));
+    // FIX: always also subscribe to sala-1 as a fallback to catch early presence
+    if (getCurrentHiveNamespace() !== CONFIG.appNamespace) {
+      ws.send(JSON.stringify(["REQ", `sub-fallback-${peerId.slice(0,8)}`, { kinds: [1], "#t": ["p2p-hive-sala-1"], since, limit: 100 }]));
+    }
+    if (!IS_HOST_EMBED) {
+      ws.send(JSON.stringify(["REQ", `lobby-${peerId.slice(0,8)}`, { kinds: [1], "#t": [ROOM_LOBBY_NAMESPACE], since, limit: 250 }]));
+    }
+  } catch (error) {}
 
 function publishLobbyPresence(collectiveState = null) { if (IS_HOST_EMBED)
 return; const state = collectiveState || getPuduStageState();
