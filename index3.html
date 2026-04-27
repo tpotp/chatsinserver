@@ -983,25 +983,12 @@ async function sendPudubotRequest(prompt) {
          }
          return;
        }
-       // Cloud fallback via pollinations.ai
-       addSystemMsgVS(currentRoomId, '☁️ Sin colmena local · consultando la nube del bosque...');
-       try {
-         const sysPoll='Eres el Pudú del bosque chileno. Responde en español chileno con ternura y máximo 3 oraciones.';
-         const res=await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?system=${encodeURIComponent(sysPoll)}`);
-         if(res.ok){
-           const txt=await res.text();
-           if(txt&&txt.trim()){
-             const msgId2=uid();
-             addMsgToVS(currentRoomId,msgId2,'PuduBot ☁️🦌',txt.trim(),false,Date.now());
-             try{add3DText(txt,false);}catch(e){}
-             try{playMsgReceive();}catch(e){}
-           }
-         } else {
-           addSystemMsgVS(currentRoomId,'❌ Colmena AI no encontrada. Abre chatsinserver.vercel.app?simulate=10 en tu PC para activarla 🌿');
-         }
-       } catch(cloudErr) {
-         addSystemMsgVS(currentRoomId,'❌ Sin colmena ni nube disponible: '+cloudErr.message);
-       }
+       try{
+         const sp='Eres el Pudú del bosque chileno. Responde en español chileno con ternura y máximo 3 oraciones.';
+         const res=await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?system=${encodeURIComponent(sp)}`);
+         if(res.ok){const t=await res.text();if(t&&t.trim()){const mid=uid();addMsgToVS(currentRoomId,mid,'PuduBot ☁️🦌',t.trim(),false,Date.now());try{add3DText(t,false);}catch(e){}try{playMsgReceive();}catch(e){}}
+         }else addSystemMsgVS(currentRoomId,'❌ Sin colmena ni nube disponible 🌿');
+       }catch(ce){addSystemMsgVS(currentRoomId,'❌ Error nube: '+ce.message);}
        return;
    }
    
@@ -1157,12 +1144,11 @@ function ensureHiveSocketSubscription(ws, force=false){
   const since=Math.floor(Date.now()/1000)-300;
   ws.send(JSON.stringify(['REQ',subId,{kinds:[1],'#t':[namespace],since}]));
   console.log('[PuduBot] Suscrito a',namespace);
-  // Siempre escuchar p2p-hive-public (donde el host publica workers)
-  if(namespace!=='p2p-hive-public'){
+  if(namespace!=='p2p-hive-public'&&!ws._hivePubSubId){
     const pubSubId=`hive-pub-${Math.random().toString(36).slice(2,7)}`;
     ws._hivePubSubId=pubSubId;
     ws.send(JSON.stringify(['REQ',pubSubId,{kinds:[1],'#t':['p2p-hive-public'],since}]));
-    console.log('[PuduBot] También suscrito a p2p-hive-public (para detectar workers del host)');
+    console.log('[PuduBot] También suscrito a p2p-hive-public');
   }
 }
 window.hiveSubscribeSocket=ensureHiveSocketSubscription;
@@ -1238,6 +1224,12 @@ let _puduThinkingShim=false;
 window._invokePuduBot=async function(roomId,question,askerName){
   console.log('[PuduBot] shim _invokePuduBot. room=' + roomId + ' q=' + question + ' asker=' + askerName);
   if(_puduThinkingShim){addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿');return;}
+  // Cuando el usuario invoca explícitamente al pudú, perdonar el enojo
+  if(typeof puduBrain!=='undefined'&&puduBrain.isAngry()){
+    puduBrain.angryUntil=0;puduBrain.angerLevel=0;puduBrain.stress=0;
+    puduBrain.angryReason='';puduBrain._saveMemory();
+    console.log('[PuduBot] Angry reseteado por invocación @pudu');
+  }
   _puduThinkingShim=true;
   const thinkId=uid();
   addMsgToVS(roomId,thinkId,'PuduBot 🦌','*...consultando el bosque...*',false,Date.now());
@@ -1269,20 +1261,12 @@ window._invokePuduBot=async function(roomId,question,askerName){
       }
     }
     if(!responseText){
-      // Cloud fallback: pollinations.ai (igual que index.html)
       updatePuduThinkShim(roomId,thinkId,'☁️ *Consultando la nube del bosque...*');
       try{
-        const systemPrompt2='Eres el Pudú del bosque chileno. Responde en español chileno con ternura, naturalidad y máximo 3 oraciones. No rompas el personaje.';
-        const encodedUser=encodeURIComponent(`${askerName||'alguien'} pregunta: ${question}`);
-        const encodedSys=encodeURIComponent(systemPrompt2);
-        const res=await fetch(`https://text.pollinations.ai/${encodedUser}?system=${encodedSys}`);
-        if(res.ok){
-          const txt=await res.text();
-          if(txt&&txt.trim())responseText=txt.trim();
-        }
-      }catch(cloudErr){
-        console.warn('[PuduBot] Cloud fallback error:',cloudErr.message);
-      }
+        const sp2='Eres el Pudú del bosque chileno. Responde en español chileno con ternura y máximo 3 oraciones.';
+        const res=await fetch(`https://text.pollinations.ai/${encodeURIComponent(`${askerName||'alguien'} pregunta: ${question}`)}?system=${encodeURIComponent(sp2)}`);
+        if(res.ok){const t=await res.text();if(t&&t.trim())responseText=t.trim();}
+      }catch(ce){console.warn('[PuduBot] cloud fallback error:',ce.message);}
     }
     if(!responseText){
       const wc=hiveWorkers.size;
@@ -1292,16 +1276,26 @@ window._invokePuduBot=async function(roomId,question,askerName){
     }
     updatePuduThinkShim(roomId,thinkId,responseText);
     try{
-      // Si el pudú está visible en overlay → habla en 3D desde su boca
-      const overlay=document.getElementById('pudu3d-overlay');
-      if(overlay&&overlay.style.display!=='none'&&typeof puduSpeakText3D==='function'){
-        puduSpeakText3D(responseText);
+      playMsgReceive();
+      // Forzar aparición del pudú aunque esté "enojado" — fue invocado explícitamente
+      if(chatEntered&&!liteMode){
+        puduBusy=false;clearTimeout(puduSchedulerTO);
+        // Resetear angry por si acaso
+        if(typeof puduBrain!=='undefined'){puduBrain.angryUntil=0;puduBrain.angerLevel=0;puduBrain._saveMemory();}
+        // Mostrar cinematic y luego texto 3D desde la boca
+        const _resp=responseText;
+        showPuduCinematic(true).catch(()=>{}).finally(()=>{});
+        // Lanzar texto 3D 1.5s después (cuando el pudú ya está en pantalla)
+        setTimeout(()=>{
+          try{
+            if(typeof puduSpeakText3D==='function') puduSpeakText3D(_resp);
+            else add3DText(_resp,false);
+          }catch(e){add3DText(_resp,false);}
+        },1500);
       } else {
         add3DText(responseText,false);
       }
-      playMsgReceive();
-      if(!puduBusy&&chatEntered&&!liteMode){puduBusy=false;clearTimeout(puduSchedulerTO);showPuduCinematic();}
-    }catch(e){}
+    }catch(e){console.error('[PuduBot] response display error:',e);}
     broadcastP2P(roomId,{type:'pudubot_resp',id:uid(),roomId,senderId:'pudubot',ts:Date.now(),hops:0,payload:{text:responseText,emoji:'🦌',thinkId,asker:askerName}});
   }catch(e){
     console.error('[PuduBot] shim error:',e.message);
@@ -1994,37 +1988,30 @@ function buildProceduralPudu(){
   snout.position.set(0,-0.06,0.36);snout.scale.set(1.15,0.72,0.88);
 
   // ── EYES — BIG, EXPRESSIVE, ANIMATED ──
-  // ── Eyes: all layers parented to eyeGroup so they move together ──
-  function makeEyeGroup(side){// side: -1=L, +1=R
+  // ── EYES — grouped so all layers move together ──
+  function makeEyeGroup(side){
     const eg=new THREE.Group();
     eg.position.set(side*0.175,0.10,0.33);
     headGroup.add(eg);
-    // Sclera (white)
     const ew=new THREE.Mesh(new THREE.SphereGeometry(0.115,seg-2,seg-2),new THREE.MeshBasicMaterial({color:0xffffff}));
     eg.add(ew);
-    // Iris
     const ir=new THREE.Mesh(new THREE.SphereGeometry(0.075,seg-3,seg-3),new THREE.MeshBasicMaterial({color:0x00e5ff}));
     ir.position.z=0.06;eg.add(ir);
-    // Pupil
     const pu=new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6),new THREE.MeshBasicMaterial({color:0x000511}));
     pu.position.z=0.10;eg.add(pu);
-    // Main glint
     const gl=new THREE.Mesh(new THREE.SphereGeometry(0.024,5,5),new THREE.MeshBasicMaterial({color:0xffffff}));
     gl.position.set(side*-0.02,0.02,0.115);eg.add(gl);
-    // Small glint
     const gl2=new THREE.Mesh(new THREE.SphereGeometry(0.013,4,4),new THREE.MeshBasicMaterial({color:0xffffff}));
     gl2.position.set(side*0.02,-0.02,0.11);eg.add(gl2);
-    // Eyelid
     const lid=new THREE.Mesh(new THREE.SphereGeometry(0.13,seg-2,4,0,Math.PI*2,0,Math.PI*0.5),new THREE.MeshBasicMaterial({color:0x00aa66,side:THREE.DoubleSide}));
     lid.scale.set(1,0,1);lid.rotation.x=-0.3;eg.add(lid);
-    return {group:eg,iris:ir,pupil:pu,lid,glint:gl};
+    return{group:eg,iris:ir,pupil:pu,lid,glint:gl};
   }
-  const eyeL=makeEyeGroup(-1), eyeR=makeEyeGroup(1);
+  const eyeL=makeEyeGroup(-1),eyeR=makeEyeGroup(1);
   P.eyeWhiteL=eyeL.group;P.eyeWhiteR=eyeR.group;
   P.irisL=eyeL.iris;P.irisR=eyeR.iris;
   P.pupilL=eyeL.pupil;P.pupilR=eyeR.pupil;
   P.lidL=eyeL.lid;P.lidR=eyeR.lid;
-  // legacy glint refs (used in animation)
   P.glintL=eyeL.glint;P.glintR=eyeR.glint;
 
   // Eyebrows (for expressions)
@@ -2770,12 +2757,12 @@ function puduFinishCinematic(){
   schedulePudu();
 }
 
-async function showPuduCinematic(){
+async function showPuduCinematic(force=false){
   try {
     console.log('[PUDU] showPuduCinematic called. puduBusy='+puduBusy+' chatEntered='+chatEntered+' loaded='+pudu3dLoaded+' model='+(pudu3dModel?'Y':'N'));
     if(puduBusy||!chatEntered)return;
-    // Check if still angry
-    if(puduBrain.isAngry()){
+    // Check if still angry — pero si force=true (invocado por @pudu), ignorar
+    if(!force&&puduBrain.isAngry()){
       addSystemMsgVS(currentRoomId,`🦌 ${puduBrain.angryReason} · ${puduBrain.getAngryCooldownText()}`);
       schedulePudu();return;
     }
@@ -3259,65 +3246,52 @@ function add3DText(txt,fromMe){
   if(floaterGroups.length>8){const old=floaterGroups.shift();floatScene.remove(old.group);}
 }
 
-// ── PUDÚ SPEECH: texto 3D que erupta desde la boca en el overlay 3D ──
-function puduSpeakText3D(fullText) {
+// ── PUDÚ SPEECH: texto 3D tipo typewriter que aparece sobre el pudú ──
+function puduSpeakText3D(fullText){
   if(!fullText||!fullText.trim())return;
-  // Truncar a ~60 chars legibles
-  const txt = fullText.length > 60 ? fullText.slice(0, 58) + '…' : fullText;
+  const txt=fullText.length>80?fullText.slice(0,78)+'…':fullText;
+  const overlay=document.getElementById('pudu3d-overlay');
+  if(!overlay||overlay.style.display==='none'){add3DText(txt,false);return;}
 
-  // Usar el canvas del pudú (pudu3d-canvas) para texto superpuesto
-  const overlay = document.getElementById('pudu3d-overlay');
-  if (!overlay || overlay.style.display === 'none') {
-    // Si el pudú no está visible, usar add3DText normal
-    add3DText(txt, false); return;
-  }
+  // Quitar speech previo si lo hubiera
+  const prev=overlay.querySelector('.pudu-speech-3d');
+  if(prev)try{overlay.removeChild(prev);}catch(e){}
 
-  // Crear elemento HTML sobre el overlay del pudú
-  const speechDiv = document.createElement('div');
-  speechDiv.style.cssText = `
-    position:absolute;
-    bottom:18%;left:50%;transform:translateX(-50%);
-    width:82%;max-width:340px;
-    text-align:center;
+  const div=document.createElement('div');
+  div.className='pudu-speech-3d';
+  div.style.cssText=`
+    position:absolute;bottom:16%;left:50%;transform:translateX(-50%);
+    width:86%;max-width:360px;text-align:center;
     font-family:'Courier New',monospace;
-    font-size:clamp(13px,3.5vw,18px);
-    font-weight:700;
-    line-height:1.45;
+    font-size:clamp(14px,3.8vw,20px);font-weight:700;line-height:1.5;
     color:#00ffbb;
-    text-shadow:0 0 12px #00ffbb, 0 0 24px #00e5ff, 0 0 4px #fff;
-    pointer-events:none;
-    z-index:9999;
-    opacity:0;
-    transition:opacity 0.35s ease;
-    letter-spacing:0.03em;
+    text-shadow:0 0 10px #00ffbb,0 0 22px #00e5ff,0 0 3px #fff;
+    pointer-events:none;z-index:9999;opacity:0;
+    transition:opacity 0.3s ease;letter-spacing:0.04em;
+    background:rgba(0,0,0,0.28);border-radius:12px;padding:8px 14px;
   `;
   overlay.style.position='relative';
-  overlay.appendChild(speechDiv);
+  overlay.appendChild(div);
 
-  // Animar letras una por una desde la boca (stagger)
-  let displayed = '';
-  let i = 0;
-  const charDelay = Math.min(55, 2800 / txt.length); // velocidad adaptativa
-  const typeInterval = setInterval(() => {
-    displayed += txt[i];
-    speechDiv.textContent = displayed;
-    if (i === 0) { speechDiv.style.opacity = '1'; }
+  let displayed='',i=0;
+  const delay=Math.min(55,3000/txt.length);
+  const iv=setInterval(()=>{
+    displayed+=txt[i];
+    div.textContent=displayed;
+    if(i===0)div.style.opacity='1';
     i++;
-    if (i >= txt.length) clearInterval(typeInterval);
-  }, charDelay);
+    if(i>=txt.length)clearInterval(iv);
+  },delay);
 
-  // Efecto: las letras salen con partículas 3D también
-  add3DText(txt, false);
+  add3DText(txt,false); // partículas flotantes también
 
-  // Fadeout y limpieza
-  const totalDuration = charDelay * txt.length + 2800;
-  setTimeout(() => {
-    speechDiv.style.transition = 'opacity 0.9s ease';
-    speechDiv.style.opacity = '0';
-    setTimeout(() => { try { overlay.removeChild(speechDiv); } catch(e){} }, 950);
-  }, totalDuration);
+  const total=delay*txt.length+3000;
+  setTimeout(()=>{
+    div.style.transition='opacity 0.8s ease';div.style.opacity='0';
+    setTimeout(()=>{try{overlay.removeChild(div);}catch(e){}},850);
+  },total);
 }
-window.puduSpeakText3D = puduSpeakText3D;
+window.puduSpeakText3D=puduSpeakText3D;
 
 function animFloat(){
   requestAnimationFrame(animFloat);
@@ -3729,11 +3703,10 @@ function hiveSubscribeSocket(ws, force=false) {
   const since = Math.floor(Date.now()/1000) - 300;
   ws.send(JSON.stringify(['REQ', subId, { kinds:[1], '#t':[namespace], since }]));
   console.log('[PuduBot] Suscrito a', namespace);
-  // Siempre escuchar p2p-hive-public para detectar workers del host
   if(namespace!=='p2p-hive-public'&&!ws._hivePubSubId2){
     const pubSubId=`hive-pub2-${Math.random().toString(36).slice(2,7)}`;
     ws._hivePubSubId2=pubSubId;
-    ws.send(JSON.stringify(['REQ', pubSubId, { kinds:[1], '#t':['p2p-hive-public'], since }]));
+    ws.send(JSON.stringify(['REQ',pubSubId,{kinds:[1],'#t':['p2p-hive-public'],since}]));
     console.log('[PuduBot] También suscrito a p2p-hive-public');
   }
 }
