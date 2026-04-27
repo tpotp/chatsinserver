@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -956,8 +956,8 @@ let colmenaPeerId = null;
 async function sendPudubotRequest(prompt) {
    if (!nostrMod) return;
 
-   if (!colmenaPeerId && typeof hiveBestWorker === 'function') {
-       const best = hiveBestWorker();
+   if (!colmenaPeerId) {
+       const best = bestHiveWorkerShim();
        if (best && best.peerId) colmenaPeerId = best.peerId;
    }
 
@@ -978,8 +978,8 @@ async function sendPudubotRequest(prompt) {
            type: "moe_fallback_req",
            reqId: reqId,
            max_tokens: 400,
-           intent: 'general',
-           targetRole: 'master_reasoner',
+           intent: 'pudu_hive',
+           targetRole: 'pudu_hive',
            messages: [{ role: 'user', content: prompt }]
        },
        timestamp: Date.now()
@@ -1002,80 +1002,7 @@ async function sendPudubotRequest(prompt) {
    }
 }
 
-const IDENTITY_KEY='@,
-    1
-)
-
-# 5) _invokePuduBot: solo colmena real, sin fallback local ni nube
-$html = [regex]::Replace(
-    $html,
-    '(?s)async function _invokePuduBot\(roomId, question, askerName\) \{.*?\r?\n\}\r?\nwindow\._invokePuduBot = _invokePuduBot;',
-    @'
-async function _invokePuduBot(roomId, question, askerName) {
-  console.log('[PuduBot] _invokePuduBot llamado. room=' + roomId + ' q=' + question + ' asker=' + askerName);
-  if (_puduIsThinking) {
-    addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿');
-    return;
-  }
-  _puduIsThinking = true;
-
-  const count = HiveCounter.getCount();
-  const level = HiveCounter.getLevel(count);
-  const levelIdx = HiveCounter.LEVELS.indexOf(level);
-  const thinkId = uid();
-  const thinkTexts = ['*...consultando el bosque...*','*...el pudú cierra los ojos...*','*...la colmena procesa...*','*...los árboles susurran...*'];
-  addMsgToVS(roomId, thinkId, `PuduBot ${level.emoji}`, thinkTexts[Math.floor(Math.random()*thinkTexts.length)], false, Date.now());
-
-  const systemPrompt = `${PUDU_PERSONALITIES[levelIdx]||PUDU_PERSONALITIES[0]}
-Estado de la red: ${count.toLocaleString('es-CL')} personas. Nivel: "${level.name}".
-Contexto: ${_puduGetRoomContext(roomId)}
-REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. No menciones que eres IA.`;
-
-  try {
-    let worker = hiveBestWorker();
-    console.log('[PuduBot] hiveBestWorker():', worker ? JSON.stringify(worker) : 'NULL', 'hiveWorkers.size:', hiveWorkers.size);
-
-    if (!worker) {
-      _puduUpdateThinkMsg(roomId, thinkId, '🕸 No hay worker real en la colmena.');
-      addSystemMsgVS(roomId, '🕸 La colmena está offline en esta sala.');
-      return;
-    }
-
-    console.log('[PuduBot] Invocando colmena... worker:', worker.peerId?.slice(0,8));
-
-    const result = await hiveRequest([
-      { role:'system', content: systemPrompt },
-      { role:'user', content: `${askerName} pregunta: ${question}` }
-    ], 250);
-
-    console.log('[PuduBot] hiveRequest result:', result ? JSON.stringify(result).slice(0,100) : 'NULL');
-
-    if (!result?.text) {
-      throw new Error('La colmena no devolvió texto.');
-    }
-
-    const responseText = result.text;
-    console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
-    _puduShowResponseCinematic(responseText);
-    _puduUpdateThinkMsg(roomId, thinkId, responseText);
-
-    broadcastP2P(roomId, {
-      type:'pudubot_resp',
-      id:uid(),
-      roomId,
-      senderId:'pudubot',
-      ts:Date.now(),
-      hops:0,
-      payload:{ text:responseText, emoji:level.emoji, thinkId, asker:askerName }
-    });
-  } catch(e) {
-    console.error('[PuduBot] Error:', e.message);
-    _puduUpdateThinkMsg(roomId, thinkId, `🦌 *${e.message}* 🍃`);
-  } finally {
-    _puduIsThinking = false;
-  }
-}
-window._invokePuduBot = _invokePuduBot;'pudu-identity-v1';
+const IDENTITY_KEY='pudu-identity-v1';
 async function generateKeypair(){
   nostrMod=await (_nostrPreload||import("https://esm.sh/nostr-tools@2/pure"));
   try{const saved=localStorage.getItem(IDENTITY_KEY);if(saved){const{priv,pub,name}=JSON.parse(saved);privKeyBytes=new Uint8Array(priv);pubKeyHex=pub;if(name&&!myName)myName=name;return;}}catch(e){}
@@ -1231,7 +1158,9 @@ function bestHiveWorkerShim(){
     any=w;
     if(w.hasEngine&&(w.tps||0)>bestTps){bestTps=w.tps||0;best=w;}
   }
-  return best||any;
+  const chosen=best||any;
+  if(chosen&&chosen.peerId) colmenaPeerId=chosen.peerId;
+  return chosen;
 }
 window._hiveBestWorker=bestHiveWorkerShim;
 
@@ -1247,7 +1176,7 @@ function requestHiveResponse(messages,maxTokens=250){
       type:'signal',
       from:fromId,
       to:worker.peerId,
-      signal:{type:'moe_fallback_req',reqId,max_tokens:maxTokens,intent:'general',targetRole:'general',messages},
+      signal:{type:'moe_fallback_req',reqId,max_tokens:maxTokens,intent:'general',targetRole:'pudu_hive',messages},
       timestamp:Date.now()
     });
   });
@@ -1272,296 +1201,36 @@ window._invokePuduBot=async function(roomId,question,askerName){
   let responseText=null;
   try{
     const worker=bestHiveWorkerShim();
-    if(worker){
-      try{
-        const result=await requestHiveResponse([
-          {role:'system',content:systemPrompt},
-          {role:'user',content:`${askerName||'alguien'} pregunta: ${question}`}
-        ],250);
-        if(result?.text)responseText=result.text;
-      }catch(hiveErr){
-        console.error('[PuduBot] shim hiveRequest error:',hiveErr.message);
-      }
+    if(!worker){
+      _puduUpdateThinkMsg(roomId,thinkId,'🕸 No hay worker real en la colmena.');
+      addSystemMsgVS(roomId,'🕸 La colmena está offline en esta sala.');
+      return;
     }
-    if(!responseText&&webLLMReady&&webLLMEngine){
-      updatePuduThinkShim(roomId,thinkId,'🧠 Colmena no lista · el Pudú reflexiona localmente...');
-      try{
-        const localRes=await webLLMEngine.chat.completions.create({
-          messages:[{role:'system',content:systemPrompt},{role:'user',content:question}],
-          max_tokens:200,temperature:0.7
-        });
-        responseText=localRes.choices?.[0]?.message?.content||'...';
-      }catch(e){
-        responseText='❌ Error al usar cerebros locales: '+e.message;
-      }
-    }
-    if(!responseText){
-      // Cloud fallback: pollinations.ai (igual que index.html)
-      updatePuduThinkShim(roomId,thinkId,'☁️ *Consultando la nube del bosque...*');
-      try{
-        const systemPrompt2='Eres el Pudú del bosque chileno. Responde en español chileno con ternura, naturalidad y máximo 3 oraciones. No rompas el personaje.';
-        const encodedUser=encodeURIComponent(`${askerName||'alguien'} pregunta: ${question}`);
-        const encodedSys=encodeURIComponent(systemPrompt2);
-        const res=await fetch(`https://text.pollinations.ai/${encodedUser}?system=${encodedSys}`);
-        if(res.ok){
-          const txt=await res.text();
-          if(txt&&txt.trim())responseText=txt.trim();
-        }
-      }catch(cloudErr){
-        console.warn('[PuduBot] Cloud fallback error:',cloudErr.message);
-      }
-    }
-    if(!responseText){
-      const wc=hiveWorkers.size;
-      responseText=wc===0
-        ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app?simulate=10 en tu computador para despertar la colmena* 🌿'
-        : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
-    }
-    updatePuduThinkShim(roomId,thinkId,responseText);
     try{
-      add3DText(responseText,false);playMsgReceive();
-      if(!puduBusy&&chatEntered&&!liteMode){puduBusy=false;clearTimeout(puduSchedulerTO);showPuduCinematic();}
-    }catch(e){}
+      const result=await requestHiveResponse([
+        {role:'system',content:systemPrompt},
+        {role:'user',content:`${askerName||'alguien'} pregunta: ${question}`}
+      ],250);
+      if(result?.text)responseText=result.text;
+    }catch(hiveErr){
+      console.error('[PuduBot] shim hiveRequest error:',hiveErr.message);
+      _puduUpdateThinkMsg(roomId,thinkId,'🕸 La colmena no respondió.');
+      return;
+    }
+    if(!responseText){
+      _puduUpdateThinkMsg(roomId,thinkId,'🕸 La colmena no devolvió texto.');
+      return;
+    }
+    _puduUpdateThinkMsg(roomId,thinkId,responseText);
+    try{add3DText(responseText,false);playMsgReceive();}catch(e){}
     broadcastP2P(roomId,{type:'pudubot_resp',id:uid(),roomId,senderId:'pudubot',ts:Date.now(),hops:0,payload:{text:responseText,emoji:'🦌',thinkId,asker:askerName}});
   }catch(e){
     console.error('[PuduBot] shim error:',e.message);
-    updatePuduThinkShim(roomId,thinkId,`🦌 *${e.message}* 🍃`);
+    _puduUpdateThinkMsg(roomId,thinkId,`🦌 *${e.message}* 🍃`);
   }finally{
     _puduThinkingShim=false;
   }
 };
-
-function getRoomPeers(roomId){return (rooms.get(roomId)&&rooms.get(roomId).peers);}
-function getRoomPeer(roomId,pub){return (rooms.get(roomId)&&rooms.get(roomId).peers).get(pub);}
-function countConnectedPeersInRoom(roomId){const peers=getRoomPeers(roomId);if(!peers)return 0;let n=0;for(const p of peers.values())if((p.dc&&p.dc.readyState)==='open')n++;return n;}
-
-function maybeConnectTo(roomId,remotePub,remoteName){
-  if(remotePub===pubKeyHex)return;const room=rooms.get(roomId);if(!room)return;
-  if(room.users.size>=MAX_PER_ROOM){showRoomFullToast();return;}
-  const existing=room.peers.get(remotePub);if(existing&&['connected','connecting'].includes(existing.status))return;
-  if(countConnectedPeersInRoom(roomId)>=MAX_PEERS)return;if(pubKeyHex<remotePub)createOffer(roomId,remotePub,remoteName);
-}
-
-function makePeerConnection(roomId,remotePub){
-  const room=rooms.get(roomId);if(!room)return null;
-  const existing=room.peers.get(remotePub);if(existing&&['connected','connecting'].includes(existing.status))return existing;
-  if(existing)closePeer(roomId,remotePub,false);
-  const pc=new RTCPeerConnection({iceServers:ICE_SERVERS,bundlePolicy:'max-bundle',iceCandidatePoolSize:10,iceTransportPolicy:'all'});
-  const peerState={pc,dc:null,name:null,status:'connecting',lastSeen:Date.now(),iceBatch:[],iceTimer:null,reconnectCount:0,reconnectTimer:null};
-  room.peers.set(remotePub,peerState);
-  pc.onicecandidate=({candidate})=>{if(!candidate)return;peerState.iceBatch.push(candidate.toJSON());clearTimeout(peerState.iceTimer);peerState.iceTimer=setTimeout(()=>{if(!peerState.iceBatch.length)return;signAndPublish({type:'candidate',roomId,to:remotePub,from:pubKeyHex,candidates:peerState.iceBatch});peerState.iceBatch=[];},ICE_BATCH_DELAY);};
-  pc.onicegatheringstatechange=()=>{if(pc.iceGatheringState==='complete'){pc.getStats().then(report=>{const stats=[];report.forEach(s=>{if(s.type==='local-candidate')stats.push(s.candidateType);});if(stats.includes('srflx')&&!stats.includes('host')&&!stats.includes('relay'))peerState._maySym=true;}).catch(()=>{}); }};
-  pc.onconnectionstatechange=()=>{const s=pc.connectionState;if(s==='connected'){peerState.status='connected';peerState.reconnectCount=0;clearTimeout(peerState.reconnectTimer);room.users.add(remotePub);if(roomId===currentRoomId){updateStatus();updateMeshIndicator();addSystemMsgVS(roomId,`🌿 Conectado P2P con ${peerState.name||remotePub.slice(0,8)} 🦌`);}renderRoomSidebar();}else if(['failed','disconnected'].includes(s)){scheduleReconnect(roomId,remotePub);}else if(s==='closed'){if(peerState.status!=='closed'&&roomId===currentRoomId)addSystemMsgVS(roomId,`🍂 Se fue: ${peerState.name||remotePub.slice(0,8)}`);closePeer(roomId,remotePub,false);}if(roomId===currentRoomId)updateStatus();};
-  pc.ondatachannel=(e)=>setupDataChannel(roomId,remotePub,e.channel);return peerState;
-}
-
-function scheduleReconnect(roomId,remotePub){
-  const room=rooms.get(roomId);if(!room)return;const peerState=room.peers.get(remotePub);if(!peerState||peerState.status==='closed')return;
-  if(peerState.reconnectCount>=RECONNECT_MAX){if(peerState._maySym&&roomId===currentRoomId)addNatWarning(peerState.name||remotePub.slice(0,8));if(roomId===currentRoomId)addSystemMsgVS(roomId,`🍂 No se pudo reconectar con ${peerState.name||remotePub.slice(0,8)}`);closePeer(roomId,remotePub,false);return;}
-  peerState.reconnectCount++;const delay=Math.pow(2,peerState.reconnectCount-1)*1000;if(roomId===currentRoomId)addSystemMsgVS(roomId,`🔄 Reconectando con ${peerState.name||remotePub.slice(0,8)}...`);clearTimeout(peerState.reconnectTimer);
-  peerState.reconnectTimer=setTimeout(async()=>{const r=rooms.get(roomId);if(!r||!r.peers.has(remotePub))return;try{(peerState.dc&&peerState.dc.close());}catch(e){}try{(peerState.pc&&peerState.pc.close());}catch(e){}const newState=makePeerConnection(roomId,remotePub);if(!newState)return;if(pubKeyHex<remotePub)await createOffer(roomId,remotePub,peerState.name);else signAndPublish({type:'hello',roomId,from:pubKeyHex,name:myName,roomName:(rooms.get(roomId)&&rooms.get(roomId).roomName),ts:Date.now()});},delay);
-}
-function addNatWarning(peerName){const c=document.getElementById('chat-messages'),ti=document.getElementById('typing-ind');const d=document.createElement('div');d.className='nat-warn';d.textContent=`⚠️ ${peerName}: posible NAT simétrico. El mensaje viaja por mesh relay 🕸`;if(ti)c.insertBefore(d,ti);else c.appendChild(d);}
-function setupDataChannel(roomId,remotePub,channel){
-  const room=rooms.get(roomId);if(!room)return;const peerState=room.peers.get(remotePub);if(!peerState)return;peerState.dc=channel;
-  channel.onopen=()=>{peerState.status='connected';peerState.lastSeen=Date.now();room.users.add(remotePub);if(roomId===currentRoomId){updateStatus();updateMeshIndicator();}renderRoomSidebar();sendToPeer(roomId,remotePub,{type:'join',senderId:pubKeyHex,name:myName,roomId,ts:Date.now(),id:uid()});};
-  channel.onclose=()=>{if(peerState.status!=='closed')scheduleReconnect(roomId,remotePub);};channel.onerror=()=>{scheduleReconnect(roomId,remotePub);};channel.onmessage=(e)=>{try{handleP2PMessage(roomId,remotePub,JSON.parse(e.data));}catch(e){}};
-}
-
-async function createOffer(roomId,remotePub,remoteName){
-  const peerState=makePeerConnection(roomId,remotePub);if(!peerState)return;if(remoteName)peerState.name=remoteName;
-  const dc=peerState.pc.createDataChannel('chat',{ordered:true});setupDataChannel(roomId,remotePub,dc);
-  try{const offer=await peerState.pc.createOffer();await peerState.pc.setLocalDescription(offer);await signAndPublish({type:'offer',roomId,to:remotePub,from:pubKeyHex,name:myName,sdp:peerState.pc.localDescription.sdp});}catch(e){closePeer(roomId,remotePub,false);}
-}
-async function handleOffer(roomId,fromPub,fromName,sdpText){
-  const room=rooms.get(roomId);if(!room){await signAndPublish({type:'bye',roomId,to:fromPub,from:pubKeyHex,reason:'unknown-room'});return;}
-  if(room.users.size>=MAX_PER_ROOM&&!room.peers.has(fromPub)){await signAndPublish({type:'bye',roomId,to:fromPub,from:pubKeyHex,reason:'full'});return;}
-  if(countConnectedPeersInRoom(roomId)>=MAX_PEERS&&!room.peers.has(fromPub)){await signAndPublish({type:'bye',roomId,to:fromPub,from:pubKeyHex,reason:'full'});return;}
-  const peerState=makePeerConnection(roomId,fromPub);if(!peerState)return;if(fromName)peerState.name=fromName;
-  try{await peerState.pc.setRemoteDescription({type:'offer',sdp:sdpText});const answer=await peerState.pc.createAnswer();await peerState.pc.setLocalDescription(answer);await signAndPublish({type:'answer',roomId,to:fromPub,from:pubKeyHex,name:myName,sdp:peerState.pc.localDescription.sdp});}catch(e){closePeer(roomId,fromPub,false);}
-}
-async function handleAnswer(roomId,fromPub,sdpText){const p=getRoomPeer(roomId,fromPub);if(!p)return;try{await p.pc.setRemoteDescription({type:'answer',sdp:sdpText});}catch(e){}}
-async function handleRemoteCandidate(roomId,fromPub,candidates){const p=getRoomPeer(roomId,fromPub);if(!p)return;for(const c of(Array.isArray(candidates)?candidates:[candidates])){try{await p.pc.addIceCandidate(new RTCIceCandidate(c));}catch(e){}}}
-function closePeer(roomId,remotePub,sendBye){const room=rooms.get(roomId);if(!room)return;const p=room.peers.get(remotePub);if(!p)return;p.status='closed';clearTimeout(p.iceTimer);clearTimeout(p.reconnectTimer);try{(p.dc&&p.dc.close());}catch(e){}try{(p.pc&&p.pc.close());}catch(e){}room.peers.delete(remotePub);room.users.delete(remotePub);if(roomId===currentRoomId){updateStatus();updateMeshIndicator();}renderRoomSidebar();if(sendBye)signAndPublish({type:'bye',roomId,to:remotePub,from:pubKeyHex});}
-function closeAllPeersInRoom(roomId){const room=rooms.get(roomId);if(!room)return;for(const[pub,p]of room.peers){p.status='closed';clearTimeout(p.iceTimer);clearTimeout(p.reconnectTimer);try{(p.dc&&p.dc.close());}catch(e){}try{(p.pc&&p.pc.close());}catch(e){}}room.peers.clear();}
-function updatePeerNameInRoom(roomId,remotePub,name){const p=getRoomPeer(roomId,remotePub);if(p)p.name=name;}
-function sendToPeer(roomId,remotePub,msg){const p=getRoomPeer(roomId,remotePub);if(!p||(p.dc&&p.dc.readyState)!=='open')return false;try{p.dc.send(JSON.stringify(msg));return true;}catch(e){return false;}}
-function broadcastP2P(roomId,msg,excludePub=null){const peers=getRoomPeers(roomId);if(!peers)return 0;let sent=0;for(const[pub]of peers){if(pub!==excludePub&&sendToPeer(roomId,pub,msg))sent++;}return sent;}
-function meshRelay(roomId,msg,fromPub){if((msg.hops||0)>=MAX_HOPS)return;const relayed={...msg,hops:(msg.hops||0)+1};const peers=getRoomPeers(roomId);if(!peers)return;for(const[pub]of peers){if(pub!==fromPub)sendToPeer(roomId,pub,relayed);}}
-
-function handleP2PMessage(roomId,fromPub,msg){
-  const room=rooms.get(roomId);if(!room)return;if(!(msg&&msg.type)||!(msg&&msg.id))return;if(room.seenMsgIds.has(msg.id))return;room.seenMsgIds.add(msg.id);
-  if(room.seenMsgIds.size>3000){const arr=[...room.seenMsgIds];room.seenMsgIds=new Set(arr.slice(arr.length-1500));}
-  const peerState=room.peers.get(fromPub);if(peerState)peerState.lastSeen=Date.now();
-  switch(msg.type){
-    case 'join':if(msg.name)updatePeerNameInRoom(roomId,fromPub,msg.name);room.users.add(fromPub);renderRoomSidebar();if(roomId===currentRoomId){updateStatus();addSystemMsgVS(roomId,`🌿 ${escapeHtml(msg.name||fromPub.slice(0,8))} entró al bosque 🦌`);}sendToPeer(roomId,fromPub,{type:'presence',id:uid(),roomId,senderId:pubKeyHex,name:myName,ts:Date.now()});break;
-    case 'leave':if(roomId===currentRoomId)addSystemMsgVS(roomId,`🍂 ${escapeHtml(msg.name||fromPub.slice(0,8))} salió del bosque`);closePeer(roomId,fromPub,false);break;
-    case 'presence':if(msg.name)updatePeerNameInRoom(roomId,fromPub,msg.name);room.users.add(fromPub);if(roomId===currentRoomId)updateStatus();renderRoomSidebar();break;
-    case 'chat':{if(!(msg.payload&&msg.payload.text)||!msg.senderId)return;const text=filtrarGarabatos(String(msg.payload.text).slice(0,2000));const name=msg.payload.name||(peerState&&peerState.name)||fromPub.slice(0,8);if(roomId===currentRoomId){addMsgToVS(roomId,msg.id,name,text,false,msg.ts);try{add3DText(text,false);}catch(e){}try{playMsgReceive();}catch(e){}}meshRelay(roomId,msg,fromPub);break;}
-    case 'pudubot_resp':{if(!(msg.payload&&msg.payload.text))return;const{text,emoji,thinkId}=msg.payload;if(roomId===currentRoomId){if(thinkId&&room.msgEls[thinkId])updatePuduThinkShim(roomId,thinkId,text);else addMsgToVS(roomId,msg.id,`PuduBot ${emoji||'🦌'}`,text,false,msg.ts);try{add3DText(text,false);}catch(e){}try{playMsgReceive();}catch(e){}}meshRelay(roomId,msg,fromPub);break;}
-    case 'reaction':{if(!(msg.payload&&msg.payload.msgId)||!(msg.payload&&msg.payload.emoji))return;const{msgId,emoji}=msg.payload;const rname=msg.payload.name||(peerState&&peerState.name)||fromPub.slice(0,8);if(!room.reactions[msgId])room.reactions[msgId]={};room.reactions[msgId][rname]=emoji;if(roomId===currentRoomId)updateReactionsUI(room,msgId);meshRelay(roomId,msg,fromPub);break;}
-    case 'typing':{if(roomId!==currentRoomId)return;const tname=msg.name||(peerState&&peerState.name);if(!tname)return;room.typingPeers.add(tname);updateTypingIndicator(room);clearTimeout(room.typTO);room.typTO=setTimeout(()=>{room.typingPeers.delete(tname);updateTypingIndicator(room);},3000);break;}
-    case 'ping':sendToPeer(roomId,fromPub,{type:'pong',id:uid(),roomId,senderId:pubKeyHex,ts:Date.now()});break;
-    case 'pong':if(peerState)peerState.lastSeen=Date.now();break;
-  }
-}
-
-setInterval(()=>{if(!currentRoomId)return;const now=Date.now();const peers=getRoomPeers(currentRoomId);if(!peers)return;for(const[pub,p]of peers){if((p.dc&&p.dc.readyState)==='open'){sendToPeer(currentRoomId,pub,{type:'ping',id:uid(),roomId:currentRoomId,senderId:pubKeyHex,ts:now});if(now-p.lastSeen>PEER_TIMEOUT){addSystemMsgVS(currentRoomId,`⏱️ Timeout con ${p.name||pub.slice(0,8)}`);scheduleReconnect(currentRoomId,pub);}}}},15000);
-
-function archiveMsg(room,entry){room.msgArchive.push(entry);if(room.msgArchive.length>MSG_ARCHIVE_KEEP){room.msgArchive.shift();if(room.vsOffset>0)room.vsOffset=Math.max(0,room.vsOffset-1);}}
-function pruneDOM(){const c=document.getElementById('chat-messages');if(!c)return;const room=rooms.get(currentRoomId);if(!room)return;const rows=[...c.querySelectorAll('.msg-row')];const excess=rows.length-DOM_MSG_LIMIT;if(excess<=0)return;for(let i=0;i<excess;i++){const row=rows[i];if(row&&row.dataset.id){delete room.msgEls[row.dataset.id];row.remove();}}document.getElementById('load-more-sentinel').classList.remove('hidden');}
-
-window.loadOlderMessages=function(){
-  const room=rooms.get(currentRoomId);if(!room)return;const visibleIds=new Set(Object.keys(room.msgEls));let oldestInDom=room.msgArchive.length;for(let i=0;i<room.msgArchive.length;i++){if(visibleIds.has(room.msgArchive[i].id)){oldestInDom=i;break;}}const batchStart=Math.max(0,oldestInDom-20);const batch=room.msgArchive.slice(batchStart,oldestInDom);if(batch.length===0){document.getElementById('load-more-sentinel').classList.add('hidden');return;}
-  const c=document.getElementById('chat-messages');const prevScrollH=c.scrollHeight;const firstRow=c.querySelector('.msg-row');
-  for(let i=batch.length-1;i>=0;i--){const e=batch[i];if(room.msgEls[e.id])continue;const row=e.isSystem?buildSysRow(e.text):buildMsgRow(room,e);row.classList.add('offscreen');if(firstRow)c.insertBefore(row,firstRow);else{const ti=document.getElementById('typing-ind');if(ti)c.insertBefore(row,ti);else c.appendChild(row);}if(!e.isSystem)room.msgEls[e.id]=row;}
-  c.scrollTop=c.scrollHeight-prevScrollH+c.scrollTop;if(batchStart===0)document.getElementById('load-more-sentinel').classList.add('hidden');
-};
-
-function buildSysRow(text){const d=document.createElement('div');d.className='sys-msg';d.textContent=text;return d;}
-function buildMsgRow(room,e){
-  const row=document.createElement('div');row.className=`msg-row ${e.isMe?'me':'other'}`;row.dataset.id=e.id;
-  const snd=document.createElement('div');snd.className='msg-sender';snd.textContent=e.isMe?'tú':escapeHtml(e.user);
-  const bub=document.createElement('div');bub.className='msg-bubble';bub.textContent=e.text;
-  let pt;bub.addEventListener('touchstart',()=>{pt=setTimeout(()=>showPicker(e.id,bub),500);},{passive:true});
-  bub.addEventListener('touchend',()=>clearTimeout(pt));bub.addEventListener('touchmove',()=>clearTimeout(pt));
-  bub.addEventListener('contextmenu',ev=>{ev.preventDefault();showPicker(e.id,bub);});bub.addEventListener('dblclick',()=>showPicker(e.id,bub));
-  const tm=document.createElement('div');tm.className='msg-time';const d=new Date(e.ts||Date.now());tm.textContent=d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
-  const reactDiv=document.createElement('div');reactDiv.className='msg-reactions';reactDiv.id=`react-${e.id}`;
-  row.appendChild(snd);row.appendChild(bub);row.appendChild(reactDiv);row.appendChild(tm);return row;
-}
-
-function addMsgToVS(roomId,id,user,text,isMe,ts){
-  const room=rooms.get(roomId);if(!room)return;if(room.msgEls[id])return;
-  const entry={id,user,text,isMe,ts:ts||Date.now(),isSystem:false};archiveMsg(room,entry);if(roomId!==currentRoomId)return;
-  const c=document.getElementById('chat-messages'),atBot=c.scrollHeight-c.scrollTop-c.clientHeight<120;
-  const row=buildMsgRow(room,entry);room.msgEls[id]=row;
-  const ti=document.getElementById('typing-ind');if(ti)c.insertBefore(row,ti);else c.appendChild(row);
-  pruneDOM();if(atBot)requestAnimationFrame(()=>{c.scrollTop=c.scrollHeight;});
-}
-function addSystemMsgVS(roomId,txt){
-  const room=rooms.get(roomId);if(!room)return;
-  const entry={id:uid(),text:txt,isSystem:true,ts:Date.now()};archiveMsg(room,entry);if(roomId!==currentRoomId)return;
-  const c=document.getElementById('chat-messages'),atBot=c.scrollHeight-c.scrollTop-c.clientHeight<120;
-  const d=buildSysRow(txt);const ti=document.getElementById('typing-ind');if(ti)c.insertBefore(d,ti);else c.appendChild(d);
-  pruneDOM();if(atBot)requestAnimationFrame(()=>{c.scrollTop=c.scrollHeight;});
-}
-function show(id){['welcome-screen','connecting-screen','chat-screen'].forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==id));}
-
-function renderRoomSidebar(){
-  const list=document.getElementById('rooms-list');if(!list)return;list.innerHTML='';
-  for(const[id,room]of rooms){
-    const count=room.users.size,status=roomStatus(room),isActive=id===currentRoomId;
-    const card=document.createElement('div');
-    card.className=`room-card${isActive?' active':''}${status==='full'&&!isActive?' full':''}`;card.dataset.roomId=id;
-    const statusLabels={available:'disponible',almost:'casi lleno',full:'lleno'};
-    card.innerHTML=`<div class="room-name">🌿 ${escapeHtml(room.roomName)}</div><div class="room-meta"><span class="room-count">🦌 ${count}/${MAX_PER_ROOM}</span><span class="room-badge ${status}">${statusLabels[status]}</span><div class="room-active-dot"></div></div>`;
-    if(!isActive)card.addEventListener('click',()=>switchRoom(id));
-    list.appendChild(card);
-  }
-}
-
-function updateReactionsUI(room,msgId){
-  const reactDiv=document.getElementById(`react-${msgId}`);if(!reactDiv)return;
-  const reacts=room.reactions[msgId]||{},cnt={};Object.values(reacts).forEach(r=>cnt[r]=(cnt[r]||0)+1);reactDiv.innerHTML='';
-  Object.entries(cnt).forEach(([emoji,count])=>{const b=document.createElement('div');b.className='react-badge';b.innerHTML=`${emoji}<span class="react-count">${count>1?count:''}</span>`;b.onclick=()=>addReact(msgId,emoji);reactDiv.appendChild(b);});
-}
-function updateTypingIndicator(room){
-  if(!room||room.roomId!==currentRoomId)return;const ti=document.getElementById('typing-ind');if(!ti)return;
-  if(room.typingPeers.size>0){const names=[...room.typingPeers].map(n=>n.split(' ')[0]).join(', ');ti.textContent='';ti.appendChild(document.createTextNode(`${names} escribe`));for(let i=0;i<3;i++){const d=document.createElement('div');d.className='tdot';ti.appendChild(d);}ti.className='typing-ind on';}else ti.className='typing-ind';
-}
-function updateStatus(){
-  const relaysOk=Object.values(nostrSockets).filter(s=>(s&&s.readyState)===1).length;const peersConn=countConnectedPeersInRoom(currentRoomId);
-  const st=document.getElementById('h-status');if(!st)return;
-  if(peersConn>0){st.textContent=`● P2P: ${peersConn} peer${peersConn!==1?'s':''} · Nostr: ${relaysOk}`;st.style.color='var(--accent)';}
-  else if(relaysOk>0){st.textContent=`🔍 buscando peers... (${relaysOk})`;st.style.color='var(--gold)';}
-  else{st.textContent='⚠️ sin conexión';st.style.color='#ef4444';}
-  const room=rooms.get(currentRoomId);const cnt=document.getElementById('h-room-count');if(cnt&&room)cnt.textContent=room.users.size;renderRoomSidebar();
-}
-function updateMeshIndicator(){const el=document.getElementById('mesh-indicator');if(!el)return;const conn=countConnectedPeersInRoom(currentRoomId);el.textContent=conn>0?`🕸 ${conn} nodo${conn>1?'s':''} mesh`:'🕸 mesh';el.className=conn>0?'active':'';}
-function updateChatHeader(){const room=rooms.get(currentRoomId);if(!room)return;document.getElementById('h-room-tag').textContent=`🌿 ${room.roomName}`;document.getElementById('h-name').textContent=room.roomName.toUpperCase();const cnt=document.getElementById('h-room-count');if(cnt)cnt.textContent=room.users.size;}
-
-function switchRoom(newRoomId){
-  if(newRoomId===currentRoomId)return;const newRoom=rooms.get(newRoomId);if(!newRoom){showRoomFullToast('Bosque no encontrado 🌿');return;}
-  if(newRoom.users.size>=MAX_PER_ROOM&&!newRoom.peers.has(pubKeyHex)){showRoomFullToast();return;}
-  if(currentRoomId){const oldRoom=rooms.get(currentRoomId);if(oldRoom){for(const[pub]of oldRoom.peers)sendToPeer(currentRoomId,pub,{type:'leave',id:uid(),roomId:currentRoomId,senderId:pubKeyHex,name:myName,ts:Date.now()});closeAllPeersInRoom(currentRoomId);oldRoom.users.delete(pubKeyHex);}}
-  const prevName=(rooms.get(currentRoomId)&&rooms.get(currentRoomId).roomName)||'';currentRoomId=newRoomId;newRoom.users.add(pubKeyHex);
-  syncRoomContext('switch-room');resetChatDOM();updateChatHeader();updateStatus();updateMeshIndicator();renderRoomSidebar();
-  signAndPublish({type:'hello',roomId:currentRoomId,roomName:newRoom.roomName,from:pubKeyHex,name:myName,ts:Date.now()});
-  for(const entry of newRoom.msgArchive){if(!entry.isSystem){const row=buildMsgRow(newRoom,entry);newRoom.msgEls[entry.id]=row;const c=document.getElementById('chat-messages'),ti=document.getElementById('typing-ind');if(ti)c.insertBefore(row,ti);else c.appendChild(row);}}
-  addSystemMsgVS(currentRoomId,`🌿 Entraste al bosque "${newRoom.roomName}" 🦌`);showRoomSwitchBanner(`🦌 Movido a "${newRoom.roomName}"${prevName?` desde "${prevName}"`:''}`);
-  try{setupInput();}catch(e){}document.getElementById('rooms-sidebar').classList.remove('open');
-}
-function resetChatDOM(){const c=document.getElementById('chat-messages');if(!c)return;[...c.querySelectorAll('.msg-row,.nat-warn')].forEach(el=>el.remove());document.getElementById('load-more-sentinel').classList.add('hidden');}
-
-window.createAndJoinNewRoom=function(){
-  const currRoom=rooms.get(currentRoomId);if(currRoom&&currRoom.users.size<MAX_PER_ROOM-1){showRoomFullToast('Tu bosque aún tiene espacio 🌿');return;}
-  const newId=createRoom();const room=rooms.get(newId);room.users.add(pubKeyHex);switchRoom(newId);signAndPublish({type:'hello',roomId:newId,roomName:room.roomName,from:pubKeyHex,name:myName,ts:Date.now()});renderRoomSidebar();
-};
-
-function showRoomFullToast(msg=null){const t=document.getElementById('room-toast');if(msg)t.innerHTML=`🌿 ${msg}`;else t.innerHTML='🦌 Este bosque ya tiene 15 pudúes hablando,<br>espera que salga uno 🌿';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
-let switchBannerTO=null;
-function showRoomSwitchBanner(msg){const b=document.getElementById('room-switch-banner');b.textContent=msg;b.classList.add('show');clearTimeout(switchBannerTO);switchBannerTO=setTimeout(()=>b.classList.remove('show'),3000);}
-
-window.toggleSidebar=function(){
-  const sidebar=document.getElementById('rooms-sidebar');
-  sidebar.classList.toggle('open');
-  const icon=document.getElementById('sidebar-toggle-icon');
-  icon.textContent=sidebar.classList.contains('open')?'✕':'🌿';
-};
-
-// Cerrar sidebar al tocar fuera
-document.addEventListener('touchstart',e=>{
-  const sidebar=document.getElementById('rooms-sidebar');
-  const toggle=document.getElementById('sidebar-toggle');
-  if(sidebar.classList.contains('open')&&!sidebar.contains(e.target)&&!toggle.contains(e.target)){
-    sidebar.classList.remove('open');
-    document.getElementById('sidebar-toggle-icon').textContent='🌿';
-  }
-},{passive:true});
-
-function showPicker(id,el){pickerMsgId=id;const p=document.getElementById('react-picker'),r=el.getBoundingClientRect();p.style.top=Math.max(10,r.top-58)+'px';p.style.left=Math.max(8,Math.min(r.left,innerWidth-320))+'px';p.classList.remove('hidden');if(navigator.vibrate)navigator.vibrate(30);}
-document.getElementById('react-picker').addEventListener('click',e=>{const b=e.target.closest('.rpick');if(b&&pickerMsgId){addReact(pickerMsgId,b.dataset.e);document.getElementById('react-picker').classList.add('hidden');pickerMsgId=null;}});
-document.addEventListener('click',e=>{if(!e.target.closest('.react-picker')&&!e.target.closest('.msg-bubble')){document.getElementById('react-picker').classList.add('hidden');pickerMsgId=null;}});
-function addReact(msgId,emoji){
-  const room=rooms.get(currentRoomId);if(!room)return;if(!room.reactions[msgId])room.reactions[msgId]={};room.reactions[msgId][myName]=emoji;updateReactionsUI(room,msgId);
-  const msg={type:'reaction',id:uid(),roomId:currentRoomId,senderId:pubKeyHex,ts:Date.now(),hops:0,payload:{msgId,emoji,name:myName}};broadcastP2P(currentRoomId,msg);try{playReactionSound();spawnStars(innerWidth/2,innerHeight/2);}catch(e){}
-}
-
-window.sendMessage=function(){
-  const inp=document.getElementById('chat-input');let txt=inp.value.trim();if(!txt)return;
-  const rawTxt=txt; // save before filtering for @pudu check
-  txt=filtrarGarabatos(txt);const msgId=uid(),room=rooms.get(currentRoomId);if(!room)return;
-  
-  const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:pubKeyHex,ts:Date.now(),hops:0,payload:{text:txt,name:myName}};
-  room.seenMsgIds.add(msgId);const sent=broadcastP2P(currentRoomId,msg);
-  addMsgToVS(currentRoomId,msgId,myName,txt,true,Date.now());
-  try{add3DText(txt,true);spawnStars(innerWidth-80,innerHeight-80);spawnRipple(innerWidth-80,innerHeight-80);playSendSound();}catch(e){}
-  if(sent===0)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
-  inp.value='';inp.style.height='auto';
-  // @pudu trigger — invoke PuduBot if message starts with @pudu
-  if(/^@pudu(?:bot)?\b/i.test(rawTxt)){
-    console.log('[PuduBot] @pudu detectado en sendMessage! rawTxt:', rawTxt);
-    const q=rawTxt.replace(/^@pudu(?:bot)?\s*/i,'').trim()||'¿quién eres?';
-    const _room=currentRoomId, _name=myName||'alguien';
-    setTimeout(function(){ 
-      console.log('[PuduBot] setTimeout fired, calling _invokePuduBot');
-      try {
-        if (typeof window._invokePuduBot==='function') {
-          window._invokePuduBot(_room, q, _name);
-        } else {
-          console.warn('[PuduBot] _invokePuduBot aún no está listo; reintentando...');
-          setTimeout(()=>{
-            if(typeof window._invokePuduBot==='function')window._invokePuduBot(_room,q,_name);
-            else addSystemMsgVS(_room,'🦌 El Pudú sigue despertando su módulo de voz... intenta de nuevo en unos segundos 🌿');
-          },600);
-        }
-      } catch(e) { console.error('[PuduBot] _invokePuduBot error:', e); }
-    }, 400);
-  }
-};
-
-let myTypingTO=null,myTypingSent=false;
 function setupInput(){
   const inp=document.getElementById('chat-input');if(inp.dataset.ready==='1')return;inp.dataset.ready='1';inp.disabled=false;
   inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();window.sendMessage();}});
@@ -3783,7 +3452,7 @@ function hiveRequest(messages, maxTokens = 250) {
       from: peerId,          // peerId = pubKeyHex.slice(0,12) — igual que index.html
       to: worker.peerId,     // peerId de la colmena
       signal: { type: 'moe_fallback_req', reqId, max_tokens: maxTokens,
-                intent: 'general', targetRole: 'master_reasoner', messages },
+                intent: 'general', targetRole: 'pudu_hive', messages },
       timestamp: Date.now()
     });
   });
@@ -3803,42 +3472,19 @@ function _hiveProcessEvent(ev) {
   // Check if this is a hive-relevant event by content type (not just tags)
   // This catches events from both the tag subscription AND direct parsing
   
-    // Presencia de un nodo de la colmena
-  if (c.type === 'presence') {
-    const workerId = c.peerId || c.from || c.payload?.peerId || c.payload?.from;
-    const payload = c.payload || {};
-    const workerHasEngine =
-      !!c.hasEngine ||
-      !!c.webgpu ||
-      c.deviceTier === 'S' ||
-      c.deviceTier === 'A' ||
-      c.deviceTier === 'B' ||
-      !!c.collectiveReady ||
-      !!c.petalsActive ||
-      (Array.isArray(c.petalsLayers) && c.petalsLayers.length > 0) ||
-      !!payload.hasEngine ||
-      !!payload.webgpu ||
-      payload.deviceTier === 'S' ||
-      payload.deviceTier === 'A' ||
-      payload.deviceTier === 'B' ||
-      !!payload.collectiveReady ||
-      !!payload.petalsActive ||
-      (Array.isArray(payload.petalsLayers) && payload.petalsLayers.length > 0);
-
-    if (workerId) {
-      hiveWorkers.set(workerId, {
-        peerId: workerId,
-        hasEngine: workerHasEngine,
-        tps: c.tps || payload.tps || 0,
-        lastSeen: Date.now()
-      });
-
-      if (workerHasEngine) colmenaPeerId = workerId;
-
-      HiveCounter.setHiveWorkers(hiveWorkers.size);
-      console.log(`[HIVE] ✅ Worker detectado: ${workerId?.slice(0,8)} hasEngine=${workerHasEngine} tps=${c.tps || payload.tps || 0} total=${hiveWorkers.size}`);
-      return;
-    }
+  // Presencia de un nodo de la colmena
+  if (c.type === 'presence' && c.peerId) {
+    const workerHasEngine = !!c.hasEngine || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
+    hiveWorkers.set(c.peerId, {
+      peerId: c.peerId, hasEngine: workerHasEngine,
+      tps: c.tps || 0, lastSeen: Date.now()
+    });
+    // Also set the legacy colmenaPeerId for the old sendPudubotRequest path
+    if (workerHasEngine) colmenaPeerId = c.peerId || colmenaPeerId;
+    // Actualizar UI inmediatamente al detectar workers
+    HiveCounter.setHiveWorkers(hiveWorkers.size);
+    console.log(`[HIVE] ✅ Worker detectado: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine} tps=${c.tps} total=${hiveWorkers.size}`);
+    return;
   }
 
   // Respuesta de la colmena dirigida a nosotros
@@ -3985,51 +3631,31 @@ Estado de la red: ${count.toLocaleString('es-CL')} personas. Nivel: "${level.nam
 Contexto: ${_puduGetRoomContext(roomId)}
 REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. No menciones que eres IA.`;
 
-  let responseText = null;
   try {
-    const worker = hiveBestWorker();
+    let worker = hiveBestWorker();
     console.log('[PuduBot] hiveBestWorker():', worker ? JSON.stringify(worker) : 'NULL', 'hiveWorkers.size:', hiveWorkers.size);
-    if (worker) {
-      console.log('[PuduBot] Invocando colmena... worker:', worker.peerId?.slice(0,8));
-      try {
-        const result = await hiveRequest([
-          { role:'system', content: systemPrompt },
-          { role:'user',   content: `${askerName} pregunta: ${question}` }
-        ], 250);
-        console.log('[PuduBot] hiveRequest result:', result ? JSON.stringify(result).slice(0,100) : 'NULL');
-        if (result?.text) {
-          responseText = result.text;
-          console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
-          _puduShowResponseCinematic(responseText);
-        }
-      } catch(hiveErr) {
-        console.error('[PuduBot] hiveRequest error:', hiveErr.message);
-        // Don't return - fall through to fallback
-      }
+    if (!worker) {
+      _puduUpdateThinkMsg(roomId, thinkId, '🕸 No hay worker real en la colmena.');
+      addSystemMsgVS(roomId, '🕸 La colmena está offline en esta sala.');
+      return;
     }
 
-    if (!responseText) {
-      if (webLLMReady && webLLMEngine) {
-         _puduUpdateThinkMsg(roomId, thinkId, '🧠 Colmena no lista · el Pudú reflexiona localmente...');
-         try {
-           const localRes = await webLLMEngine.chat.completions.create({
-             messages: [ { role: 'system', content: systemPrompt }, { role: 'user', content: question } ],
-             max_tokens: 200, temperature: 0.7,
-           });
-           responseText = localRes.choices?.[0]?.message?.content || '...';
-           _puduShowResponseCinematic(responseText);
-         } catch(e) {
-           responseText = '❌ Error al usar cerebros locales: ' + e.message;
-         }
-      } else {
-         const wc = hiveWorkers.size;
-         responseText = wc === 0
-           ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app?simulate=10 en tu computador para despertar la colmena* 🌿'
-           : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
-      }
+    console.log('[PuduBot] Invocando colmena... worker:', worker.peerId?.slice(0,8));
+    const result = await hiveRequest([
+      { role:'system', content: systemPrompt },
+      { role:'user',   content: `${askerName} pregunta: ${question}` }
+    ], 250);
+
+    console.log('[PuduBot] hiveRequest result:', result ? JSON.stringify(result).slice(0,100) : 'NULL');
+    if (!result?.text) {
+      throw new Error('La colmena no devolvió texto.');
     }
 
+    const responseText = result.text;
+    console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
+    _puduShowResponseCinematic(responseText);
     _puduUpdateThinkMsg(roomId, thinkId, responseText);
+
     broadcastP2P(roomId, { type:'pudubot_resp', id:uid(), roomId,
       senderId:'pudubot', ts:Date.now(), hops:0,
       payload:{ text:responseText, emoji:level.emoji, thinkId, asker:askerName } });

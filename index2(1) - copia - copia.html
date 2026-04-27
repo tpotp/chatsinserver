@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -955,21 +955,60 @@ let colmenaPeerId = null;
 
 async function sendPudubotRequest(prompt) {
    if (!nostrMod) return;
-
-   if (!colmenaPeerId && typeof hiveBestWorker === 'function') {
-       const best = hiveBestWorker();
-       if (best && best.peerId) colmenaPeerId = best.peerId;
-   }
-
    if (!colmenaPeerId) {
-       addSystemMsgVS(currentRoomId, '🕸 No hay colmena viva en esta sala.');
+       // Try local WebLLM engine as fallback
+       if (webLLMReady && webLLMEngine) {
+         addSystemMsgVS(currentRoomId, '🧠 Colmena no encontrada · usando modelo local...');
+         try {
+           const result = await webLLMEngine.chat.completions.create({
+             messages: [
+               { role: 'system', content: 'Eres un pudú místico del bosque chileno. Respondes en español con ternura.' },
+               { role: 'user', content: prompt }
+             ],
+             max_tokens: 200,
+             temperature: 0.7,
+           });
+           const text = result.choices?.[0]?.message?.content || '[Sin respuesta]';
+           const msgId = uid();
+           addMsgToVS(currentRoomId, msgId, '@pudubot 🧠', text, false, Date.now());
+           try { add3DText(text, false); } catch(e) {}
+           try { playMsgReceive(); } catch(e) {}
+           broadcastP2P(currentRoomId, {
+             type: 'chat', id: msgId, roomId: currentRoomId,
+             senderId: pubKeyHex, ts: Date.now(), hops: 0,
+             payload: { text: text, name: '@pudubot 🧠' }
+           });
+         } catch(e) {
+           addSystemMsgVS(currentRoomId, '❌ Error en modelo local: ' + e.message);
+         }
+         return;
+       }
+       // Cloud fallback via pollinations.ai
+       addSystemMsgVS(currentRoomId, '☁️ Sin colmena local · consultando la nube del bosque...');
+       try {
+         const sysPoll='Eres el Pudú del bosque chileno. Responde en español chileno con ternura y máximo 3 oraciones.';
+         const res=await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?system=${encodeURIComponent(sysPoll)}`);
+         if(res.ok){
+           const txt=await res.text();
+           if(txt&&txt.trim()){
+             const msgId2=uid();
+             addMsgToVS(currentRoomId,msgId2,'PuduBot ☁️🦌',txt.trim(),false,Date.now());
+             try{add3DText(txt,false);}catch(e){}
+             try{playMsgReceive();}catch(e){}
+           }
+         } else {
+           addSystemMsgVS(currentRoomId,'❌ Colmena AI no encontrada. Abre chatsinserver.vercel.app?simulate=10 en tu PC para activarla 🌿');
+         }
+       } catch(cloudErr) {
+         addSystemMsgVS(currentRoomId,'❌ Sin colmena ni nube disponible: '+cloudErr.message);
+       }
        return;
    }
-
+   
    const reqId = Math.floor(Math.random() * 0xFFFFFFFF);
    const msgId = uid();
    pendingPudubotReqs.set(reqId, { prompt, msgId });
-
+   
    const reqContent = {
        type: "signal",
        from: peerId || pubKeyHex.slice(0,12),
@@ -980,7 +1019,7 @@ async function sendPudubotRequest(prompt) {
            max_tokens: 400,
            intent: 'general',
            targetRole: 'master_reasoner',
-           messages: [{ role: 'user', content: prompt }]
+           messages: [{role: 'user', content: prompt}]
        },
        timestamp: Date.now()
    };
@@ -994,88 +1033,15 @@ async function sendPudubotRequest(prompt) {
    for (const ws of Object.values(nostrSockets)) {
        if ((ws && ws.readyState) === 1) { ws.send(raw); relaysUsed++; }
    }
-
-   if (relaysUsed > 0) {
+   
+   if(relaysUsed > 0) {
       addSystemMsgVS(currentRoomId, `🧠 @pudubot está procesando con la Colmena distribuida...`);
    } else {
       addSystemMsgVS(currentRoomId, `❌ Colmena inalcanzable (Relays offline)`);
    }
 }
 
-const IDENTITY_KEY='@,
-    1
-)
-
-# 5) _invokePuduBot: solo colmena real, sin fallback local ni nube
-$html = [regex]::Replace(
-    $html,
-    '(?s)async function _invokePuduBot\(roomId, question, askerName\) \{.*?\r?\n\}\r?\nwindow\._invokePuduBot = _invokePuduBot;',
-    @'
-async function _invokePuduBot(roomId, question, askerName) {
-  console.log('[PuduBot] _invokePuduBot llamado. room=' + roomId + ' q=' + question + ' asker=' + askerName);
-  if (_puduIsThinking) {
-    addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿');
-    return;
-  }
-  _puduIsThinking = true;
-
-  const count = HiveCounter.getCount();
-  const level = HiveCounter.getLevel(count);
-  const levelIdx = HiveCounter.LEVELS.indexOf(level);
-  const thinkId = uid();
-  const thinkTexts = ['*...consultando el bosque...*','*...el pudú cierra los ojos...*','*...la colmena procesa...*','*...los árboles susurran...*'];
-  addMsgToVS(roomId, thinkId, `PuduBot ${level.emoji}`, thinkTexts[Math.floor(Math.random()*thinkTexts.length)], false, Date.now());
-
-  const systemPrompt = `${PUDU_PERSONALITIES[levelIdx]||PUDU_PERSONALITIES[0]}
-Estado de la red: ${count.toLocaleString('es-CL')} personas. Nivel: "${level.name}".
-Contexto: ${_puduGetRoomContext(roomId)}
-REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. No menciones que eres IA.`;
-
-  try {
-    let worker = hiveBestWorker();
-    console.log('[PuduBot] hiveBestWorker():', worker ? JSON.stringify(worker) : 'NULL', 'hiveWorkers.size:', hiveWorkers.size);
-
-    if (!worker) {
-      _puduUpdateThinkMsg(roomId, thinkId, '🕸 No hay worker real en la colmena.');
-      addSystemMsgVS(roomId, '🕸 La colmena está offline en esta sala.');
-      return;
-    }
-
-    console.log('[PuduBot] Invocando colmena... worker:', worker.peerId?.slice(0,8));
-
-    const result = await hiveRequest([
-      { role:'system', content: systemPrompt },
-      { role:'user', content: `${askerName} pregunta: ${question}` }
-    ], 250);
-
-    console.log('[PuduBot] hiveRequest result:', result ? JSON.stringify(result).slice(0,100) : 'NULL');
-
-    if (!result?.text) {
-      throw new Error('La colmena no devolvió texto.');
-    }
-
-    const responseText = result.text;
-    console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
-    _puduShowResponseCinematic(responseText);
-    _puduUpdateThinkMsg(roomId, thinkId, responseText);
-
-    broadcastP2P(roomId, {
-      type:'pudubot_resp',
-      id:uid(),
-      roomId,
-      senderId:'pudubot',
-      ts:Date.now(),
-      hops:0,
-      payload:{ text:responseText, emoji:level.emoji, thinkId, asker:askerName }
-    });
-  } catch(e) {
-    console.error('[PuduBot] Error:', e.message);
-    _puduUpdateThinkMsg(roomId, thinkId, `🦌 *${e.message}* 🍃`);
-  } finally {
-    _puduIsThinking = false;
-  }
-}
-window._invokePuduBot = _invokePuduBot;'pudu-identity-v1';
+const IDENTITY_KEY='pudu-identity-v1';
 async function generateKeypair(){
   nostrMod=await (_nostrPreload||import("https://esm.sh/nostr-tools@2/pure"));
   try{const saved=localStorage.getItem(IDENTITY_KEY);if(saved){const{priv,pub,name}=JSON.parse(saved);privKeyBytes=new Uint8Array(priv);pubKeyHex=pub;if(name&&!myName)myName=name;return;}}catch(e){}
@@ -3755,9 +3721,7 @@ function hiveBestWorker() {
     any = w;
     if (w.hasEngine && w.tps > bestTps) { bestTps = w.tps; best = w; }
   }
-  const chosen = best || any;
-  if (chosen && chosen.peerId) colmenaPeerId = chosen.peerId;
-  return chosen;
+  return best || any;
 }
 window._hiveBestWorker = hiveBestWorker;
 
@@ -3783,7 +3747,7 @@ function hiveRequest(messages, maxTokens = 250) {
       from: peerId,          // peerId = pubKeyHex.slice(0,12) — igual que index.html
       to: worker.peerId,     // peerId de la colmena
       signal: { type: 'moe_fallback_req', reqId, max_tokens: maxTokens,
-                intent: 'general', targetRole: 'master_reasoner', messages },
+                intent: 'general', targetRole: 'general', messages },
       timestamp: Date.now()
     });
   });
@@ -3803,42 +3767,19 @@ function _hiveProcessEvent(ev) {
   // Check if this is a hive-relevant event by content type (not just tags)
   // This catches events from both the tag subscription AND direct parsing
   
-    // Presencia de un nodo de la colmena
-  if (c.type === 'presence') {
-    const workerId = c.peerId || c.from || c.payload?.peerId || c.payload?.from;
-    const payload = c.payload || {};
-    const workerHasEngine =
-      !!c.hasEngine ||
-      !!c.webgpu ||
-      c.deviceTier === 'S' ||
-      c.deviceTier === 'A' ||
-      c.deviceTier === 'B' ||
-      !!c.collectiveReady ||
-      !!c.petalsActive ||
-      (Array.isArray(c.petalsLayers) && c.petalsLayers.length > 0) ||
-      !!payload.hasEngine ||
-      !!payload.webgpu ||
-      payload.deviceTier === 'S' ||
-      payload.deviceTier === 'A' ||
-      payload.deviceTier === 'B' ||
-      !!payload.collectiveReady ||
-      !!payload.petalsActive ||
-      (Array.isArray(payload.petalsLayers) && payload.petalsLayers.length > 0);
-
-    if (workerId) {
-      hiveWorkers.set(workerId, {
-        peerId: workerId,
-        hasEngine: workerHasEngine,
-        tps: c.tps || payload.tps || 0,
-        lastSeen: Date.now()
-      });
-
-      if (workerHasEngine) colmenaPeerId = workerId;
-
-      HiveCounter.setHiveWorkers(hiveWorkers.size);
-      console.log(`[HIVE] ✅ Worker detectado: ${workerId?.slice(0,8)} hasEngine=${workerHasEngine} tps=${c.tps || payload.tps || 0} total=${hiveWorkers.size}`);
-      return;
-    }
+  // Presencia de un nodo de la colmena
+  if (c.type === 'presence' && c.peerId) {
+    const workerHasEngine = !!c.hasEngine || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
+    hiveWorkers.set(c.peerId, {
+      peerId: c.peerId, hasEngine: workerHasEngine,
+      tps: c.tps || 0, lastSeen: Date.now()
+    });
+    // Also set the legacy colmenaPeerId for the old sendPudubotRequest path
+    if (workerHasEngine) colmenaPeerId = c.peerId || colmenaPeerId;
+    // Actualizar UI inmediatamente al detectar workers
+    HiveCounter.setHiveWorkers(hiveWorkers.size);
+    console.log(`[HIVE] ✅ Worker detectado: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine} tps=${c.tps} total=${hiveWorkers.size}`);
+    return;
   }
 
   // Respuesta de la colmena dirigida a nosotros
