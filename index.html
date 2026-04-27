@@ -75,7 +75,7 @@ body::before {
   padding: 4px 10px; border-radius: 20px; font-size: 11px;
   font-weight: 500; letter-spacing: 0.3px;
   border: 1px solid var(--border-subtle); background: var(--bg-glass);
-  backdrop-filter: blur(8px); flex-shrink: 0;
+  flex-shrink: 0;
   transition: all var(--transition-med);
 }
 .h-room-tag,
@@ -658,7 +658,6 @@ body::before {
   color: #d9ffe7; background: linear-gradient(135deg, rgba(0,229,255,0.16), rgba(177,107,255,0.2));
   border-bottom: 1px solid rgba(0,229,255,0.18);
   transform: translateY(-110%); transition: transform 0.28s ease;
-  backdrop-filter: blur(16px);
 }
 #room-switch-banner.show { transform: translateY(0); }
 #sidebar-toggle {
@@ -675,7 +674,6 @@ body::before {
   border-radius: 24px; border: 1px solid rgba(0,229,255,0.14);
   background: linear-gradient(180deg, rgba(4,8,18,0.94), rgba(8,12,28,0.96));
   box-shadow: 0 26px 40px rgba(0,0,0,0.34);
-  backdrop-filter: blur(22px);
   display: flex; flex-direction: column; overflow: hidden;
   transform: translateX(calc(-100% - 18px));
   transition: transform 0.28s ease;
@@ -759,7 +757,6 @@ body::before {
   padding: 18px 22px; border-radius: 28px;
   border: 2px solid rgba(255,255,255,0.18);
   background: rgba(10,12,24,0.84);
-  backdrop-filter: blur(20px);
   box-shadow: 0 24px 42px rgba(0,0,0,0.36);
   opacity: 0; transition: opacity 0.3s ease, transform 0.3s ease;
   pointer-events: none;
@@ -904,7 +901,7 @@ body::before {
 /* ── Modals ──────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 500;
-  background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.6);
   display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
 }
@@ -1054,7 +1051,6 @@ body::before {
   opacity: 0;
   pointer-events: none;
   transition: opacity .25s ease, transform .25s ease;
-  backdrop-filter: blur(18px);
 }
 #room-toast.show {
   opacity: 1;
@@ -1071,7 +1067,6 @@ body::before {
     radial-gradient(circle at top right, rgba(108,92,231,0.07), transparent 34%),
     rgba(8, 10, 18, 0.84);
   box-shadow: 0 24px 70px rgba(0,0,0,0.36);
-  backdrop-filter: blur(26px);
 }
 #sidebar {
   width: 320px;
@@ -1412,7 +1407,6 @@ body:not(.debug-mode) #messages {
 body:not(.debug-mode) .room-bar {
   z-index: 20;
   background: rgba(4, 8, 18, 0.72);
-  backdrop-filter: blur(20px) saturate(1.4);
   border-bottom: 1px solid rgba(0,229,255,0.12);
   box-shadow: 0 2px 24px rgba(0,0,0,0.32);
   position: relative;
@@ -1423,7 +1417,6 @@ body:not(.debug-mode) .room-bar {
 body:not(.debug-mode) #input-area {
   z-index: 20;
   background: rgba(4, 8, 18, 0.78);
-  backdrop-filter: blur(20px) saturate(1.4);
   border-top: 1px solid rgba(0,229,255,0.10);
   padding: 12px 16px 16px;
   position: relative;
@@ -1433,7 +1426,6 @@ body:not(.debug-mode) #input-area {
 /* Bubbles de mensaje semitransparentes */
 body:not(.debug-mode) .msg-body {
   background: rgba(8, 12, 28, 0.82);
-  backdrop-filter: blur(12px);
 }
 body:not(.debug-mode) .message.user-msg .msg-body {
   background: linear-gradient(135deg, rgba(0,114,255,0.88), rgba(0,229,255,0.88));
@@ -1513,7 +1505,6 @@ body.debug-mode #pudu-ambient-wrap { display: none; }
   z-index: 15;
   background: rgba(0,229,255,0.08);
   border: 1px solid rgba(0,229,255,0.22);
-  backdrop-filter: blur(14px);
   border-radius: 20px;
   padding: 6px 16px;
   font-size: 12px;
@@ -5792,8 +5783,8 @@ async function generateResponse(userMessage) {
   }
 
   if (!route) {
-    showRouteBanner(`☁️ Inferencia Remota → Relay Backup (Tier Cloud)`);
-    return await runCloudFallback(userMessage);
+    showRouteBanner(`🦌 Sin fallback externo: el pudú responde solo dentro de la colmena.`);
+    return showHiveOnlyUnavailableMessage();
   }
 
   const routeLabel = ROLE_LABELS[route.role] || route.role;
@@ -6142,42 +6133,11 @@ async function runLocalInference(userMessage, intent, route) {
   isGenerating = false; updateSpeedChip();
 }
 
-async function runCloudFallback(userMessage) {
-  isGenerating = true;
-  const aiMsgEl = addMessageToUI("assistant", null, true);
-  aiMsgEl.querySelector('.msg-avatar').classList.replace('ai-av', 'moe-av');
-  aiMsgEl.querySelector('.msg-header').textContent = `Cloud Relay - Nostr Subnet (Tier S)`;
-  
-  let middleStepHtml = `<div class="pipeline-step" style="opacity:0.6"><div class="pipeline-icon" style="filter:grayscale(1)">🗄️</div> Red Local Vacía <span>(Sin Motores Activos)</span></div>`;
-  if (myRole === 'semantic_rag') {
-     middleStepHtml = `<div class="pipeline-step"><div class="pipeline-icon active">🧠</div> Vectorizado Semántico <span>(Aportado por Ti)</span></div>`;
-  }
-
-  const pipelineHtml = `
-    <div class="swarm-pipeline">
-      <div class="pipeline-step"><div class="pipeline-icon">📲</div> Recepción & Ruteo <span>(Tu Node - Tier ${deviceTier})</span></div>
-      ${middleStepHtml}
-      <div class="pipeline-step"><div class="pipeline-icon" style="background:var(--tier-s);color:#000">☁️</div> Backup Cloud Mined <span>(Garantía de Computo)</span></div>
-    </div>
-  `;
-  const pipelineEl = document.createElement('div');
-  pipelineEl.innerHTML = pipelineHtml;
-  aiMsgEl.querySelector('.msg-body').insertBefore(pipelineEl, aiMsgEl.querySelector('.msg-content'));
-  
-  try {
-    const sys = "You are a helpful AI in a decentralized hive mind. Answer concisely.";
-    const encodedUser = encodeURIComponent(userMessage);
-    const encodedSys = encodeURIComponent(sys);
-    const res = await fetch(`https://text.pollinations.ai/${encodedUser}?system=${encodedSys}`);
-    const text = await res.text();
-    aiMsgEl.querySelector('.typing-indicator')?.remove();
-    aiMsgEl.querySelector('.msg-content').textContent = text;
-    chatHistory.push({ role: 'assistant', content: text });
-  } catch(e) {
-    aiMsgEl.querySelector('.typing-indicator')?.remove();
-    aiMsgEl.querySelector('.msg-content').textContent = '❌ Fallo en red externa. No hay P2P ni Cloud viable.';
-  }
-  isGenerating = false;
+function showHiveOnlyUnavailableMessage() {
+  const text = '🦌 El pudú solo responde desde la IA colmena de esta sala. No hay fallbacks externos activos; invoca a @pudu y espera a que la colmena termine de hilar la respuesta.';
+  addMessageToUI('assistant', text);
+  chatHistory.push({ role: 'assistant', content: text });
+  setPuduWhisper('La voz del pudú se queda dentro de la colmena.', 2800);
 }
 
 async function runRemoteInference(userMessage, remotePeerId, intent, route) {
