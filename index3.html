@@ -1198,7 +1198,10 @@ function updatePuduThinkShim(roomId,thinkId,text){
 }
 
 window._invokePuduBot=async function(roomId,question,askerName){
-  return _invokePuduBot(roomId,question,askerName);
+  if (typeof window.__puduBridgeInvoke === 'function') {
+    return window.__puduBridgeInvoke(roomId,question,askerName);
+  }
+  addSystemMsgVS(roomId,'🦌 El Pudú sigue enlazando su colmena... intenta de nuevo en unos segundos 🌿');
 };
 
 function getRoomPeers(roomId){return (rooms.get(roomId)&&rooms.get(roomId).peers);}
@@ -1357,7 +1360,7 @@ function switchRoom(newRoomId){
   if(currentRoomId){const oldRoom=rooms.get(currentRoomId);if(oldRoom){for(const[pub]of oldRoom.peers)sendToPeer(currentRoomId,pub,{type:'leave',id:uid(),roomId:currentRoomId,senderId:pubKeyHex,name:myName,ts:Date.now()});closeAllPeersInRoom(currentRoomId);oldRoom.users.delete(pubKeyHex);}}
   const prevName=(rooms.get(currentRoomId)&&rooms.get(currentRoomId).roomName)||'';currentRoomId=newRoomId;newRoom.users.add(pubKeyHex);
   syncRoomContext('switch-room');resetChatDOM();updateChatHeader();updateStatus();updateMeshIndicator();renderRoomSidebar();
-  requestEmbeddedColmenaRoomSync('switch-room').catch(err=>console.warn('[ColmenaBridge] switch-room sync failed:', err.message));
+  window.requestEmbeddedColmenaRoomSync?.('switch-room').catch(err=>console.warn('[ColmenaBridge] switch-room sync failed:', err.message));
   signAndPublish({type:'hello',roomId:currentRoomId,roomName:newRoom.roomName,from:pubKeyHex,name:myName,ts:Date.now()});
   for(const entry of newRoom.msgArchive){if(!entry.isSystem){const row=buildMsgRow(newRoom,entry);newRoom.msgEls[entry.id]=row;const c=document.getElementById('chat-messages'),ti=document.getElementById('typing-ind');if(ti)c.insertBefore(row,ti);else c.appendChild(row);}}
   addSystemMsgVS(currentRoomId,`🌿 Entraste al bosque "${newRoom.roomName}" 🦌`);showRoomSwitchBanner(`🦌 Movido a "${newRoom.roomName}"${prevName?` desde "${prevName}"`:''}`);
@@ -1402,16 +1405,17 @@ function addReact(msgId,emoji){
 window.sendMessage=function(){
   const inp=document.getElementById('chat-input');let txt=inp.value.trim();if(!txt)return;
   const rawTxt=txt; // save before filtering for @pudu check
+  const isPuduSummon=/^@pudu(?:bot)?\b/i.test(rawTxt);
   txt=filtrarGarabatos(txt);const msgId=uid(),room=rooms.get(currentRoomId);if(!room)return;
   
   const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:pubKeyHex,ts:Date.now(),hops:0,payload:{text:txt,name:myName}};
   room.seenMsgIds.add(msgId);const sent=broadcastP2P(currentRoomId,msg);
   addMsgToVS(currentRoomId,msgId,myName,txt,true,Date.now());
   try{add3DText(txt,true);spawnStars(innerWidth-80,innerHeight-80);spawnRipple(innerWidth-80,innerHeight-80);playSendSound();}catch(e){}
-  if(sent===0)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
+  if(sent===0&&!isPuduSummon)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
   inp.value='';inp.style.height='auto';
   // @pudu trigger — invoke PuduBot if message starts with @pudu
-  if(/^@pudu(?:bot)?\b/i.test(rawTxt)){
+  if(isPuduSummon){
     console.log('[PuduBot] @pudu detectado en sendMessage! rawTxt:', rawTxt);
     const q=rawTxt.replace(/^@pudu(?:bot)?\s*/i,'').trim()||'¿quién eres?';
     const _room=currentRoomId, _name=myName||'alguien';
@@ -1495,7 +1499,7 @@ function enterChatScreen(){
   if(chatEntered)return;chatEntered=true;show('chat-screen');
   document.getElementById('h-avatar').textContent=avatarFor(myName);
   updateChatHeader();try{triggerEntryAnimation();}catch(e){}setupInput();
-  requestEmbeddedColmenaRoomSync('enter-chat').catch(err=>console.warn('[ColmenaBridge] enter-chat sync failed:', err.message));
+  window.requestEmbeddedColmenaRoomSync?.('enter-chat').catch(err=>console.warn('[ColmenaBridge] enter-chat sync failed:', err.message));
   addSystemMsgVS(currentRoomId,`🌿 Entraste al bosque como ${myName} 🦌`);
   addSystemMsgVS(currentRoomId,`🏡 Tu bosque: "${(rooms.get(currentRoomId)&&rooms.get(currentRoomId).roomName)}" — esperando más pudúes...`);
   addSystemMsgVS(currentRoomId,'⚡ Chat mesh P2P listo. En móvil: "Cambiar de Bosque" arriba izquierda 🌿');
@@ -3411,7 +3415,7 @@ if(originalSendBtn){originalSendBtn.addEventListener('touchstart',()=>{unlockAud
 //  4. La colmena de tu PC recibe, procesa con SmolLM2/Llama, responde moe_fallback_res
 //  5. El chat muestra la respuesta como PuduBot
 //
-//  INSTALACIÓN: pegar este script justo antes del </script> final del HTML
+//  INSTALACIÓN: pegar este script justo antes del cierre final del script HTML
 // ══════════════════════════════════════════════════════════════════════
 
 // ── CIRCUIT RELAY v2 ─────────────────────────────────────────────────
@@ -3844,7 +3848,8 @@ function getEmbeddedColmenaFrame() {
 }
 
 function getEmbeddedColmenaRoomKey(roomId = currentRoomId) {
-  return roomId || new URLSearchParams(window.location.search).get('room') || 'sala-1';
+  const params = new URLSearchParams(window.location.search);
+  return params.get('colmenaRoom') || params.get('sharedAiRoom') || 'sala-1';
 }
 
 function buildEmbeddedColmenaUrl(roomKey) {
@@ -3971,6 +3976,7 @@ function requestEmbeddedColmenaRoomSync(reason = 'sync') {
 
   return embeddedColmenaState.loadPromise;
 }
+window.requestEmbeddedColmenaRoomSync = requestEmbeddedColmenaRoomSync;
 
 function readEmbeddedAssistantText(contentEl) {
   if (!contentEl) return '';
@@ -4085,6 +4091,7 @@ async function requestEmbeddedColmenaReply(roomId, question, onStream) {
     postEmbeddedColmenaControl(frame, roomKey, 'pudu-host-refresh');
   });
 }
+window.requestEmbeddedColmenaReply = requestEmbeddedColmenaReply;
 
 // Show the pudú 3D cinematic with the response text coming from its mouth
 function _puduShowResponseCinematic(responseText) {
@@ -4101,7 +4108,7 @@ function _puduShowResponseCinematic(responseText) {
   } catch(e) { console.warn('[PuduBot] Cinematic error:', e); }
 }
 
-async function _invokePuduBot(roomId, question, askerName) {
+async function invokeSharedPuduBot(roomId, question, askerName) {
   console.log('[PuduBot] _invokePuduBot llamado. room=' + roomId + ' q=' + question + ' asker=' + askerName);
   if (_puduIsThinking) { addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿'); return; }
   _puduIsThinking = true;
@@ -4111,7 +4118,7 @@ async function _invokePuduBot(roomId, question, askerName) {
   addMsgToVS(roomId, thinkId, stageLabel, '*...consultando la colmena...*', false, Date.now());
 
   try {
-    const responseText = await requestEmbeddedColmenaReply(roomId, question, (partialText) => {
+    const responseText = await window.requestEmbeddedColmenaReply(roomId, question, (partialText) => {
       _puduUpdateThinkMsg(roomId, thinkId, partialText);
     });
     _puduUpdateThinkMsg(roomId, thinkId, responseText);
@@ -4126,7 +4133,8 @@ async function _invokePuduBot(roomId, question, askerName) {
     _puduIsThinking = false;
   }
 }
-window._invokePuduBot = _invokePuduBot;
+window.__puduBridgeInvoke = invokeSharedPuduBot;
+window._invokePuduBot = invokeSharedPuduBot;
 
 // Handle pudubot_resp P2P messages — hook into handleP2PMessage
 const _origHandleP2P = handleP2PMessage;
@@ -4190,7 +4198,7 @@ function injectHiveUI() {
 async function initPuduBotModule() {
   injectHiveUI();
   bindEmbeddedColmenaStatusListener();
-  requestEmbeddedColmenaRoomSync('boot').catch(err => {
+  window.requestEmbeddedColmenaRoomSync?.('boot').catch(err => {
     console.warn('[ColmenaBridge] boot sync deferred:', err.message);
   });
   console.log('🦌 PuduBot v5 — index.html embebido como motor de colmena');
