@@ -682,11 +682,7 @@ const pudubotPending = new Map(); // reqId → {resolve, reject, timer}
 let peerId = null;                // our peerId = pubKeyHex.slice(0,12)
 let _hiveCounterRef = null;       // set once HiveCounter IIFE runs
 
-// EXPOSE EARLY to prevent module errors from breaking access
-window._hiveRegisterWorker = _hiveRegisterWorker;
-window._invokePuduBot = _invokePuduBot;
-window._hiveWorkers = hiveWorkers;
-window._hiveBestWorker = hiveBestWorker;
+// No early exports to avoid Firefox TDZ evaluation bugs.
 
 // Bridge function: called from handleNostrEvent to register workers
 // This is always available because it's at the top of the module.
@@ -716,6 +712,8 @@ function _hiveRegisterWorker(workerId, hasEngine, tps) {
   } catch(e) { console.warn('[HIVE] DOM failsafe error:', e); }
   console.log('[HIVE] ✅ Worker registrado:', workerId?.slice(0,8), 'hasEngine=' + hasEngine, 'total=' + hiveWorkers.size);
 }
+window._hiveRegisterWorker = _hiveRegisterWorker;
+window._hiveWorkers = hiveWorkers;
 
 // Bridge function: resolve pending pudubot requests
 function _hiveResolvePending(reqId, payload) {
@@ -3475,6 +3473,7 @@ function hiveBestWorker() {
   }
   return best || any;
 }
+window._hiveBestWorker = hiveBestWorker;
 
 // ── Enviar request a la colmena y esperar respuesta ───────────────
 function hiveRequest(messages, maxTokens = 250) {
@@ -3732,6 +3731,7 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
     _puduIsThinking = false;
   }
 }
+window._invokePuduBot = _invokePuduBot;
 
 // Handle pudubot_resp P2P messages — hook into handleP2PMessage
 const _origHandleP2P = handleP2PMessage;
