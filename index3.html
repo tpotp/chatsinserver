@@ -892,12 +892,15 @@ function createRoom(name){
   return roomId;
 }
 function getCurrentHiveRoomKey(){
-  if(currentRoomId)return currentRoomId;
+  // Use the URL ?room= param (e.g. "sala-test-fix") not the internal UUID roomId
+  // This MUST match the namespace that index.html (the host) publishes to
   return new URLSearchParams(window.location.search).get('room')||null;
 }
 function getCurrentHiveNamespace(){
   const roomKey=getCurrentHiveRoomKey();
-  return roomKey?`p2p-hive-${roomKey}`:'p2p-hive-public';
+  const ns = roomKey?`p2p-hive-${roomKey}`:'p2p-hive-public';
+  console.log('[HIVE-NS] getCurrentHiveNamespace() →', ns, '(roomKey='+roomKey+')');
+  return ns;
 }
 function syncRoomUrl(){
   if(!currentRoomId)return;
@@ -1052,7 +1055,7 @@ function connectNostrRelay(url){
       if(typeof window.hiveSubscribeSocket==='function')window.hiveSubscribeSocket(ws,true);
       onRelayReady();
     };
-    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT"){handleNostrEvent(msg[2]);}else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
+    ws.onmessage=(e)=>{try{const msg=JSON.parse(e.data);if(msg[0]==="EVENT"){handleNostrEvent(msg[2]);try{if(typeof _hiveProcessEvent==='function')_hiveProcessEvent(msg[2]);}catch(he){}}else if(msg[0]==="EOSE")onRelayReady();}catch(e){}};
     ws.onerror=()=>{dot.className='rdot fail';};
     ws.onclose=()=>{dot.className='rdot fail';nostrSockets[url]=null;setTimeout(connect,retryDelay);retryDelay=Math.min(retryDelay*2,60000);};
   }
@@ -1077,22 +1080,24 @@ function handleNostrEvent(ev){
       colmenaPeerId = data.from;
       _hiveRegisterWorker(data.from || fromPub, true, data.payload.tps || 0);
   }
-  // Also detect index.html-style presence events (with peerId format)
-  if (data.type === "presence" && data.peerId && (data.hasEngine || data.tps > 0 || data.webgpu || data.deviceTier === 'S' || data.deviceTier === 'A' || data.deviceTier === 'B')) {
-      colmenaPeerId = data.peerId || data.from || colmenaPeerId;
+  // Also detect index.html-style presence events (with peerId format) — THIS IS THE MAIN PATH
+  if (data.type === "presence" && data.peerId) {
       const whe = !!data.hasEngine || !!data.webgpu || data.deviceTier === 'S' || data.deviceTier === 'A' || data.deviceTier === 'B';
+      colmenaPeerId = data.peerId || data.from || colmenaPeerId;
+      console.log('[HIVE] Presencia recibida peerId='+data.peerId?.slice(0,8)+' hasEngine='+data.hasEngine+' tier='+data.deviceTier+' whe='+whe);
       _hiveRegisterWorker(data.peerId, whe, data.tps || 0);
   }
   
-  if (data.type === "signal" && data.to === pubKeyHex && data.signal && data.signal.type === "moe_fallback_res") {
+  if (data.type === "signal" && (data.to === pubKeyHex || (peerId && data.to === peerId) || (pubKeyHex && data.to === pubKeyHex.slice(0,12))) && data.signal && data.signal.type === "moe_fallback_res") {
       const res = data.signal;
+      console.log('[HIVE] handleNostrEvent: moe_fallback_res reqId='+res.reqId+' to='+data.to+' peerId='+peerId?.slice(0,8));
       // Check NEW pudubotPending Map first (used by the hiveRequest path)
       if (_hiveResolvePending(res.reqId, res.payload)) return;
       // Legacy path for old pendingPudubotReqs
       if (pendingPudubotReqs.has(res.reqId)) {
          const { msgId } = pendingPudubotReqs.get(res.reqId);
          pendingPudubotReqs.delete(res.reqId);
-         const text = res.text || '[Sin respuesta validada]';
+         const text = res.text || (res.payload && res.payload.text) || '[Sin respuesta validada]';
          
          const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:data.from,ts:Date.now(),hops:0,payload:{text:text,name:`@pudubot`}};
          const room = rooms.get(currentRoomId);
@@ -1971,11 +1976,12 @@ function buildProceduralPudu(){
   const snout=addPart(new THREE.SphereGeometry(0.15,seg-2,seg-3),0x33ffaa,headGroup);
   snout.position.set(0,-0.06,0.36);snout.scale.set(1.15,0.72,0.88);
 
-  // ── EYES — BIG, EXPRESSIVE, ANIMATED ──
   // ── EYES — grouped so all layers move together ──
+  // Eyes positioned slightly lower and more forward so they don't appear to float
   function makeEyeGroup(side){
     const eg=new THREE.Group();
-    eg.position.set(side*0.175,0.10,0.33);
+    // Moved from y=0.10 to y=0.06 so eyes sit properly on the face, not floating above
+    eg.position.set(side*0.175, 0.06, 0.36);
     headGroup.add(eg);
     const ew=new THREE.Mesh(new THREE.SphereGeometry(0.115,seg-2,seg-2),new THREE.MeshBasicMaterial({color:0xffffff}));
     eg.add(ew);
@@ -3695,12 +3701,13 @@ function hiveSubscribeSocket(ws, force=false) {
   ws._hiveNamespace=namespace;
   const since = Math.floor(Date.now()/1000) - 300;
   ws.send(JSON.stringify(['REQ', subId, { kinds:[1], '#t':[namespace], since }]));
-  console.log('[PuduBot] Suscrito a', namespace);
+  console.log('[PuduBot] Suscrito a namespace:', namespace, 'subId:', subId);
+  // Always also subscribe to p2p-hive-public for broad compatibility
   if(namespace!=='p2p-hive-public'&&!ws._hivePubSubId2){
     const pubSubId=`hive-pub2-${Math.random().toString(36).slice(2,7)}`;
     ws._hivePubSubId2=pubSubId;
     ws.send(JSON.stringify(['REQ',pubSubId,{kinds:[1],'#t':['p2p-hive-public'],since}]));
-    console.log('[PuduBot] También suscrito a p2p-hive-public');
+    console.log('[PuduBot] También suscrito a p2p-hive-public subId:', pubSubId);
   }
 }
 window.hiveSubscribeSocket = hiveSubscribeSocket;
@@ -3718,10 +3725,13 @@ function hiveStartListening() {
 function hivePublish(content) {
   if (!nostrMod || !privKeyBytes) { console.error('[PuduBot] nostrMod o privKeyBytes no listo. nostrMod:', !!nostrMod, 'privKeyBytes:', !!privKeyBytes); return 0; }
   const namespace=getCurrentHiveNamespace();
+  // Tag both the specific room namespace AND p2p-hive-public for maximum compatibility
+  const tags = [['t', namespace]];
+  if (namespace !== 'p2p-hive-public') tags.push(['t', 'p2p-hive-public']);
   const event = nostrMod.finalizeEvent({
     kind: 1,
     created_at: Math.floor(Date.now()/1000),
-    tags: [['t', namespace]],
+    tags,
     content: JSON.stringify(content)
   }, privKeyBytes);
   const raw = JSON.stringify(['EVENT', event]);
@@ -3729,7 +3739,7 @@ function hivePublish(content) {
   for (const ws of Object.values(nostrSockets)) {
     if (ws?.readyState === 1) { ws.send(raw); sent++; }
   }
-  console.log(`[PuduBot] Publicado en ${sent} relays hacia ${namespace}`);
+  console.log(`[PuduBot] Publicado en ${sent} relays → tags:`, tags.map(t=>t[1]).join(', '));
   return sent;
 }
 function hivePublishPresence() {
@@ -3812,34 +3822,35 @@ function _hiveProcessEvent(ev) {
   let c;
   try { c = JSON.parse(ev.content); } catch(e) { return; }
 
-  // Check if this is a hive-relevant event by content type (not just tags)
-  // This catches events from both the tag subscription AND direct parsing
-  
-  // Presencia de un nodo de la colmena
+  // Presencia de un nodo de la colmena — accept ALL presences, not just engine-capable
   if (c.type === 'presence' && c.peerId) {
     const workerHasEngine = !!c.hasEngine || !!c.webgpu || c.deviceTier === 'S' || c.deviceTier === 'A' || c.deviceTier === 'B';
     hiveWorkers.set(c.peerId, {
       peerId: c.peerId, hasEngine: workerHasEngine,
       tps: c.tps || 0, lastSeen: Date.now()
     });
-    // Also set the legacy colmenaPeerId for the old sendPudubotRequest path
     if (workerHasEngine) colmenaPeerId = c.peerId || colmenaPeerId;
-    // Actualizar UI inmediatamente al detectar workers
-    HiveCounter.setHiveWorkers(hiveWorkers.size);
-    console.log(`[HIVE] ✅ Worker detectado: ${c.peerId?.slice(0,8)} hasEngine=${workerHasEngine} tps=${c.tps} total=${hiveWorkers.size}`);
+    if (_hiveCounterRef?.setHiveWorkers) _hiveCounterRef.setHiveWorkers(hiveWorkers.size);
+    console.log(`[HIVE] _hiveProcessEvent presencia: ${c.peerId?.slice(0,8)} tier=${c.deviceTier} hasEngine=${workerHasEngine} total=${hiveWorkers.size}`);
     return;
   }
 
-  // Respuesta de la colmena dirigida a nosotros
-  if (c.type === 'signal' && peerId && (c.to === peerId || c.to === pubKeyHex)) {
-    const sig = c.signal;
-    if (sig?.type === 'moe_fallback_res') {
-      console.log(`[HIVE] ✅ Respuesta recibida reqId=${sig.reqId}`);
-      const pending = pudubotPending.get(sig.reqId);
-      if (pending) {
-        clearTimeout(pending.timer);
-        pudubotPending.delete(sig.reqId);
-        pending.resolve(sig.payload);
+  // Respuesta de la colmena dirigida a nosotros — check all possible ID formats
+  if (c.type === 'signal') {
+    const myIds = [peerId, pubKeyHex, pubKeyHex ? pubKeyHex.slice(0,12) : null].filter(Boolean);
+    const isForMe = myIds.some(id => c.to === id);
+    if (isForMe) {
+      const sig = c.signal;
+      if (sig?.type === 'moe_fallback_res') {
+        console.log(`[HIVE] ✅ _hiveProcessEvent respuesta reqId=${sig.reqId} to=${c.to} payload:`, JSON.stringify(sig.payload||{}).slice(0,80));
+        const pending = pudubotPending.get(sig.reqId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pudubotPending.delete(sig.reqId);
+          pending.resolve(sig.payload);
+        } else {
+          console.warn('[HIVE] No había pending para reqId='+sig.reqId, 'pending.size='+pudubotPending.size, 'peerId='+peerId);
+        }
       }
     }
   }
@@ -3942,15 +3953,158 @@ function _puduUpdateThinkMsg(roomId, thinkId, text) {
   if (entry) entry.text = text;
 }
 
+// ══════════════════════════════════════════════════════════════
+// PUDU SPEAKS — Dramatic 3D text animation from mouth
+// When pudu has a response: it approaches screen, opens mouth,
+// and letters explode out in 3D animated sequence
+// ══════════════════════════════════════════════════════════════
+let _puduSpeakActive = false;
+let _puduSpeakTO = null;
+
+function _puduSpeakAnimation(text) {
+  // Remove existing speak overlay if any
+  const existingOverlay = document.getElementById('pudu-speak-overlay');
+  if (existingOverlay) existingOverlay.remove();
+
+  // Create the overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'pudu-speak-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:600;pointer-events:none;
+    display:flex;align-items:center;justify-content:center;
+    flex-direction:column;
+  `;
+
+  // Vignette / darkening
+  const vignette = document.createElement('div');
+  vignette.style.cssText = `
+    position:absolute;inset:0;
+    background:radial-gradient(ellipse at center, transparent 25%, rgba(2,4,14,0.88) 100%);
+    animation:puduVigIn 0.6s ease-out forwards;
+  `;
+  overlay.appendChild(vignette);
+
+  // Container for the text letters
+  const textContainer = document.createElement('div');
+  textContainer.style.cssText = `
+    position:relative;z-index:2;
+    text-align:center;
+    max-width:85vw;
+    padding:0 20px;
+    transform:translateY(10vh);
+  `;
+
+  // Split text into individual characters for animation
+  const words = text.slice(0, 220);
+  const chars = words.split('');
+  
+  // Render chars with staggered 3D animation
+  chars.forEach((ch, i) => {
+    const span = document.createElement('span');
+    span.textContent = ch === ' ' ? '\u00A0' : ch;
+    const delay = (i * 28) + 200;
+    const hue = (i * 15) % 360;
+    span.style.cssText = `
+      display:inline-block;
+      font-family:'Fredoka One',cursive;
+      font-size:clamp(18px,3.5vw,32px);
+      font-weight:900;
+      letter-spacing:1.5px;
+      color:hsl(${hue},100%,75%);
+      text-shadow:0 0 12px hsl(${hue},100%,60%), 0 0 28px hsl(${hue+30},90%,50%), 2px 2px 0 rgba(0,0,0,0.8);
+      opacity:0;
+      transform:translateY(60px) translateZ(-200px) rotateX(-45deg) scale(0.2);
+      animation:letterPop 0.55s cubic-bezier(0.175,0.885,0.32,1.275) ${delay}ms forwards;
+      will-change:transform,opacity;
+    `;
+    textContainer.appendChild(span);
+  });
+
+  overlay.appendChild(textContainer);
+
+  // "PuduBot speaks" label
+  const label = document.createElement('div');
+  label.style.cssText = `
+    position:relative;z-index:2;
+    margin-top:22px;
+    font-family:'Fredoka One',cursive;
+    font-size:13px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+    color:rgba(0,229,255,0.7);
+    text-shadow:0 0 10px rgba(0,229,255,0.5);
+    animation:puduLabelIn 0.5s ease-out 0.3s both;
+  `;
+  label.textContent = '🦌 EL PUDÚ HABLA 🌿';
+  overlay.appendChild(label);
+
+  // Tap to dismiss hint
+  const hint = document.createElement('div');
+  hint.style.cssText = `
+    position:absolute;bottom:30px;left:50%;transform:translateX(-50%);
+    font-family:'Nunito',sans-serif;font-size:11px;
+    color:rgba(255,255,255,0.3);letter-spacing:2px;
+    animation:puduLabelIn 0.5s ease-out 1.5s both;
+  `;
+  hint.textContent = 'toca para cerrar';
+  overlay.appendChild(hint);
+
+  // Add keyframes if not already added
+  if (!document.getElementById('pudu-speak-styles')) {
+    const style = document.createElement('style');
+    style.id = 'pudu-speak-styles';
+    style.textContent = `
+      @keyframes letterPop {
+        0%   { opacity:0; transform:translateY(60px) translateZ(-80px) rotateX(-45deg) scale(0.2); }
+        60%  { opacity:1; transform:translateY(-8px) translateZ(40px) rotateX(8deg) scale(1.15); }
+        80%  { transform:translateY(3px) translateZ(10px) rotateX(-3deg) scale(0.97); }
+        100% { opacity:1; transform:translateY(0) translateZ(0) rotateX(0) scale(1); }
+      }
+      @keyframes puduVigIn {
+        from { opacity:0; } to { opacity:1; }
+      }
+      @keyframes puduLabelIn {
+        from { opacity:0; transform:translateY(20px); }
+        to   { opacity:1; transform:translateY(0); }
+      }
+      @keyframes puduSpeakOut {
+        from { opacity:1; transform:scale(1); }
+        to   { opacity:0; transform:scale(1.08); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.body.appendChild(overlay);
+  _puduSpeakActive = true;
+
+  // Auto-dismiss: 1.2s per word + 2.5s base + time for chars to appear
+  const readTime = Math.max(3500, chars.length * 40 + 2000);
+  clearTimeout(_puduSpeakTO);
+  _puduSpeakTO = setTimeout(() => _puduDismissSpeak(overlay), readTime);
+
+  // Click/tap to dismiss
+  overlay.style.pointerEvents = 'auto';
+  overlay.addEventListener('click', () => _puduDismissSpeak(overlay), { once: true });
+}
+
+function _puduDismissSpeak(overlay) {
+  if (!overlay || !overlay.parentNode) return;
+  overlay.style.animation = 'puduSpeakOut 0.5s ease-in forwards';
+  setTimeout(() => { if (overlay.parentNode) overlay.remove(); _puduSpeakActive = false; }, 500);
+  clearTimeout(_puduSpeakTO);
+}
+
 // Show the pudú 3D cinematic with the response text coming from its mouth
 function _puduShowResponseCinematic(responseText) {
   try {
-    // Trigger the 3D pudú overlay with text
-    add3DText(responseText, false);
+    console.log('[PuduBot] Mostrando cinematica respuesta:', responseText?.slice(0,40));
+    // Trigger dramatic 3D text-from-mouth animation
+    _puduSpeakAnimation(responseText);
     playMsgReceive();
-    // Show a quick pudú cinematic if not already showing
+    // Also trigger the pudú 3D appearance if not in lite mode
     if (!puduBusy && chatEntered && !liteMode) {
-      puduBusy = false; // reset so cinematic can trigger
+      puduBusy = false;
       clearTimeout(puduSchedulerTO);
       showPuduCinematic();
     }
