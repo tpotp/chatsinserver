@@ -119,11 +119,9 @@ async function run() {
 
     const results = [];
     for (const scale of SCALES) {
-      console.log(`RUN scale=${scale}`);
       const commandStart = Date.now();
-      await hostPage.evaluate(async (nextScale) => {
-        await window.__PUDU_DEBUG__.startColmenaChile(nextScale);
-      }, scale);
+      await hostPage.fill('#chat-input', `/colmena ${scale}`);
+      await hostPage.click('#send-btn');
       await waitForCollectiveReady(hostPage, scale, scale >= 300 ? 900000 : 600000);
       await hostPage.waitForTimeout(2500);
       const host = await collectHostSnapshot(hostPage);
