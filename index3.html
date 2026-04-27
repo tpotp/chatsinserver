@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<title>rerer221111PudúChat — Bosque Mágico</title>
+<title>eererer221111PudúChat — Bosque Mágico</title>
 
 <style>
 /* ── PUDÚ 3D OVERLAY ── */
@@ -983,12 +983,7 @@ async function sendPudubotRequest(prompt) {
          }
          return;
        }
-       try{
-         const sp='Eres el Pudú del bosque chileno. Responde en español chileno con ternura y máximo 3 oraciones.';
-         const res=await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?system=${encodeURIComponent(sp)}`);
-         if(res.ok){const t=await res.text();if(t&&t.trim()){const mid=uid();addMsgToVS(currentRoomId,mid,'PuduBot ☁️🦌',t.trim(),false,Date.now());try{add3DText(t,false);}catch(e){}try{playMsgReceive();}catch(e){}}
-         }else addSystemMsgVS(currentRoomId,'❌ Sin colmena ni nube disponible 🌿');
-       }catch(ce){addSystemMsgVS(currentRoomId,'❌ Error nube: '+ce.message);}
+       addSystemMsgVS(currentRoomId,'🦌 Sin colmena activa. Abre el host con ?simulate=5 🌿');
        return;
    }
    
@@ -1261,17 +1256,9 @@ window._invokePuduBot=async function(roomId,question,askerName){
       }
     }
     if(!responseText){
-      updatePuduThinkShim(roomId,thinkId,'☁️ *Consultando la nube del bosque...*');
-      try{
-        const sp2='Eres el Pudú del bosque chileno. Responde en español chileno con ternura y máximo 3 oraciones.';
-        const res=await fetch(`https://text.pollinations.ai/${encodeURIComponent(`${askerName||'alguien'} pregunta: ${question}`)}?system=${encodeURIComponent(sp2)}`);
-        if(res.ok){const t=await res.text();if(t&&t.trim())responseText=t.trim();}
-      }catch(ce){console.warn('[PuduBot] cloud fallback error:',ce.message);}
-    }
-    if(!responseText){
       const wc=hiveWorkers.size;
       responseText=wc===0
-        ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app?simulate=10 en tu computador para despertar la colmena* 🌿'
+        ? '🦌 *El bosque está dormido... necesito la colmena activa para pensar* 🌿'
         : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
     }
     updatePuduThinkShim(roomId,thinkId,responseText);
@@ -1282,16 +1269,13 @@ window._invokePuduBot=async function(roomId,question,askerName){
         puduBusy=false;clearTimeout(puduSchedulerTO);
         // Resetear angry por si acaso
         if(typeof puduBrain!=='undefined'){puduBrain.angryUntil=0;puduBrain.angerLevel=0;puduBrain._saveMemory();}
-        // Mostrar cinematic y luego texto 3D desde la boca
         const _resp=responseText;
-        showPuduCinematic(true).catch(()=>{}).finally(()=>{});
-        // Lanzar texto 3D 1.5s después (cuando el pudú ya está en pantalla)
-        setTimeout(()=>{
-          try{
-            if(typeof puduSpeakText3D==='function') puduSpeakText3D(_resp);
-            else add3DText(_resp,false);
-          }catch(e){add3DText(_resp,false);}
-        },1500);
+        (async()=>{
+          await showPuduCinematic(true);
+          await new Promise(r=>setTimeout(r,400));
+          try{if(typeof puduSpeakText3D==='function')puduSpeakText3D(_resp);else add3DText(_resp,false);}
+          catch(e){add3DText(_resp,false);}
+        })().catch(()=>add3DText(responseText,false));
       } else {
         add3DText(responseText,false);
       }
@@ -2122,17 +2106,19 @@ function updateEyes(t){
   // Pupil follows cursor/target
   const tx=brain.eyeTargetX*0.035,ty=brain.eyeTargetY*0.035;
   // Smooth follow
-  puduParts.irisL.position.x+=((-0.17+tx)-puduParts.irisL.position.x)*0.12;
-  puduParts.irisL.position.y+=((0.12+ty)-puduParts.irisL.position.y)*0.12;
-  puduParts.irisR.position.x+=((0.17+tx)-puduParts.irisR.position.x)*0.12;
-  puduParts.irisR.position.y+=((0.12+ty)-puduParts.irisR.position.y)*0.12;
-  puduParts.pupilL.position.x+=((-0.17+tx*1.1)-puduParts.pupilL.position.x)*0.12;
-  puduParts.pupilL.position.y+=((0.12+ty*1.1)-puduParts.pupilL.position.y)*0.12;
-  puduParts.pupilR.position.x+=((0.17+tx*1.1)-puduParts.pupilR.position.x)*0.12;
-  puduParts.pupilR.position.y+=((0.12+ty*1.1)-puduParts.pupilR.position.y)*0.12;
+  // iris/pupil son locales al eyeGroup — solo mover con offset relativo al centro (0,0)
+  puduParts.irisL.position.x+=(tx-puduParts.irisL.position.x)*0.12;
+  puduParts.irisL.position.y+=(ty-puduParts.irisL.position.y)*0.12;
+  puduParts.irisR.position.x+=(tx-puduParts.irisR.position.x)*0.12;
+  puduParts.irisR.position.y+=(ty-puduParts.irisR.position.y)*0.12;
+  puduParts.pupilL.position.x+=(tx*1.1-puduParts.pupilL.position.x)*0.12;
+  puduParts.pupilL.position.y+=(ty*1.1-puduParts.pupilL.position.y)*0.12;
+  puduParts.pupilR.position.x+=(tx*1.1-puduParts.pupilR.position.x)*0.12;
+  puduParts.pupilR.position.y+=(ty*1.1-puduParts.pupilR.position.y)*0.12;
   // Glint follows opposite
-  puduParts.glintL.position.x+=((-0.15+tx*0.5)-puduParts.glintL.position.x)*0.08;
-  puduParts.glintR.position.x+=((0.19+tx*0.5)-puduParts.glintR.position.x)*0.08;
+  // glints son locales al eyeGroup
+  puduParts.glintL.position.x+=((tx*0.5)-puduParts.glintL.position.x)*0.08;
+  puduParts.glintR.position.x+=((tx*0.5)-puduParts.glintR.position.x)*0.08;
 
   // Blink (eyelids)
   const bs=brain.getBlinkScale();
@@ -2769,13 +2755,20 @@ async function showPuduCinematic(force=false){
 
     if(!pudu3dLoaded){
       console.log('[PUDU] About to call initPudu3D...');
-      await initPudu3D();
+      if(!pudu3dLoading) await initPudu3D();
+      let t=0;while(!pudu3dLoaded&&t<80){await new Promise(r=>setTimeout(r,150));t++;}
       console.log('[PUDU] initPudu3D call returned. loaded='+pudu3dLoaded);
-      let t=0;while(!pudu3dLoaded&&t<60){await new Promise(r=>setTimeout(r,150));t++;}
       if(!pudu3dLoaded){ console.log('[PUDU] Timeout waiting for pudu3dLoaded inside showPuduCinematic'); return; }
     }
   } catch(e) {
     console.error('[PUDU_ERROR] ERROR in showPuduCinematic:', e.message, e.stack);
+  }
+  // Si el try/catch atrapó algo y el modelo no cargó, intentar una vez más
+  if(!pudu3dModel||!pudu3dLoaded){
+    console.log('[PUDU] Model missing after try block — forcing procedural build');
+    pudu3dLoading=false;pudu3dLoaded=false;
+    await initPudu3D();
+    if(!pudu3dModel){puduBusy=false;return;}
   }
   puduBusy=true;
   puduBrain.visitCount++;puduBrain._saveMemory();
