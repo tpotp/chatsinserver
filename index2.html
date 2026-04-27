@@ -682,6 +682,12 @@ const pudubotPending = new Map(); // reqId → {resolve, reject, timer}
 let peerId = null;                // our peerId = pubKeyHex.slice(0,12)
 let _hiveCounterRef = null;       // set once HiveCounter IIFE runs
 
+// EXPOSE EARLY to prevent module errors from breaking access
+window._hiveRegisterWorker = _hiveRegisterWorker;
+window._invokePuduBot = _invokePuduBot;
+window._hiveWorkers = hiveWorkers;
+window._hiveBestWorker = hiveBestWorker;
+
 // Bridge function: called from handleNostrEvent to register workers
 // This is always available because it's at the top of the module.
 function _hiveRegisterWorker(workerId, hasEngine, tps) {
@@ -3726,10 +3732,6 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
     _puduIsThinking = false;
   }
 }
-// Expose on window for debugging and cross-scope access
-window._invokePuduBot = _invokePuduBot;
-window._hiveWorkers = hiveWorkers;
-window._hiveBestWorker = hiveBestWorker;
 
 // Handle pudubot_resp P2P messages — hook into handleP2PMessage
 const _origHandleP2P = handleP2PMessage;
