@@ -983,7 +983,25 @@ async function sendPudubotRequest(prompt) {
          }
          return;
        }
-       addSystemMsgVS(currentRoomId, '❌ Colmena AI no encontrada. Abre chatsinserver.vercel.app?simulate=10 en tu PC para activarla 🌿');
+       // Cloud fallback via pollinations.ai
+       addSystemMsgVS(currentRoomId, '☁️ Sin colmena local · consultando la nube del bosque...');
+       try {
+         const sysPoll='Eres el Pudú del bosque chileno. Responde en español chileno con ternura y máximo 3 oraciones.';
+         const res=await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?system=${encodeURIComponent(sysPoll)}`);
+         if(res.ok){
+           const txt=await res.text();
+           if(txt&&txt.trim()){
+             const msgId2=uid();
+             addMsgToVS(currentRoomId,msgId2,'PuduBot ☁️🦌',txt.trim(),false,Date.now());
+             try{add3DText(txt,false);}catch(e){}
+             try{playMsgReceive();}catch(e){}
+           }
+         } else {
+           addSystemMsgVS(currentRoomId,'❌ Colmena AI no encontrada. Abre chatsinserver.vercel.app?simulate=10 en tu PC para activarla 🌿');
+         }
+       } catch(cloudErr) {
+         addSystemMsgVS(currentRoomId,'❌ Sin colmena ni nube disponible: '+cloudErr.message);
+       }
        return;
    }
    
@@ -1241,6 +1259,22 @@ window._invokePuduBot=async function(roomId,question,askerName){
         responseText=localRes.choices?.[0]?.message?.content||'...';
       }catch(e){
         responseText='❌ Error al usar cerebros locales: '+e.message;
+      }
+    }
+    if(!responseText){
+      // Cloud fallback: pollinations.ai (igual que index.html)
+      updatePuduThinkShim(roomId,thinkId,'☁️ *Consultando la nube del bosque...*');
+      try{
+        const systemPrompt2='Eres el Pudú del bosque chileno. Responde en español chileno con ternura, naturalidad y máximo 3 oraciones. No rompas el personaje.';
+        const encodedUser=encodeURIComponent(`${askerName||'alguien'} pregunta: ${question}`);
+        const encodedSys=encodeURIComponent(systemPrompt2);
+        const res=await fetch(`https://text.pollinations.ai/${encodedUser}?system=${encodedSys}`);
+        if(res.ok){
+          const txt=await res.text();
+          if(txt&&txt.trim())responseText=txt.trim();
+        }
+      }catch(cloudErr){
+        console.warn('[PuduBot] Cloud fallback error:',cloudErr.message);
       }
     }
     if(!responseText){
