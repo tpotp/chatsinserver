@@ -892,8 +892,15 @@ function createRoom(name){
   return roomId;
 }
 function getCurrentHiveRoomKey(){
-  if(currentRoomId)return currentRoomId;
-  return new URLSearchParams(window.location.search).get('room')||null;
+  const params=new URLSearchParams(window.location.search);
+  const sharedRoom=
+    params.get('colmenaRoom')||
+    params.get('sharedAiRoom')||
+    localStorage.getItem('p2p-hive-last-room')||
+    params.get('room')||
+    currentRoomId||
+    'sala-1';
+  return sharedRoom||'sala-1';
 }
 function getCurrentHiveNamespace(){
   const roomKey=getCurrentHiveRoomKey();
@@ -1002,80 +1009,7 @@ async function sendPudubotRequest(prompt) {
    }
 }
 
-const IDENTITY_KEY='@,
-    1
-)
-
-# 5) _invokePuduBot: solo colmena real, sin fallback local ni nube
-$html = [regex]::Replace(
-    $html,
-    '(?s)async function _invokePuduBot\(roomId, question, askerName\) \{.*?\r?\n\}\r?\nwindow\._invokePuduBot = _invokePuduBot;',
-    @'
-async function _invokePuduBot(roomId, question, askerName) {
-  console.log('[PuduBot] _invokePuduBot llamado. room=' + roomId + ' q=' + question + ' asker=' + askerName);
-  if (_puduIsThinking) {
-    addSystemMsgVS(roomId,'🦌 El Pudú ya está procesando... 🌿');
-    return;
-  }
-  _puduIsThinking = true;
-
-  const count = HiveCounter.getCount();
-  const level = HiveCounter.getLevel(count);
-  const levelIdx = HiveCounter.LEVELS.indexOf(level);
-  const thinkId = uid();
-  const thinkTexts = ['*...consultando el bosque...*','*...el pudú cierra los ojos...*','*...la colmena procesa...*','*...los árboles susurran...*'];
-  addMsgToVS(roomId, thinkId, `PuduBot ${level.emoji}`, thinkTexts[Math.floor(Math.random()*thinkTexts.length)], false, Date.now());
-
-  const systemPrompt = `${PUDU_PERSONALITIES[levelIdx]||PUDU_PERSONALITIES[0]}
-Estado de la red: ${count.toLocaleString('es-CL')} personas. Nivel: "${level.name}".
-Contexto: ${_puduGetRoomContext(roomId)}
-REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. No menciones que eres IA.`;
-
-  try {
-    let worker = hiveBestWorker();
-    console.log('[PuduBot] hiveBestWorker():', worker ? JSON.stringify(worker) : 'NULL', 'hiveWorkers.size:', hiveWorkers.size);
-
-    if (!worker) {
-      _puduUpdateThinkMsg(roomId, thinkId, '🕸 No hay worker real en la colmena.');
-      addSystemMsgVS(roomId, '🕸 La colmena está offline en esta sala.');
-      return;
-    }
-
-    console.log('[PuduBot] Invocando colmena... worker:', worker.peerId?.slice(0,8));
-
-    const result = await hiveRequest([
-      { role:'system', content: systemPrompt },
-      { role:'user', content: `${askerName} pregunta: ${question}` }
-    ], 250);
-
-    console.log('[PuduBot] hiveRequest result:', result ? JSON.stringify(result).slice(0,100) : 'NULL');
-
-    if (!result?.text) {
-      throw new Error('La colmena no devolvió texto.');
-    }
-
-    const responseText = result.text;
-    console.log('[PuduBot] Respuesta OK:', responseText.slice(0,60));
-    _puduShowResponseCinematic(responseText);
-    _puduUpdateThinkMsg(roomId, thinkId, responseText);
-
-    broadcastP2P(roomId, {
-      type:'pudubot_resp',
-      id:uid(),
-      roomId,
-      senderId:'pudubot',
-      ts:Date.now(),
-      hops:0,
-      payload:{ text:responseText, emoji:level.emoji, thinkId, asker:askerName }
-    });
-  } catch(e) {
-    console.error('[PuduBot] Error:', e.message);
-    _puduUpdateThinkMsg(roomId, thinkId, `🦌 *${e.message}* 🍃`);
-  } finally {
-    _puduIsThinking = false;
-  }
-}
-window._invokePuduBot = _invokePuduBot;'pudu-identity-v1';
+const IDENTITY_KEY='pudu-identity-v1';
 async function generateKeypair(){
   nostrMod=await (_nostrPreload||import("https://esm.sh/nostr-tools@2/pure"));
   try{const saved=localStorage.getItem(IDENTITY_KEY);if(saved){const{priv,pub,name}=JSON.parse(saved);privKeyBytes=new Uint8Array(priv);pubKeyHex=pub;if(name&&!myName)myName=name;return;}}catch(e){}
@@ -1533,14 +1467,15 @@ window.sendMessage=function(){
   const rawTxt=txt; // save before filtering for @pudu check
   txt=filtrarGarabatos(txt);const msgId=uid(),room=rooms.get(currentRoomId);if(!room)return;
   
+  const isPuduSummon=/^@pudu(?:bot)?\b/i.test(rawTxt);
   const msg={type:'chat',id:msgId,roomId:currentRoomId,senderId:pubKeyHex,ts:Date.now(),hops:0,payload:{text:txt,name:myName}};
   room.seenMsgIds.add(msgId);const sent=broadcastP2P(currentRoomId,msg);
   addMsgToVS(currentRoomId,msgId,myName,txt,true,Date.now());
   try{add3DText(txt,true);spawnStars(innerWidth-80,innerHeight-80);spawnRipple(innerWidth-80,innerHeight-80);playSendSound();}catch(e){}
-  if(sent===0)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
+  if(sent===0&&!isPuduSummon)addSystemMsgVS(currentRoomId,'⚠️ Sin peers P2P. Intenta nuevamente.');
   inp.value='';inp.style.height='auto';
   // @pudu trigger — invoke PuduBot if message starts with @pudu
-  if(/^@pudu(?:bot)?\b/i.test(rawTxt)){
+  if(isPuduSummon){
     console.log('[PuduBot] @pudu detectado en sendMessage! rawTxt:', rawTxt);
     const q=rawTxt.replace(/^@pudu(?:bot)?\s*/i,'').trim()||'¿quién eres?';
     const _room=currentRoomId, _name=myName||'alguien';
@@ -3539,7 +3474,7 @@ if(originalSendBtn){originalSendBtn.addEventListener('touchstart',()=>{unlockAud
 //  4. La colmena de tu PC recibe, procesa con SmolLM2/Llama, responde moe_fallback_res
 //  5. El chat muestra la respuesta como PuduBot
 //
-//  INSTALACIÓN: pegar este script justo antes del </script> final del HTML
+//  INSTALACIÓN: pegar este script justo antes del cierre final del script HTML
 // ══════════════════════════════════════════════════════════════════════
 
 // ── CIRCUIT RELAY v2 ─────────────────────────────────────────────────
@@ -3762,7 +3697,7 @@ function hiveBestWorker() {
 window._hiveBestWorker = hiveBestWorker;
 
 // ── Enviar request a la colmena y esperar respuesta ───────────────
-function hiveRequest(messages, maxTokens = 250) {
+function hiveRequest(messages, maxTokens = 250, options = {}) {
   const worker = hiveBestWorker();
   if (!worker) return Promise.reject(new Error('Sin workers en la colmena'));
 
@@ -3778,12 +3713,20 @@ function hiveRequest(messages, maxTokens = 250) {
     pudubotPending.set(reqId, { resolve, reject, timer });
 
     // Publicar exactamente igual que index.html
+    const signal = {
+      type: 'moe_fallback_req',
+      reqId,
+      max_tokens: maxTokens,
+      intent: options.intent || 'general',
+      targetRole: options.targetRole || 'master_reasoner',
+      messages
+    };
+    if (options.petalsHive) signal.petalsHive = true;
     hivePublish({
       type: 'signal',
       from: peerId,          // peerId = pubKeyHex.slice(0,12) — igual que index.html
       to: worker.peerId,     // peerId de la colmena
-      signal: { type: 'moe_fallback_req', reqId, max_tokens: maxTokens,
-                intent: 'general', targetRole: 'master_reasoner', messages },
+      signal,
       timestamp: Date.now()
     });
   });
@@ -3953,6 +3896,40 @@ function _puduUpdateThinkMsg(roomId, thinkId, text) {
   if (entry) entry.text = text;
 }
 
+function normalizePuduQuestion(text='') {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function buildPuduKnowledgeFallback(question='') {
+  const q = normalizePuduQuestion(question);
+  const asksDiet = /\b(que comen|comen|alimentacion|alimentan|dieta)\b/.test(q);
+  const asksHabitat = /\b(habitat|habitat|donde viven|donde habitan|viven|habitan)\b/.test(q);
+  if (asksDiet && asksHabitat) {
+    return 'Peñi, los pudúes comen hojas tiernas, brotes, frutos, flores, helechos y ramitas suaves. Viven sobre todo en bosques templados lluviosos y matorrales densos del sur de Chile y Argentina, con mucho sotobosque húmedo donde puedan esconderse tranquilos.';
+  }
+  if (asksDiet) {
+    return 'Peñi, los pudúes son herbívoros y comen sobre todo hojas tiernas, brotes, frutos, flores, helechos y ramitas suaves del sotobosque.';
+  }
+  if (asksHabitat) {
+    return 'Peñi, los pudúes viven principalmente en bosques templados lluviosos y matorrales densos del sur de Chile y Argentina, siempre cerca de vegetación baja y húmeda donde puedan ocultarse.';
+  }
+  return null;
+}
+
+function shouldRescuePuduReply(question='', responseText='') {
+  const q = normalizePuduQuestion(question);
+  const r = normalizePuduQuestion(responseText);
+  if (!r) return true;
+  if (/la colmena .*responde|sigue creciendo|bosque esta dormido|modelo .* no .* listo|guardo silencio|reuniendo su respuesta|no se loen|no se loprimen|no se lo alimentan/.test(r)) return true;
+  if (/\b(que comen|comen|alimentacion|alimentan|dieta)\b/.test(q) && !/\b(hojas|brotes|frutos|flores|helechos|ramitas|herbivor)\b/.test(r)) return true;
+  if (/\b(habitat|donde viven|habitan|viven)\b/.test(q) && !/\b(bosque|matorral|sur de chile|argentina|sotobosque|templad|lluvios)\b/.test(r)) return true;
+  return false;
+}
+
 // Show the pudú 3D cinematic with the response text coming from its mouth
 function _puduShowResponseCinematic(responseText) {
   try {
@@ -3995,7 +3972,7 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
         const result = await hiveRequest([
           { role:'system', content: systemPrompt },
           { role:'user',   content: `${askerName} pregunta: ${question}` }
-        ], 250);
+        ], 250, { petalsHive: true, intent: 'pudu_hive', targetRole: 'pudu_hive' });
         console.log('[PuduBot] hiveRequest result:', result ? JSON.stringify(result).slice(0,100) : 'NULL');
         if (result?.text) {
           responseText = result.text;
@@ -4027,6 +4004,12 @@ REGLAS: Español chileno natural. Máximo 3 oraciones. No rompas el personaje. N
            ? '🦌 *El bosque está dormido... abre chatsinserver.vercel.app?simulate=10 en tu computador para despertar la colmena* 🌿'
            : `🦌 *La colmena tiene ${wc} nodo(s) pero el modelo aún no está listo. Espera un momento* 🌿`;
       }
+    }
+
+    const rescuedReply = shouldRescuePuduReply(question, responseText) ? buildPuduKnowledgeFallback(question) : null;
+    if (rescuedReply) {
+      console.log('[PuduBot] Reemplazando respuesta débil por fallback semántico.');
+      responseText = rescuedReply;
     }
 
     _puduUpdateThinkMsg(roomId, thinkId, responseText);
