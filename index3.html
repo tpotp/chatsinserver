@@ -901,8 +901,8 @@ function createRoom(name){
   return roomId;
 }
 function getCurrentHiveRoomKey(){
-  if(currentRoomId)return currentRoomId;
-  return new URLSearchParams(window.location.search).get('room')||null;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('colmenaRoom') || params.get('sharedAiRoom') || 'sala-1';
 }
 function getCurrentHiveNamespace(){
   const roomKey=getCurrentHiveRoomKey();
@@ -3987,109 +3987,52 @@ function readEmbeddedAssistantText(contentEl) {
 async function requestEmbeddedColmenaReply(roomId, question, onStream) {
   const roomKey = getEmbeddedColmenaRoomKey(roomId);
   const frame = await requestEmbeddedColmenaRoomSync('reply');
-  const doc = frame?.contentDocument;
   const win = frame?.contentWindow;
-  const messages = doc?.getElementById('messages');
-  const input = doc?.getElementById('chat-input');
-  const sendBtn = doc?.getElementById('send-btn');
-  if (!messages || !input || !sendBtn || !win) {
-    throw new Error('La colmena compartida no dejó listo su chat interno.');
+  const hostApi = win?.__PUDU_DEBUG__;
+  if (!hostApi || typeof hostApi.invokePuduSummon !== 'function') {
+    throw new Error('La colmena compartida no dejó listo su motor de voz.');
   }
 
-  const baselineTotal = messages.querySelectorAll('.message').length;
-  const baselineAssistants = messages.querySelectorAll('.message.assistant-msg').length;
+  postEmbeddedColmenaControl(frame, roomKey, 'pudu-host-refresh');
+  postEmbeddedColmenaControl(frame, roomKey, 'pudu-host-warm');
 
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let lastText = '';
-    let settleTimer = null;
-    let hardTimeout = null;
-    let rootObserver = null;
-    let assistantObserver = null;
+  let progressTimer = null;
+  let lastProgress = '';
+  const pushProgress = () => {
+    if (typeof onStream !== 'function') return;
+    let nextText = '';
+    try {
+      nextText = (
+        win.document?.getElementById('pudu3d-caption')?.textContent ||
+        embeddedColmenaState.status?.progressText ||
+        embeddedColmenaState.status?.stageLabel ||
+        ''
+      ).trim();
+    } catch (error) {
+      nextText = embeddedColmenaState.status?.progressText || '';
+    }
+    if (nextText && nextText !== lastProgress) {
+      lastProgress = nextText;
+      onStream(nextText);
+    }
+  };
 
-    const cleanup = () => {
-      if (rootObserver) rootObserver.disconnect();
-      if (assistantObserver) assistantObserver.disconnect();
-      clearTimeout(settleTimer);
-      clearTimeout(hardTimeout);
-    };
-
-    const finish = (error = null) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (error) {
-        reject(error);
-        return;
-      }
-      if (!lastText.trim()) {
-        reject(new Error('La colmena no devolvió texto.'));
-        return;
-      }
-      resolve(lastText.trim());
-    };
-
-    const scheduleSettle = () => {
-      clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => finish(), 1800);
-    };
-
-    const syncAssistant = (assistantEl) => {
-      if (!assistantEl) return;
-      const contentEl = assistantEl.querySelector('.msg-content');
-      const nextText = readEmbeddedAssistantText(contentEl);
-      if (nextText && nextText !== lastText) {
-        lastText = nextText;
-        if (typeof onStream === 'function') onStream(nextText);
-      }
-      if (!assistantEl.querySelector('.typing-indicator') && lastText.trim()) {
-        scheduleSettle();
-      }
-    };
-
-    const watchAssistant = () => {
-      const assistants = [...messages.querySelectorAll('.message.assistant-msg')];
-      if (assistants.length <= baselineAssistants) return;
-      const assistantEl = assistants[assistants.length - 1];
-      if (assistantObserver) assistantObserver.disconnect();
-      assistantObserver = new MutationObserver(() => syncAssistant(assistantEl));
-      assistantObserver.observe(assistantEl, { childList: true, subtree: true, characterData: true });
-      syncAssistant(assistantEl);
-    };
-
-    rootObserver = new MutationObserver(() => {
-      watchAssistant();
-      const assistants = [...messages.querySelectorAll('.message.assistant-msg')];
-      if (assistants.length > baselineAssistants) {
-        syncAssistant(assistants[assistants.length - 1]);
-      }
-    });
-    rootObserver.observe(messages, { childList: true, subtree: true, characterData: true });
-
-    hardTimeout = setTimeout(() => {
-      if (lastText.trim()) {
-        finish();
-      } else {
-        finish(new Error('La colmena no respondió a tiempo.'));
-      }
-    }, 120000);
-
-    const dispatchSend = () => {
-      input.value = `@pudu ${question}`;
-      input.dispatchEvent(new win.Event('input', { bubbles: true }));
-      sendBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
-      setTimeout(() => {
-        const totalAfterClick = messages.querySelectorAll('.message').length;
-        if (totalAfterClick <= baselineTotal) {
-          input.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        }
-      }, 260);
-    };
-
-    dispatchSend();
-    setTimeout(watchAssistant, 120);
-    postEmbeddedColmenaControl(frame, roomKey, 'pudu-host-refresh');
-  });
+  try {
+    if (typeof onStream === 'function') {
+      pushProgress();
+      progressTimer = setInterval(pushProgress, 350);
+    }
+    const result = await hostApi.invokePuduSummon(question);
+    pushProgress();
+    const responseText = String(result?.text || '').trim();
+    if (!responseText) throw new Error('La colmena no devolvió texto.');
+    if (result?.blocked || /reuniendo su respuesta|reuniendo su voz|voy de a una|dame un instante/i.test(responseText)) {
+      throw new Error(responseText);
+    }
+    return responseText;
+  } finally {
+    clearInterval(progressTimer);
+  }
 }
 window.requestEmbeddedColmenaReply = requestEmbeddedColmenaReply;
 
@@ -4114,7 +4057,7 @@ async function invokeSharedPuduBot(roomId, question, askerName) {
   _puduIsThinking = true;
 
   const thinkId = uid();
-  const stageLabel = embeddedColmenaState.status?.stageLabel || 'PuduBot 🦌';
+  const stageLabel = embeddedColmenaState.status?.stageLabel || 'Pudu del Bosque';
   addMsgToVS(roomId, thinkId, stageLabel, '*...consultando la colmena...*', false, Date.now());
 
   try {
@@ -4201,7 +4144,7 @@ async function initPuduBotModule() {
   window.requestEmbeddedColmenaRoomSync?.('boot').catch(err => {
     console.warn('[ColmenaBridge] boot sync deferred:', err.message);
   });
-  console.log('🦌 PuduBot v5 — index.html embebido como motor de colmena');
+  console.log(`🦌 PuduBot v7 — index.html embebido via invokePuduSummon en ${getEmbeddedColmenaRoomKey()}`);
 }
 
 if (document.readyState === 'loading') {
