@@ -3984,6 +3984,25 @@ function readEmbeddedAssistantText(contentEl) {
   return raw.replace(/\u00a0/g, ' ').trim();
 }
 
+function toVisiblePuduHandle(name = '') {
+  return String(name || 'pudu')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'pudu';
+}
+
+function retargetPuduReply(text, askerName = '') {
+  const clean = String(text || '').trim();
+  if (!clean) return clean;
+  const handle = toVisiblePuduHandle(askerName);
+  if (/^respuesta a @/i.test(clean)) {
+    return clean.replace(/^respuesta a @[^:]+:/i, `Respuesta a @${handle}:`);
+  }
+  return `Respuesta a @${handle}: ${clean}`;
+}
+
 async function requestEmbeddedColmenaReply(roomId, question, onStream) {
   const roomKey = getEmbeddedColmenaRoomKey(roomId);
   const frame = await requestEmbeddedColmenaRoomSync('reply');
@@ -4061,9 +4080,10 @@ async function invokeSharedPuduBot(roomId, question, askerName) {
   addMsgToVS(roomId, thinkId, stageLabel, '*...consultando la colmena...*', false, Date.now());
 
   try {
-    const responseText = await window.requestEmbeddedColmenaReply(roomId, question, (partialText) => {
+    const rawResponseText = await window.requestEmbeddedColmenaReply(roomId, question, (partialText) => {
       _puduUpdateThinkMsg(roomId, thinkId, partialText);
     });
+    const responseText = retargetPuduReply(rawResponseText, askerName);
     _puduUpdateThinkMsg(roomId, thinkId, responseText);
     _puduShowResponseCinematic(responseText);
     broadcastP2P(roomId, { type:'pudubot_resp', id:uid(), roomId,
