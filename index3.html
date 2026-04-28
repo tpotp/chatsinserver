@@ -902,7 +902,7 @@ function createRoom(name){
 }
 function getCurrentHiveRoomKey(){
   const params = new URLSearchParams(window.location.search);
-  return params.get('colmenaRoom') || params.get('sharedAiRoom') || 'sala-1';
+  return params.get('colmenaRoom') || params.get('sharedAiRoom') || localStorage.getItem('p2p-hive-last-room') || 'sala-1';
 }
 function getCurrentHiveNamespace(){
   const roomKey=getCurrentHiveRoomKey();
@@ -3849,7 +3849,7 @@ function getEmbeddedColmenaFrame() {
 
 function getEmbeddedColmenaRoomKey(roomId = currentRoomId) {
   const params = new URLSearchParams(window.location.search);
-  return params.get('colmenaRoom') || params.get('sharedAiRoom') || 'sala-1';
+  return params.get('colmenaRoom') || params.get('sharedAiRoom') || localStorage.getItem('p2p-hive-last-room') || 'sala-1';
 }
 
 function buildEmbeddedColmenaUrl(roomKey) {
@@ -3866,18 +3866,20 @@ function applyEmbeddedColmenaStatus(status) {
   if (!bar || !status) return;
 
   const ready = !!status.ready;
-  const memberCount = Math.max(1, Number(status.memberCount) || 1);
+  const memberCount = Math.max(1, Number(status.peerCount) || Number(status.memberCount) || 1);
+  const workerCount = Math.max(0, Number(status.workerCount) || 0);
   const coverageCount = Math.max(0, Number(status.coverageCount) || 0);
   const coverageTotal = Math.max(coverageCount || 1, Number(status.coverageTotal) || 1);
-  const progress = Math.max(ready ? 18 : 6, Math.min(100, Math.round((coverageCount / coverageTotal) * 100) || 0));
-  const statusText = status.progressText || (ready ? 'colmena activa' : 'conectando colmena');
+  const progress = Math.max(ready ? 100 : 6, Math.min(100, Number(status.progressPct) || Math.round((coverageCount / coverageTotal) * 100) || 0));
+  const title = status.statusTitle || (ready ? 'COLMENA ACTIVA' : 'CARGANDO COLMENA');
+  const modelText = status.statusModelLabel || status.modelLabel || 'colmena';
   const workersText = ready
-    ? `🧠 ${statusText}`
-    : `🌿 ${statusText}`;
+    ? `${Math.max(1, workerCount)} worker${Math.max(1, workerCount) > 1 ? 's' : ''}`
+    : `${coverageCount}/${coverageTotal} shards`;
 
-  bar.querySelector('.hive-emoji').textContent = ready ? '🦌' : '🌱';
-  bar.querySelector('.hive-level').textContent = status.stageLabel || (ready ? 'Activa' : 'Despertando');
-  bar.querySelector('.hive-model').textContent = status.modelLabel || 'colmena';
+  bar.querySelector('.hive-emoji').textContent = ready ? '🐝' : '⏳';
+  bar.querySelector('.hive-level').textContent = title;
+  bar.querySelector('.hive-model').textContent = modelText;
   bar.querySelector('.hive-prog-fill').style.width = `${progress}%`;
   bar.querySelector('.hive-prog-fill').style.background = ready
     ? 'linear-gradient(90deg,#00e5ff,#4ade80)'

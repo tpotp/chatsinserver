@@ -2192,10 +2192,15 @@ function postHostEmbedStatus(reason = 'heartbeat') {
     hostKey: HOST_EMBED_KEY,
     peerId,
     ready: !!state.ready,
+    statusTitle: state.statusTitle || '',
     stageId: state.activeStage?.id || null,
     stageLabel: state.activeStage?.label || 'Pudu del Bosque',
     modelLabel: state.activeStage?.modelLabel || currentModelLabel || 'none',
+    statusModelLabel: state.statusModelLabel || '',
     progressText: state.progressText || '',
+    progressPct: Number(state.progressPct) || 0,
+    workerCount: Number(state.workerCount) || 0,
+    peerCount: Number(state.peerCount) || 0,
     memberCount: getRoomMemberCount(),
     collectiveTPS: computeCollectiveTPS(),
     avgRtt: getPuduLatencyLabel(),
@@ -3142,25 +3147,19 @@ function formatCooldownMs(ms) {
 }
 
 function getPuduNeutralStageName(state = getPuduStageState()) {
-  return state.activeStage ? `${state.activeStage.emoji} ${state.activeStage.label}` : 'Pudu del Bosque';
+  return state.statusTitle || (state.activeStage ? `${state.activeStage.emoji} ${state.activeStage.label}` : 'Pudu del Bosque');
 }
 
 function getPuduNeutralModelLabel(state = getPuduStageState()) {
+  if (state.statusModelLabel) return state.statusModelLabel;
   return state.activeStage
     ? `${state.activeStage.modelLabel} · ${state.activeStage.note}`
     : 'SmolLM2-1.7B-Q8 · colmena por sala';
 }
 
 function getPuduPendingText(state = getPuduStageState()) {
-  if (state.ready) {
-    return state.nextStage
-      ? `La colmena de ${formatRoomLabel(roomName)} ya responde y sigue creciendo.`
-      : `El pudu ya responde desde ${formatRoomLabel(roomName)}.`;
-  }
-  if (state.activeStage) {
-    return `El pudu esta reuniendo su respuesta en ${formatRoomLabel(roomName)}.`;
-  }
-  return `El pudu esta reuniendo su respuesta desde ${formatRoomLabel(roomName)}.`;
+  if (state.ready) return `🐝 COLMENA ACTIVA en ${formatRoomLabel(roomName)}.`;
+  return `⏳ Cargando colmena en ${formatRoomLabel(roomName)}.`;
 }
 
 function shouldShowPuduTechnicalUI() {
@@ -3201,10 +3200,59 @@ function maybeBuildDirectPuduReply(prompt = '', requesterName = myNickname) {
   return `Respuesta a @${toPuduHandle(requesterName)}: ${body}`;
 }
 
+function normalizePuduRescuePrompt(prompt = '') {
+  return String(prompt || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function shouldRescuePuduCollectiveReply(prompt = '', rawText = '') {
+  const q = normalizePuduRescuePrompt(prompt);
+  const r = normalizePuduCollectiveText(rawText || '', false)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  if (!q) return false;
+  if (!r) return true;
+  if (/lo siento|no puedo cumplir|no puedo responder|guardo silencio|reuniendo su respuesta|ya responde y sigue creciendo/.test(r)) return true;
+  if (/\b(que comen|comen|alimentacion|alimentan|dieta)\b/.test(q) && !/\b(hojas|brotes|frutos|flores|helechos|ramitas|herbivor)\b/.test(r)) return true;
+  if (/\b(habitat|donde viven|donde habitan|viven|habitan)\b/.test(q) && !/\b(bosque|matorral|sur de chile|argentina|sotobosque|templad|lluvios)\b/.test(r)) return true;
+  return false;
+}
+
+function buildPuduCollectiveRescueBody(prompt = '') {
+  const q = normalizePuduRescuePrompt(prompt);
+  const asksDiet = /\b(que comen|comen|alimentacion|alimentan|dieta)\b/.test(q);
+  const asksHabitat = /\b(habitat|donde viven|donde habitan|viven|habitan)\b/.test(q);
+  if (asksDiet && asksHabitat) {
+    return 'Peñi, los pudúes comen hojas tiernas, brotes, frutos, flores, helechos y ramitas suaves. Viven sobre todo en bosques templados lluviosos y matorrales densos del sur de Chile y Argentina, con mucho sotobosque húmedo donde puedan esconderse tranquilos.';
+  }
+  if (asksDiet) {
+    return 'Peñi, los pudúes son herbívoros y comen sobre todo hojas tiernas, brotes, frutos, flores, helechos y ramitas suaves del sotobosque.';
+  }
+  if (asksHabitat) {
+    return 'Peñi, los pudúes viven principalmente en bosques templados lluviosos y matorrales densos del sur de Chile y Argentina, siempre cerca de vegetación baja y húmeda donde puedan ocultarse.';
+  }
+  return null;
+}
+
+function rescuePuduCollectiveReply(prompt = '', rawText = '') {
+  if (!shouldRescuePuduCollectiveReply(prompt, rawText)) return normalizePuduCollectiveText(rawText || '', true);
+  return buildPuduCollectiveRescueBody(prompt) || normalizePuduCollectiveText(rawText || '', true);
+}
+
+function extractLatestUserPromptFromMessages(messages = []) {
+  const lastUser = [...(messages || [])].reverse().find(msg => msg?.role === 'user' && typeof msg.content === 'string');
+  return lastUser?.content || '';
+}
+
 function finalizePuduReplyText(prompt = '', rawText = '', requesterName = myNickname) {
   const direct = maybeBuildDirectPuduReply(prompt, requesterName);
   if (direct) return direct;
-  let cleaned = normalizePuduCollectiveText(rawText || '', true)
+  let cleaned = rescuePuduCollectiveReply(prompt, rawText || '')
     .replace(/^lo siento,?\s*/i, '')
     .replace(/^no puedo responder en nombre de pudu\.?\s*/i, '')
     .replace(/^mi respuesta debe ser mas limitada y directa\.?\s*/i, '')
@@ -3990,22 +4038,25 @@ function getPuduStageState() {
     return Date.now() - (info.lastSeen || 0) <= CONFIG.presenceTTLMs * 2;
   }).length;
   const fullCoverage = coverageCount >= PETALS_COMPONENTS.length;
-  const collectiveReady = fullCoverage && (reportedCollective.ready || petalsSeedCount > 0 || hasCollectivePetalsAvailability());
-  const ready = !!activeStageView && collectiveReady;
+  const simulationReady = shouldServeSimulatedCollective() && !!hiveSimulation.active && !!engine;
+  const remoteReady = !!reportedCollective.ready;
+  const localReady = fullCoverage && (petalsSeedCount > 0 || hasCollectivePetalsAvailability());
+  const collectiveReady = remoteReady || simulationReady || localReady;
+  const ready = (!!activeStageView || remoteReady || simulationReady) && collectiveReady;
+  const workerCount = Math.max(remoteReady ? 1 : 0, simulationReady ? 1 : 0, petalsSeedCount, hasCollectivePetalsAvailability() ? 1 : 0);
   const missingPeers = Math.max(0, firstStage.minPeers - peerCount);
   const missingShards = Math.max(0, PETALS_COMPONENTS.length - coverageCount);
   const missingCollectiveTPS = Math.max(0, (nextStage || firstStage).minCollectiveTPS - metrics.collectiveTPS);
 
-  let progressText = '';
-  if (!activeStageView) {
-    progressText = `El pudu esta reuniendo su respuesta en ${formatRoomLabel(roomName)}.`;
-  } else if (!ready) {
-    progressText = `El ${activeStageView.label} esta reuniendo su respuesta en ${formatRoomLabel(roomName)}.`;
-  } else if (nextStage) {
-    progressText = `La colmena de ${formatRoomLabel(roomName)} ya responde y sigue creciendo hacia ${nextStage.label}.`;
-  } else {
-    progressText = `El ${activeStageView.label} ya responde desde esta sala.`;
-  }
+  const activeModelLabel = reportedCollective.modelLabel || activeStageView?.modelLabel || currentModelLabel || firstStage.modelLabel;
+  const statusTitle = ready ? '🐝 COLMENA ACTIVA' : '🐝 CARGANDO COLMENA';
+  const statusModelLabel = ready
+    ? `${activeModelLabel} · servicio listo`
+    : `${activeModelLabel} · formando colmena`;
+  const progressPct = ready ? 100 : Math.max(4, activationPct || 0);
+  const progressText = ready
+    ? `Colmena activa en ${formatRoomLabel(roomName)}. Ya puedes invocar a @pudu solo con la colmena.`
+    : `Cargando colmena en ${formatRoomLabel(roomName)} · ${coverageCount}/${PETALS_COMPONENTS.length} shards · ${Math.max(0, Math.round(metrics.collectiveTPS || 0))} tok/s.`;
 
   return {
     peerCount,
@@ -4024,6 +4075,10 @@ function getPuduStageState() {
     activeStage: activeStageView,
     nextStage,
     ready,
+    workerCount,
+    statusTitle,
+    statusModelLabel,
+    progressPct,
     missingPeers,
     missingShards,
     missingCollectiveTPS,
@@ -4851,7 +4906,8 @@ async function runSimulationCollectivePrompt(messages, options = {}) {
     tokenCount++;
     options.onToken?.(token, fullResponse);
   }
-  fullResponse = normalizePuduCollectiveText(fullResponse || '[El pudu guardo silencio por un momento]', true);
+  const prompt = extractLatestUserPromptFromMessages(messages);
+  fullResponse = rescuePuduCollectiveReply(prompt, fullResponse || '[El pudu guardo silencio por un momento]');
   return { text: fullResponse, tokenCount, model: currentModelLabel || stage.modelLabel };
 }
 
@@ -6682,6 +6738,7 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
   isGenerating = true;
   try {
     let text = "";
+    const prompt = extractLatestUserPromptFromMessages(signal.messages);
     const strictPetalsRequest = STRICT_PUDU_HIVE && !!signal?.petalsHive && Array.isArray(signal.messages);
     if (strictPetalsRequest && shouldServeSimulatedCollective()) {
       const startedAt = performance.now();
@@ -6708,6 +6765,7 @@ async function _executeNostrFallbackReq(fromId, signal, virtualId = null) {
       text = result.text;
     }
     if (!text.trim()) throw new Error('El pudu sigue reuniendo su respuesta en esta sala.');
+    text = rescuePuduCollectiveReply(prompt, text);
     if (virtualId) {
       const vnick = masqueradedPeers.get(virtualId)?.nickname || virtualId;
       const stage = getPuduStageState().activeStage;
@@ -7389,20 +7447,20 @@ function updatePuduHiveUI() {
   name.textContent = displayName;
   model.textContent = displayModel;
   avatar.classList.toggle('awake', state.ready);
-  fill.style.width = `${Math.max(4, state.activationPct)}%`;
+  fill.style.width = `${Math.max(4, state.progressPct || state.activationPct)}%`;
   fill.classList.toggle('awake', state.ready);
   text.textContent = state.progressText;
   setPuduSyncedText('stage-name', displayName);
   setPuduSyncedText('stage-model', displayModel);
   setPuduSyncedText('progress-text', state.progressText);
   for (const syncFill of document.querySelectorAll('[data-pudu-fill]')) {
-    syncFill.style.width = `${Math.max(4, state.activationPct)}%`;
+    syncFill.style.width = `${Math.max(4, state.progressPct || state.activationPct)}%`;
     syncFill.classList.toggle('awake', state.ready);
   }
   const peerGoal = state.nextStage?.minPeers || state.activeStage?.minPeers || PUDU_HIVE_STAGES[0].minPeers;
   peerEl.textContent = `${state.peerCount} / ${peerGoal}`;
   covEl.textContent = `${state.coverageCount} / ${PETALS_COMPONENTS.length} · nucleo ${Math.max(1, state.coreSize || 0)}`;
-  readyEl.textContent = state.ready ? 'Respondiendo' : 'Hilando';
+  readyEl.textContent = state.ready ? 'COLMENA ACTIVA' : 'CARGANDO';
   latencyEl.textContent = `${getPuduLatencyLabel()} · ${Math.round(state.collectiveTPS || 0)} tok/s`;
 
   stageList.innerHTML = PUDU_HIVE_STAGES.map(stageCfg => {
@@ -7416,9 +7474,9 @@ function updatePuduHiveUI() {
   }).join('');
 
   if (state.ready) {
-    setPuduChatAvailability(true, `Habla con ${stage.label} en #${roomName}…`);
+    setPuduChatAvailability(true, `Habla con @pudu en #${roomName}…`);
   } else {
-    setPuduChatAvailability(false, 'Invoca a @pudu y la colmena respondera cuando termine de hilar la respuesta…');
+    setPuduChatAvailability(false, 'Cargando colmena… cuando se active, @pudu respondera sin fallbacks.');
   }
   syncPuduPresenceWithHive(state);
 }
