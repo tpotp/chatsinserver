@@ -42,6 +42,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Nunito', sans-seri
   --bubble-me: linear-gradient(135deg, #0072ff 0%, #00e5ff 100%);
   --bubble-other: rgba(20, 24, 40, 0.95);
   --sidebar-w:260px;
+  --vvh:100dvh;
   --font-title:'Fredoka One', cursive;
   --font-body:'Nunito', sans-serif;
 }
@@ -233,7 +234,7 @@ canvas{position:fixed;inset:0;z-index:0}
 .h-info{flex:1;min-width:0}
 .h-room-tag{font-family:var(--font-body);font-weight:800;font-size:11px;letter-spacing:1.5px;color:rgba(255,255,255,.5);text-transform:uppercase;margin-bottom:2px}
 .h-name{font-family:var(--font-title);font-size:clamp(16px,2vw,20px);letter-spacing:2px;color:#fff;text-shadow:0 0 10px rgba(0,229,255,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.h-status{font-size:12px;font-weight:700;color:var(--accent);font-family:var(--font-body);letter-spacing:0.5px}
+.h-status{font-size:12px;font-weight:700;color:var(--accent);font-family:var(--font-body);letter-spacing:0.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .h-status.offline{color:rgba(255,255,255,.4)}
 .h-room-counter{
   font-family:var(--font-title);font-size:14px;letter-spacing:1px;
@@ -330,7 +331,7 @@ canvas{position:fixed;inset:0;z-index:0}
 .chat-input-area{
   position:relative;z-index:600;background:rgba(10,14,25,.95);
   border-top:1px solid rgba(0,229,255,.2);
-  padding:14px 18px;display:flex;gap:12px;align-items:flex-end;
+  padding:14px 18px calc(14px + env(safe-area-inset-bottom, 0px));display:flex;gap:12px;align-items:flex-end;
   backdrop-filter:blur(28px);flex-shrink:0;
 }
 .chat-input-area::before{content:'';position:absolute;top:-2px;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,229,255,.5),transparent)}
@@ -428,32 +429,136 @@ body.chat-entered #pudu-mode-toggle{
 /* ── MOBILE: ocultar botones 3D para no tapar el input ── */
 @media(max-width:600px){
   #pudu-mode-toggle{
-    /* En móvil, mover a la esquina superior derecha debajo del header */
-    bottom:auto;
-    top:calc(var(--header-h, 70px) + 4px);
-    right:8px;
-    gap:4px;
+    display:none!important;
   }
-  #pudu-mode-toggle > div:first-child{
-    display:none; /* ocultar el label "modo pudú 3D" en móvil */
+  #mesh-indicator,
+  #pudubot-hint,
+  #device-tier-badge,
+  .h-logo,
+  .h-room-tag{
+    display:none!important;
   }
-  #btn-mode-glb, #btn-mode-fallback, #btn-preview-now{
-    font-size:10px;padding:5px 8px;letter-spacing:0.5px;
-  }
-  #pudu-mode-label{ display:none; }
-  /* Cuando el teclado virtual está abierto (viewport muy reducido), ocultar todo */
-  @media(max-height:500px){
-    body.chat-entered #pudu-mode-toggle{ display:none; }
-  }
-}
-
-/* ── MOBILE SIDEBAR TOGGLE ── */
-@media(max-width:600px){
   :root{--sidebar-w:240px}
+  #chat-screen{height:var(--vvh);}
+  .chat-area{min-width:0;min-height:0;height:100%;}
   #rooms-sidebar{position:absolute;top:0;bottom:0;left:0;z-index:30;transform:translateX(-100%);transition:transform .3s}
   #rooms-sidebar.open{transform:translateX(0)}
-  .chat-header{padding-left:68px}
-  #sidebar-toggle{display:flex!important}
+  .chat-header{
+    padding:10px 12px 10px 58px;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto auto;
+    column-gap:8px;
+    row-gap:3px;
+    align-items:center;
+  }
+  .h-avatar{
+    width:40px;height:40px;border-radius:12px;font-size:20px;
+    grid-column:1;grid-row:1 / span 2;
+  }
+  .h-info{
+    grid-column:2;grid-row:1 / span 2;min-width:0;
+  }
+  .h-name{
+    font-size:15px;
+    letter-spacing:1px;
+    line-height:1.1;
+  }
+  .h-status{
+    font-size:10px;
+    letter-spacing:0;
+    opacity:.9;
+  }
+  .h-room-counter{
+    grid-column:3;grid-row:1;
+    padding:5px 8px;
+    font-size:11px;
+    gap:4px;
+    justify-self:end;
+  }
+  #btn-lite-mode{
+    grid-column:4;grid-row:1;
+    padding:4px 8px!important;
+    font-size:10px!important;
+    letter-spacing:1px!important;
+    border-radius:7px!important;
+  }
+  #pudu-hive-bar{
+    display:grid!important;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-areas:
+      "emoji level count"
+      "emoji model workers"
+      "bar bar bar";
+    gap:4px 8px!important;
+    margin:4px 8px 0!important;
+    padding:8px 10px!important;
+    align-items:center!important;
+  }
+  #pudu-hive-bar .hive-emoji{grid-area:emoji;font-size:18px!important;}
+  #pudu-hive-bar .hive-level{
+    grid-area:level;
+    font-size:11px!important;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  #pudu-hive-bar .hive-model{
+    grid-area:model;
+    font-size:10px!important;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  #pudu-hive-bar .hive-count{grid-area:count;font-size:11px!important;justify-self:end;}
+  #pudu-hive-bar .hive-workers{grid-area:workers;font-size:10px!important;justify-self:end;text-align:right;}
+  #pudu-hive-bar > div{grid-area:bar;min-width:0!important;width:100%;}
+  .chat-messages{
+    padding:12px 12px 8px;
+    gap:10px;
+    min-height:0;
+  }
+  .msg-row{max-width:86%;}
+  .msg-sender{font-size:11px;letter-spacing:1px;margin-bottom:3px;}
+  .msg-bubble{padding:12px 14px;font-size:15px;line-height:1.4;}
+  .msg-time{font-size:10px;}
+  .sys-msg{font-size:10px;letter-spacing:1px;line-height:1.35;padding:4px 2px;}
+  .chat-input-area{
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    gap:10px;
+    align-items:flex-end;
+  }
+  .chat-input{
+    min-height:48px;
+    max-height:110px;
+    padding:12px 14px;
+    border-radius:14px;
+    line-height:1.35;
+    font-size:16px;
+  }
+  .send-btn{
+    width:48px;height:48px;border-radius:15px;
+    font-size:22px;
+    flex:0 0 48px;
+  }
+  #sidebar-toggle{
+    display:flex!important;
+    top:10px;
+    left:10px;
+    height:34px;
+    width:40px;
+    padding:0;
+    gap:0;
+    font-size:11px;
+    justify-content:center;
+  }
+  #sidebar-toggle span:last-child{display:none;}
+  #sidebar-toggle-icon{font-size:14px;}
+  body.keyboard-open #sidebar-toggle{opacity:.55;}
+}
+@media(max-width:600px) and (max-height:500px){
+  body.keyboard-open #sidebar-toggle{
+    display:none!important;
+  }
 }
 @media(min-width:1200px){
   #chat-screen{max-width:1400px;margin:0 auto;height:100vh; box-shadow: 0 0 50px rgba(0,0,0,0.8);}
@@ -1329,9 +1434,20 @@ function addSystemMsgVS(roomId,txt){
   const d=buildSysRow(txt);const ti=document.getElementById('typing-ind');if(ti)c.insertBefore(d,ti);else c.appendChild(d);
   pruneDOM();if(atBot)requestAnimationFrame(()=>{c.scrollTop=c.scrollHeight;});
 }
+function syncMobileViewport(){
+  const vv = window.visualViewport;
+  const vh = vv ? vv.height : window.innerHeight;
+  document.documentElement.style.setProperty('--vvh', `${Math.round(vh)}px`);
+  const header = document.querySelector('.chat-header');
+  if (header) document.documentElement.style.setProperty('--header-h', `${Math.round(header.getBoundingClientRect().height)}px`);
+  const inputFocused = document.activeElement && document.activeElement.id === 'chat-input';
+  const keyboardOpen = window.innerWidth <= 600 && (inputFocused || (!!vv && (window.innerHeight - vv.height > 120)));
+  document.body.classList.toggle('keyboard-open', keyboardOpen);
+}
 function show(id){
   ['welcome-screen','connecting-screen','chat-screen'].forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==id));
   document.body.classList.toggle('chat-entered', id==='chat-screen');
+  syncMobileViewport();
 }
 
 function renderRoomSidebar(){
@@ -1359,8 +1475,9 @@ function updateTypingIndicator(room){
 function updateStatus(){
   const relaysOk=Object.values(nostrSockets).filter(s=>(s&&s.readyState)===1).length;const peersConn=countConnectedPeersInRoom(currentRoomId);
   const st=document.getElementById('h-status');if(!st)return;
-  if(peersConn>0){st.textContent=`● P2P: ${peersConn} peer${peersConn!==1?'s':''} · Nostr: ${relaysOk}`;st.style.color='var(--accent)';}
-  else if(relaysOk>0){st.textContent=`🔍 buscando peers... (${relaysOk})`;st.style.color='var(--gold)';}
+  const compact=window.innerWidth<=600;
+  if(peersConn>0){st.textContent=compact?`● ${peersConn} peer${peersConn!==1?'s':''} · ${relaysOk} relays`:`● P2P: ${peersConn} peer${peersConn!==1?'s':''} · Nostr: ${relaysOk}`;st.style.color='var(--accent)';}
+  else if(relaysOk>0){st.textContent=compact?`🔍 buscando peers · ${relaysOk} relays`:`🔍 buscando peers... (${relaysOk})`;st.style.color='var(--gold)';}
   else{st.textContent='⚠️ sin conexión';st.style.color='#ef4444';}
   const room=rooms.get(currentRoomId);const cnt=document.getElementById('h-room-count');if(cnt&&room)cnt.textContent=room.users.size;renderRoomSidebar();
 }
@@ -1454,6 +1571,8 @@ function setupInput(){
   const inp=document.getElementById('chat-input');if(inp.dataset.ready==='1')return;inp.dataset.ready='1';inp.disabled=false;
   inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();window.sendMessage();}});
   inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,90)+'px';if(!myTypingSent&&currentRoomId){myTypingSent=true;broadcastP2P(currentRoomId,{type:'typing',id:uid(),roomId:currentRoomId,senderId:pubKeyHex,name:myName,ts:Date.now()});}clearTimeout(myTypingTO);myTypingTO=setTimeout(()=>{myTypingSent=false;},2500);});
+  inp.addEventListener('focus',()=>{if(window.innerWidth<=600){document.body.classList.add('keyboard-open');syncMobileViewport();}});
+  inp.addEventListener('blur',()=>setTimeout(syncMobileViewport,60));
 }
 
 let discoveryDone=false,discoveryTimer=null;
@@ -1525,7 +1644,11 @@ function enterChatScreen(){
 window.addEventListener('DOMContentLoaded',()=>{
   const previewName=randomName();
   document.getElementById('assigned-name-display').textContent=`Tu nombre será: ${previewName} ${avatarFor(previewName)}`;
+  syncMobileViewport();
 });
+window.addEventListener('resize',syncMobileViewport);
+window.visualViewport?.addEventListener('resize',syncMobileViewport);
+window.visualViewport?.addEventListener('scroll',syncMobileViewport);
 
 // ══════════════════════════════════════════════════════════════
 //  PUDÚ ALIVE v6 — AI BEHAVIORAL SYSTEM
