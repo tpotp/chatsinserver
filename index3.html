@@ -1016,8 +1016,15 @@ function createRoom(name){
   return roomId;
 }
 function getCurrentHiveRoomKey(){
-  const params = new URLSearchParams(window.location.search);
-  return params.get('colmenaRoom') || params.get('sharedAiRoom') || localStorage.getItem('p2p-hive-last-room') || 'sala-1';
+  const params=new URLSearchParams(window.location.search);
+  const sharedRoom=
+    params.get('colmenaRoom')||
+    params.get('sharedAiRoom')||
+    localStorage.getItem('p2p-hive-last-room')||
+    params.get('room')||
+    currentRoomId||
+    'sala-1';
+  return sharedRoom||'sala-1';
 }
 function getCurrentHiveNamespace(){
   const roomKey=getCurrentHiveRoomKey();
