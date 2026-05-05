@@ -101,7 +101,7 @@ canvas{position:fixed;inset:0;z-index:0}
 .mode-select-label{font-family:var(--font-title);font-size:11px;letter-spacing:2px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:10px;text-transform:uppercase;}
 .mode-select-buttons{display:flex;gap:10px;width:100%;}
 @media(max-width:420px){.mode-select-buttons{flex-direction:column;gap:8px;}}
-.mode-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;border-radius:14px;border:2px solid;cursor:pointer;transition:all .22s;position:relative;overflow:hidden;background:transparent;}
+.mode-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;border-radius:14px;border:2px solid;cursor:pointer;transition:all .22s;position:relative;overflow:hidden;background:transparent;touch-action:manipulation;}
 .mode-btn-icon{font-size:26px;line-height:1;}
 .mode-btn-title{font-family:var(--font-title);font-size:13px;letter-spacing:2px;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.5);}
 .mode-btn-sub{font-size:10px;font-weight:600;color:rgba(255,255,255,.5);letter-spacing:.5px;text-align:center;line-height:1.3;}
@@ -112,6 +112,7 @@ canvas{position:fixed;inset:0;z-index:0}
 .mode-btn-lite:hover{box-shadow:0 6px 30px rgba(74,222,128,.35),inset 0 1px 0 rgba(255,255,255,.2);transform:translateY(-2px);border-color:rgba(74,222,128,.7);}
 .mode-btn-lite:active{transform:scale(.96);}
 .mode-btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;}
+#pudu-btn,.enter-btn{touch-action:manipulation;}
 #assigned-name-display{font-family:var(--font-title);font-size:15px;letter-spacing:2px;color:var(--gold);text-align:center;margin-top:14px;min-height:22px;text-shadow:0 0 16px rgba(255,215,0,.6)}
 .connecting-card{background:var(--bg-dark);border:2px solid var(--secondary);border-radius:16px;padding:36px 28px;max-width:320px;width:90%;text-align:center;backdrop-filter:blur(24px);box-shadow:0 0 60px rgba(177,107,255,.2)}
 .connecting-title{font-family:var(--font-title);font-size:24px;letter-spacing:3px;color:#fff;margin-bottom:16px;text-shadow:0 0 20px var(--primary)}
@@ -415,6 +416,15 @@ canvas{position:fixed;inset:0;z-index:0}
   :root{--sidebar-w:280px;}
 }
 
+#pudu-mode-toggle{
+  display:none;
+  pointer-events:none;
+}
+body.chat-entered #pudu-mode-toggle{
+  display:flex;
+  pointer-events:auto;
+}
+
 /* ── MOBILE: ocultar botones 3D para no tapar el input ── */
 @media(max-width:600px){
   #pudu-mode-toggle{
@@ -433,7 +443,7 @@ canvas{position:fixed;inset:0;z-index:0}
   #pudu-mode-label{ display:none; }
   /* Cuando el teclado virtual está abierto (viewport muy reducido), ocultar todo */
   @media(max-height:500px){
-    #pudu-mode-toggle{ display:none; }
+    body.chat-entered #pudu-mode-toggle{ display:none; }
   }
 }
 
@@ -639,7 +649,7 @@ canvas{position:fixed;inset:0;z-index:0}
 <!-- BOTÓN TOGGLE GLB / FALLBACK -->
 <div id="pudu-mode-toggle" style="
   position:fixed;bottom:18px;right:18px;z-index:600;
-  display:flex;flex-direction:column;gap:6px;align-items:flex-end;
+  flex-direction:column;gap:6px;align-items:flex-end;
 ">
   <div style="font-family:'Fredoka One',cursive;font-size:10px;letter-spacing:2px;color:rgba(0,229,255,0.7);text-align:right;text-transform:uppercase;margin-bottom:2px;">modo pudú 3D</div>
   <div style="display:flex;gap:6px;">
@@ -1319,7 +1329,10 @@ function addSystemMsgVS(roomId,txt){
   const d=buildSysRow(txt);const ti=document.getElementById('typing-ind');if(ti)c.insertBefore(d,ti);else c.appendChild(d);
   pruneDOM();if(atBot)requestAnimationFrame(()=>{c.scrollTop=c.scrollHeight;});
 }
-function show(id){['welcome-screen','connecting-screen','chat-screen'].forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==id));}
+function show(id){
+  ['welcome-screen','connecting-screen','chat-screen'].forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==id));
+  document.body.classList.toggle('chat-entered', id==='chat-screen');
+}
 
 function renderRoomSidebar(){
   const list=document.getElementById('rooms-list');if(!list)return;list.innerHTML='';
@@ -1890,43 +1903,48 @@ function buildProceduralPudu(){
   snout.position.set(0,-0.06,0.36);snout.scale.set(1.15,0.72,0.88);
 
   // ── EYES — BIG, EXPRESSIVE, ANIMATED ──
+  const eyeBaseX=0.16,eyeBaseY=0.055;
+  const eyeWhiteZ=0.355,irisZ=0.425,pupilZ=0.455,lidZ=0.365,browY=0.19,browZ=0.39;
+  const glintOffsetX=0.022,glintOffsetY=0.028,glintZ=0.47;
+  const glint2OffsetX=0.018,glint2OffsetY=-0.02,glint2Z=0.465;
+  P.eyeAnchor={x:eyeBaseX,y:eyeBaseY,glintOffsetX,glintOffsetY};
   const eyeWhiteGeo=new THREE.SphereGeometry(0.115,seg-2,seg-2);
   const eyeWhiteMat=new THREE.MeshBasicMaterial({color:0xffffff});
-  P.eyeWhiteL=new THREE.Mesh(eyeWhiteGeo,eyeWhiteMat);P.eyeWhiteL.position.set(-0.17,0.12,0.34);headGroup.add(P.eyeWhiteL);
-  P.eyeWhiteR=new THREE.Mesh(eyeWhiteGeo,eyeWhiteMat.clone());P.eyeWhiteR.position.set(0.17,0.12,0.34);headGroup.add(P.eyeWhiteR);
+  P.eyeWhiteL=new THREE.Mesh(eyeWhiteGeo,eyeWhiteMat);P.eyeWhiteL.position.set(-eyeBaseX,eyeBaseY,eyeWhiteZ);P.eyeWhiteL.scale.set(1,0.95,0.82);headGroup.add(P.eyeWhiteL);
+  P.eyeWhiteR=new THREE.Mesh(eyeWhiteGeo,eyeWhiteMat.clone());P.eyeWhiteR.position.set(eyeBaseX,eyeBaseY,eyeWhiteZ);P.eyeWhiteR.scale.set(1,0.95,0.82);headGroup.add(P.eyeWhiteR);
 
   // Iris
   const irisGeo=new THREE.SphereGeometry(0.075,seg-3,seg-3);
   const irisMat=new THREE.MeshBasicMaterial({color:0x00e5ff});
-  P.irisL=new THREE.Mesh(irisGeo,irisMat);P.irisL.position.set(-0.17,0.12,0.42);headGroup.add(P.irisL);
-  P.irisR=new THREE.Mesh(irisGeo,irisMat.clone());P.irisR.position.set(0.17,0.12,0.42);headGroup.add(P.irisR);
+  P.irisL=new THREE.Mesh(irisGeo,irisMat);P.irisL.position.set(-eyeBaseX,eyeBaseY,irisZ);P.irisL.scale.set(0.95,0.95,0.72);headGroup.add(P.irisL);
+  P.irisR=new THREE.Mesh(irisGeo,irisMat.clone());P.irisR.position.set(eyeBaseX,eyeBaseY,irisZ);P.irisR.scale.set(0.95,0.95,0.72);headGroup.add(P.irisR);
 
   // Pupil
   const pupGeo=new THREE.SphereGeometry(0.05,6,6);
   const pupMat=new THREE.MeshBasicMaterial({color:0x000511});
-  P.pupilL=new THREE.Mesh(pupGeo,pupMat);P.pupilL.position.set(-0.17,0.12,0.46);headGroup.add(P.pupilL);
-  P.pupilR=new THREE.Mesh(pupGeo,pupMat.clone());P.pupilR.position.set(0.17,0.12,0.46);headGroup.add(P.pupilR);
+  P.pupilL=new THREE.Mesh(pupGeo,pupMat);P.pupilL.position.set(-eyeBaseX,eyeBaseY,pupilZ);P.pupilL.scale.set(0.9,0.95,0.6);headGroup.add(P.pupilL);
+  P.pupilR=new THREE.Mesh(pupGeo,pupMat.clone());P.pupilR.position.set(eyeBaseX,eyeBaseY,pupilZ);P.pupilR.scale.set(0.9,0.95,0.6);headGroup.add(P.pupilR);
 
   // Eye glints (catch light)
   const glintGeo=new THREE.SphereGeometry(0.024,5,5);
   const glintMat=new THREE.MeshBasicMaterial({color:0xffffff});
-  P.glintL=new THREE.Mesh(glintGeo,glintMat);P.glintL.position.set(-0.15,0.14,0.475);headGroup.add(P.glintL);
-  P.glintR=new THREE.Mesh(glintGeo,glintMat.clone());P.glintR.position.set(0.19,0.14,0.475);headGroup.add(P.glintR);
+  P.glintL=new THREE.Mesh(glintGeo,glintMat);P.glintL.position.set(-eyeBaseX+glintOffsetX,eyeBaseY+glintOffsetY,glintZ);headGroup.add(P.glintL);
+  P.glintR=new THREE.Mesh(glintGeo,glintMat.clone());P.glintR.position.set(eyeBaseX-glintOffsetX,eyeBaseY+glintOffsetY,glintZ);headGroup.add(P.glintR);
   const g2Geo=new THREE.SphereGeometry(0.013,4,4);
-  const g2L=new THREE.Mesh(g2Geo,new THREE.MeshBasicMaterial({color:0xffffff}));g2L.position.set(-0.185,0.10,0.47);headGroup.add(g2L);
-  const g2R=new THREE.Mesh(g2Geo,new THREE.MeshBasicMaterial({color:0xffffff}));g2R.position.set(0.155,0.10,0.47);headGroup.add(g2R);
+  const g2L=new THREE.Mesh(g2Geo,new THREE.MeshBasicMaterial({color:0xffffff}));g2L.position.set(-eyeBaseX-glint2OffsetX,eyeBaseY+glint2OffsetY,glint2Z);headGroup.add(g2L);
+  const g2R=new THREE.Mesh(g2Geo,new THREE.MeshBasicMaterial({color:0xffffff}));g2R.position.set(eyeBaseX+glint2OffsetX,eyeBaseY+glint2OffsetY,glint2Z);headGroup.add(g2R);
 
   // Eyelids (for blinking — scale Y to close)
   const lidGeo=new THREE.SphereGeometry(0.13,seg-2,4,0,Math.PI*2,0,Math.PI*0.5);
   const lidMat=new THREE.MeshBasicMaterial({color:0x00aa66,side:THREE.DoubleSide});
-  P.lidL=new THREE.Mesh(lidGeo,lidMat);P.lidL.position.set(-0.17,0.12,0.35);P.lidL.scale.set(1,0,1);P.lidL.rotation.x=-0.3;headGroup.add(P.lidL);
-  P.lidR=new THREE.Mesh(lidGeo,lidMat.clone());P.lidR.position.set(0.17,0.12,0.35);P.lidR.scale.set(1,0,1);P.lidR.rotation.x=-0.3;headGroup.add(P.lidR);
+  P.lidL=new THREE.Mesh(lidGeo,lidMat);P.lidL.position.set(-eyeBaseX,eyeBaseY,lidZ);P.lidL.scale.set(1,0,0.9);P.lidL.rotation.x=-0.42;headGroup.add(P.lidL);
+  P.lidR=new THREE.Mesh(lidGeo,lidMat.clone());P.lidR.position.set(eyeBaseX,eyeBaseY,lidZ);P.lidR.scale.set(1,0,0.9);P.lidR.rotation.x=-0.42;headGroup.add(P.lidR);
 
   // Eyebrows (for expressions)
   const browGeo=new THREE.CylinderGeometry(0.005,0.005,0.1,4);
   const browMat=new THREE.MeshBasicMaterial({color:0x006644});
-  P.browL=new THREE.Mesh(browGeo,browMat);P.browL.position.set(-0.17,0.24,0.38);P.browL.rotation.z=0.3;headGroup.add(P.browL);
-  P.browR=new THREE.Mesh(browGeo,browMat.clone());P.browR.position.set(0.17,0.24,0.38);P.browR.rotation.z=-0.3;headGroup.add(P.browR);
+  P.browL=new THREE.Mesh(browGeo,browMat);P.browL.position.set(-eyeBaseX,browY,browZ);P.browL.rotation.z=0.3;headGroup.add(P.browL);
+  P.browR=new THREE.Mesh(browGeo,browMat.clone());P.browR.position.set(eyeBaseX,browY,browZ);P.browR.rotation.z=-0.3;headGroup.add(P.browR);
 
   // ── CHEEKS (blush, animated opacity) ──
   const cheekGeo=new THREE.SphereGeometry(0.085,7,7);
@@ -2027,20 +2045,21 @@ function buildProceduralPudu(){
 function updateEyes(t){
   if(!puduParts.pupilL)return;
   const brain=puduBrain;
+  const eyeBase=puduParts.eyeAnchor||{x:0.16,y:0.055,glintOffsetX:0.022,glintOffsetY:0.028};
   // Pupil follows cursor/target
   const tx=brain.eyeTargetX*0.035,ty=brain.eyeTargetY*0.035;
   // Smooth follow
-  puduParts.irisL.position.x+=((-0.17+tx)-puduParts.irisL.position.x)*0.12;
-  puduParts.irisL.position.y+=((0.12+ty)-puduParts.irisL.position.y)*0.12;
-  puduParts.irisR.position.x+=((0.17+tx)-puduParts.irisR.position.x)*0.12;
-  puduParts.irisR.position.y+=((0.12+ty)-puduParts.irisR.position.y)*0.12;
-  puduParts.pupilL.position.x+=((-0.17+tx*1.1)-puduParts.pupilL.position.x)*0.12;
-  puduParts.pupilL.position.y+=((0.12+ty*1.1)-puduParts.pupilL.position.y)*0.12;
-  puduParts.pupilR.position.x+=((0.17+tx*1.1)-puduParts.pupilR.position.x)*0.12;
-  puduParts.pupilR.position.y+=((0.12+ty*1.1)-puduParts.pupilR.position.y)*0.12;
+  puduParts.irisL.position.x+=((-eyeBase.x+tx)-puduParts.irisL.position.x)*0.12;
+  puduParts.irisL.position.y+=((eyeBase.y+ty)-puduParts.irisL.position.y)*0.12;
+  puduParts.irisR.position.x+=((eyeBase.x+tx)-puduParts.irisR.position.x)*0.12;
+  puduParts.irisR.position.y+=((eyeBase.y+ty)-puduParts.irisR.position.y)*0.12;
+  puduParts.pupilL.position.x+=((-eyeBase.x+tx*1.1)-puduParts.pupilL.position.x)*0.12;
+  puduParts.pupilL.position.y+=((eyeBase.y+ty*1.1)-puduParts.pupilL.position.y)*0.12;
+  puduParts.pupilR.position.x+=((eyeBase.x+tx*1.1)-puduParts.pupilR.position.x)*0.12;
+  puduParts.pupilR.position.y+=((eyeBase.y+ty*1.1)-puduParts.pupilR.position.y)*0.12;
   // Glint follows opposite
-  puduParts.glintL.position.x+=((-0.15+tx*0.5)-puduParts.glintL.position.x)*0.08;
-  puduParts.glintR.position.x+=((0.19+tx*0.5)-puduParts.glintR.position.x)*0.08;
+  puduParts.glintL.position.x+=((-eyeBase.x+eyeBase.glintOffsetX+tx*0.5)-puduParts.glintL.position.x)*0.08;
+  puduParts.glintR.position.x+=((eyeBase.x-eyeBase.glintOffsetX+tx*0.5)-puduParts.glintR.position.x)*0.08;
 
   // Blink (eyelids)
   const bs=brain.getBlinkScale();
